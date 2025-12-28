@@ -50,6 +50,11 @@ At the same time, it returns to the original concepts of the Azazel System: the 
 - Network delay and jitter insertion with **tc (Traffic Control)**  
 - Dynamic control and notification with **custom Python scripts**  
 - **Wi-Fi safety sensors** (Python + `iw` + `tcpdump`) detect Evil AP / MITM / spoofed DNS-DHCP traffic and emit tags so Azazel-Zero can disconnect risky Wi-Fi automatically  
+- **First-Minute Control (Pi Zero 2 W)**  
+  - Deterministic state machine (INIT→PROBE→DEGRADED→NORMAL→CONTAIN/DECEPTION) with suspicion decay/hysteresis  
+  - nftables+tc で段階的開放、dnsmasqログ由来の動的宛先セット、QUIC/DoH抑制  
+  - 軽量プローブ(Captive/TLS/DNS/route)とWi-Fiタグを Mock-LLM (`judge_zero`) で統一スコアリング、`wifi_health.json` に書き出し  
+  - スクリプト起動: `sudo ./azazel_zero_run.py start --config configs/first_minute.yaml --foreground [--pretty-console]`
 
 ### Status Display
 
@@ -83,7 +88,8 @@ Heavy ML models remain a future research track, but the current deterministic st
 
 - **tmux console**  
   - `py/azazel_menu.py` offers a curses launcher for Wi-Fi selection, Portal/Shield/Lockdown scripts, OpenCanary control, and E-Paper tests.  
-  - `py/azazel_status.py` renders a telemetry pane (SSID/BSSID, gadget IPs, RSSI, captive portal indicator).  
+  - `py/azazel_status.py` renders a telemetry pane (SSID/BSSID, gadget IPs, RSSI, captive portal indicator, Wi-Fi health risk/tags).  
+  - 起動: `bash bin/azazel_console.sh`（sudo不要。sudoの場合は自動で元ユーザに切り替えてtmuxを起動）
 - **Bootstrap tooling**  
   - `tools/bootstrap_zero.sh` installs dependencies, systemd units, minimal Suricata rules, and can run smoke tests.  
   - Flags (`--no-epd`, `--no-enable`, `--no-suricata`, `--dry-run`) adapt the flow for lab vs. production builds.
