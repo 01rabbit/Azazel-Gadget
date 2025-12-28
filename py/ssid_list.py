@@ -17,6 +17,70 @@ import time
 import os
 import atexit
 from collections import defaultdict
+from pathlib import Path
+
+# Ensure repo modules importable for health check
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parent
+if str(ROOT / "py") not in sys.path:
+    sys.path.insert(0, str(ROOT / "py"))
+
+try:
+    from azazel_zero.sensors.wifi_safety import evaluate_wifi_safety
+except Exception:
+    evaluate_wifi_safety = None  # fallback if deps missing
+
+HEALTH_MONITOR = ["/usr/bin/python3", str(ROOT / "py" / "azazel_zero" / "wifi_health_monitor.py")]
+
+def _monitor_pid_path() -> Path:
+    run_dir = Path("/run/azazel-zero")
+    if run_dir.exists() and os.access(run_dir, os.W_OK):
+        return run_dir / "wifi_health_monitor.pid"
+    fb = ROOT / ".azazel-zero" / "run"
+    fb.mkdir(parents=True, exist_ok=True)
+    return fb / "wifi_health_monitor.pid"
+
+
+def _monitor_running() -> bool:
+    pid_path = _monitor_pid_path()
+    if not pid_path.exists():
+        return False
+    try:
+        pid = int(pid_path.read_text().strip())
+    except Exception:
+        return False
+    return Path(f"/proc/{pid}").exists()
+
+
+def start_health_monitor(iface: str) -> None:
+    if not HEALTH_MONITOR or not Path(HEALTH_MONITOR[1]).exists():
+        return
+    if _monitor_running():
+        return
+    try:
+        subprocess.Popen(
+            HEALTH_MONITOR + ["--iface", iface],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        pass
+
+
+def run_health_check_once(iface: str) -> None:
+    if evaluate_wifi_safety is None:
+        return
+    try:
+        from azazel_zero.app.threat_judge import judge_zero
+        verdict = judge_zero("wifi_health_check", iface, "", None)
+    except Exception:
+        return
+    ssid = (verdict.get("meta", {}) or {}).get("link", {}).get("ssid", "")
+    risk = verdict.get("risk", 0)
+    tags = verdict.get("tags", []) or []
+    status = "OK" if risk <= 2 else "WARN"
+    tag_str = ",".join(tags)
+    print(f"[Wi-Fi health] {status} risk={risk} tags={tag_str} ssid={ssid}")
 
 # Positional arg or default
 IFACE = sys.argv[1] if len(sys.argv) > 1 else "wlan0"
@@ -393,6 +457,8 @@ def main():
         ip = run(["/sbin/ip", "-4", "addr", "show", IFACE]).stdout
         print(f"Connected to: {ssid}")
         print(ip)
+        run_health_check_once(IFACE)
+        start_health_monitor(IFACE)
     else:
         print(f"Failed to connect: {ssid}", file=sys.stderr)
         sys.exit(3)

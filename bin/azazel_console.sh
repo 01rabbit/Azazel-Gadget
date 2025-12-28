@@ -2,13 +2,36 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# Avoid root tmux socket confusion (sudo -> /tmp/tmux-0). Re-exec as invoking user if run with sudo.
+if [ "$(id -u)" -eq 0 ]; then
+  if [ -n "${SUDO_USER:-}" ]; then
+    exec sudo -u "$SUDO_USER" -E "$0" "$@"
+  else
+    echo "Please run without sudo (tmux should run as the login user)" >&2
+    exit 1
+  fi
+fi
+
 # 共通設定の読込（存在しなくても続行）
 [ -f /etc/default/azazel-zero ] && . /etc/default/azazel-zero || true
-AZAZEL_ROOT="${AZAZEL_ROOT:-/home/azazel/Azazel-Zero}"
+AZAZEL_ROOT="${AZAZEL_ROOT:-$DEFAULT_ROOT}"
 
 SESSION="azazel"
-MENU="python3 ${AZAZEL_ROOT}/py/azazel_menu.py"   # 後で用意。暫定なら bash -l でも可
+MENU="python3 ${AZAZEL_ROOT}/py/azazel_menu.py"
 STATUS="python3 ${AZAZEL_ROOT}/py/azazel_status.py"
+
+if ! command -v tmux >/dev/null 2>&1; then
+  echo "tmux not found; please install tmux." >&2
+  exit 1
+fi
+
+if [ ! -f "${AZAZEL_ROOT}/py/azazel_menu.py" ] || [ ! -f "${AZAZEL_ROOT}/py/azazel_status.py" ]; then
+  echo "menu/status scripts not found under ${AZAZEL_ROOT}/py" >&2
+  exit 1
+fi
 
 # Ensure environment variables for curses/emoji
 export TERM=xterm-256color

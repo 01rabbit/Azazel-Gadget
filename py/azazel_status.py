@@ -17,8 +17,10 @@ import time
 import shutil
 import subprocess
 import shlex
+import json
 from datetime import datetime
 from typing import Optional, Tuple
+from pathlib import Path
 
 # ---------- helpers ----------
 
@@ -117,6 +119,40 @@ def _supports_emoji() -> bool:
     return 'UTF-8' in s
 
 
+def _health_path() -> Path:
+    run_dir = Path("/run/azazel-zero")
+    if run_dir.exists() and os.access(run_dir, os.R_OK):
+        return run_dir / "wifi_health.json"
+    fb = Path(__file__).resolve().parent.parent / ".azazel-zero" / "run" / "wifi_health.json"
+    return fb
+
+
+def _health_status() -> str:
+    path = _health_path()
+    if not path.exists():
+        return ""
+    try:
+        data = json.loads(path.read_text())
+    except Exception:
+        return ""
+    status = data.get("status", "")
+    tags = data.get("tags", []) or []
+    risk = data.get("risk", None)
+    ts = data.get("ts", 0)
+    age = int(time.time() - ts) if ts else None
+    tag_str = ",".join(tags[:5])
+    parts = []
+    if status:
+        parts.append(status)
+    if risk is not None:
+        parts.append(f"risk={risk}")
+    if tag_str:
+        parts.append(tag_str)
+    if age is not None:
+        parts.append(f"{age}s ago")
+    return " | ".join(parts)
+
+
 # ---------- rendering ----------
 
 def _clear():
@@ -154,12 +190,15 @@ def _print_status():
     # Header line
     line1 = f"{ap}{arw}{ssid}{arw}{aza}{arw}{dhcp}{arw}{lap}"
     badges = f"  [NET {ok_sym}]  [CAP {cap_sym}]  [RSSI {rssi if rssi is not None else '—'} dBm]"
+    health = _health_status()
 
     # Print
     print(f"==== Azazel-Zero Status  |  {now} ====")
     print(line1 + badges)
     print(f"AP(wlan0): {wlan_ip}   |   Pi(usb0): {usb_ip}   |   Laptop: {lap_ip}")
     print(f"GW-IF: {gw_if}    BSSID: {bssid}")
+    if health:
+        print(f"Wi-Fi health: {health}")
     print("-" * 80)
 
 
