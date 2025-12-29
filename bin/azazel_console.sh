@@ -5,14 +5,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-# Avoid root tmux socket confusion (sudo -> /tmp/tmux-0). Re-exec as invoking user if run with sudo.
-if [ "$(id -u)" -eq 0 ]; then
-  if [ -n "${SUDO_USER:-}" ]; then
-    exec sudo -u "$SUDO_USER" -E "$0" "$@"
-  else
-    echo "Please run without sudo (tmux should run as the login user)" >&2
-    exit 1
-  fi
+# Root required: Wi-Fi scan/connection, nft/tc/dnsmasq control are root-only.
+if [ "$(id -u)" -ne 0 ]; then
+  echo "Run with sudo/root: Wi-Fi scan/connection and filters require root." >&2
+  exit 1
 fi
 
 # 共通設定の読込（存在しなくても続行）
