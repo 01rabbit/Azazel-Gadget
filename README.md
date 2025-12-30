@@ -90,6 +90,7 @@ Heavy ML models remain a future research track, but the current deterministic st
   - `py/azazel_menu.py` offers a curses launcher for Wi-Fi selection, Portal/Shield/Lockdown scripts, OpenCanary control, and E-Paper tests.  
   - `py/azazel_status.py` renders a telemetry pane (SSID/BSSID, gadget IPs, RSSI, captive portal indicator, Wi-Fi health risk/tags).  
   - 起動: `bash bin/azazel_console.sh`（sudo不要。sudoの場合は自動で元ユーザに切り替えてtmuxを起動）
+  - 過去の固定プロファイル切替スクリプト（delay/portal/shield/lockdown）は `archive/bin/` に退避（First-Minuteが段階制御を担うため）
 - **Bootstrap tooling**  
   - `tools/bootstrap_zero.sh` installs dependencies, systemd units, minimal Suricata rules, and can run smoke tests.  
   - Flags (`--no-epd`, `--no-enable`, `--no-suricata`, `--dry-run`) adapt the flow for lab vs. production builds.

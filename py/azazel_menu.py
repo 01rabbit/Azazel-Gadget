@@ -180,11 +180,6 @@ def _bin_cmd(name):
 
 MENU = [
     ("Wi-Fi Selector (ssid_list.py)", SSID_TOOL),
-    ("Delay: enable (egress only)", _bin_cmd("delay_on.sh")),
-    ("Delay: disable", _bin_cmd("delay_off.sh")),
-    ("Mode: Portal", _bin_cmd("portal_mode.sh")),
-    ("Mode: Shield", _bin_cmd("shield_mode.sh")),
-    ("Mode: Lockdown", _bin_cmd("lockdown_mode.sh")),
     ("OpenCanary: start", ["/bin/sh","-lc","sudo systemctl start opencanary.service"]),
     ("OpenCanary: stop",  ["/bin/sh","-lc","sudo systemctl stop opencanary.service"]),
     ("OpenCanary: hits (tail)", ["/bin/sh","-lc","sudo journalctl -u opencanary.service -f || tail -F /var/log/opencanary.log"]),

@@ -5,10 +5,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-# Root required: Wi-Fi scan/connection, nft/tc/dnsmasq control are root-only.
-if [ "$(id -u)" -ne 0 ]; then
-  echo "Run with sudo/root: Wi-Fi scan/connection and filters require root." >&2
-  exit 1
+# Use sudo for commands inside panes; tmux itself runs as invoking user.
+if command -v sudo >/dev/null 2>&1 && [ "$(id -u)" -ne 0 ]; then
+  SUDO_PREFIX="sudo -E"
+else
+  SUDO_PREFIX=""
 fi
 
 # 共通設定の読込（存在しなくても続行）
@@ -16,8 +17,8 @@ fi
 AZAZEL_ROOT="${AZAZEL_ROOT:-$DEFAULT_ROOT}"
 
 SESSION="azazel"
-MENU="python3 ${AZAZEL_ROOT}/py/azazel_menu.py"
-STATUS="python3 ${AZAZEL_ROOT}/py/azazel_status.py"
+MENU="${SUDO_PREFIX} python3 ${AZAZEL_ROOT}/py/azazel_menu.py"
+STATUS="${SUDO_PREFIX} python3 ${AZAZEL_ROOT}/py/azazel_status.py"
 
 if ! command -v tmux >/dev/null 2>&1; then
   echo "tmux not found; please install tmux." >&2

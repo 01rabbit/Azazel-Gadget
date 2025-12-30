@@ -6,11 +6,6 @@ echo "AZAZEL_ROOT=${ROOT}"
 # スクリプトを /usr/local/bin へ
 install -m 0755 "${ROOT}/bin/azazel_console.sh"     /usr/local/bin/
 install -m 0755 "${ROOT}/bin/update_epaper_tmux.sh" /usr/local/bin/
-install -m 0755 "${ROOT}/bin/delay_on.sh"           /usr/local/bin/
-install -m 0755 "${ROOT}/bin/delay_off.sh"          /usr/local/bin/
-install -m 0755 "${ROOT}/bin/portal_mode.sh"        /usr/local/bin/
-install -m 0755 "${ROOT}/bin/shield_mode.sh"        /usr/local/bin/
-install -m 0755 "${ROOT}/bin/lockdown_mode.sh"      /usr/local/bin/
 install -m 0755 "${ROOT}/bin/suri_epaper.sh"        /usr/local/bin/
 install -m 0755 "${ROOT}/bin/portal_detect.sh"      /usr/local/bin/
 
