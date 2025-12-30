@@ -15,6 +15,8 @@ def get_link_state(iface: str) -> Dict[str, str]:
     out = _run(["iw", "dev", iface, "link"])
     bssid = ""
     ssid = ""
+    freq_mhz = ""
+    signal_dbm = ""
     if "Not connected" in out:
         return {"connected": "0"}
     for line in out.splitlines():
@@ -24,7 +26,52 @@ def get_link_state(iface: str) -> Dict[str, str]:
             if m: bssid = m.group(0).lower()
         elif line.startswith("SSID:"):
             ssid = line.split("SSID:", 1)[1].strip()
-    return {"connected": "1", "ssid": ssid, "bssid": bssid}
+        elif line.startswith("freq:"):
+            # freq: 5620.0
+            freq_mhz = line.split("freq:", 1)[1].strip().split()[0]
+        elif line.startswith("signal:"):
+            # signal: -62 dBm
+            signal_dbm = line.split("signal:", 1)[1].strip().split()[0]
+    link = {"connected": "1", "ssid": ssid, "bssid": bssid}
+    if freq_mhz:
+        link["freq_mhz"] = freq_mhz
+        ch = freq_to_channel(freq_mhz)
+        if ch:
+            link["channel"] = ch
+    if signal_dbm:
+        link["signal"] = signal_dbm
+    return link
+
+def freq_to_channel(freq_mhz: str) -> str:
+    """Convert MHz reported by iw to a channel number string."""
+    try:
+        freq = float(freq_mhz)
+    except (TypeError, ValueError):
+        return ""
+    if 2412 <= freq <= 2472:
+        # 2.4GHz: 2412 + 5*(ch-1)
+        return str(int(round((freq - 2407) / 5)))
+    if 2483 <= freq <= 2485:
+        return "14"
+    if 5180 <= freq <= 5885:
+        # 5GHz: 5000 + 5*ch
+        return str(int(round((freq - 5000) / 5)))
+    if 5955 <= freq <= 7115:
+        # 6GHz: 5950 + 5*ch
+        return str(int(round((freq - 5950) / 5)))
+    return ""
+
+def get_gateway_ip(iface: str) -> str:
+    """Return the default gateway for the given interface, if present."""
+    out = _run(["ip", "route", "show", "dev", iface])
+    for line in out.splitlines():
+        if line.startswith("default "):
+            parts = line.split()
+            if "via" in parts:
+                idx = parts.index("via")
+                if idx + 1 < len(parts):
+                    return parts[idx + 1]
+    return ""
 
 def load_known_db(path: str) -> Dict[str, Any]:
     if not path:
@@ -122,6 +169,9 @@ def detect_dns_anomaly(tcpdump_text: str) -> List[str]:
 def evaluate_wifi_safety(iface: str, known_db_path: str, gateway_ip: Optional[str]) -> Tuple[List[str], Dict[str, Any]]:
     known_db = load_known_db(known_db_path)
     link = get_link_state(iface)
+    gw = get_gateway_ip(iface)
+    if gw:
+        link.setdefault("gateway", gw)
     tags = []
     tags.extend(check_ap_fingerprint(link, known_db))
 

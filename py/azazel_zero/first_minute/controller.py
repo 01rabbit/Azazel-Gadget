@@ -73,6 +73,8 @@ class FirstMinuteController:
         self.status_server: Optional[ThreadingHTTPServer] = None
         self.processes: Dict[str, subprocess.Popen] = {}
         self.last_console = 0.0
+        self.snapshot_path = cfg.runtime_dir / "ui_snapshot.json"
+        self.snapshot_path.parent.mkdir(parents=True, exist_ok=True)
 
     def preflight(self) -> None:
         if os.geteuid() != 0:
@@ -116,6 +118,79 @@ class FirstMinuteController:
         self.status_server = make_status_server(host, port, self.status_ctx)
         thread = threading.Thread(target=self.status_server.serve_forever, daemon=True)
         thread.start()
+
+    def write_snapshot(self, summary: Dict[str, object], link_meta: Dict[str, object]) -> None:
+        """Write a UI snapshot JSON for the TUI to consume."""
+        link = link_meta.get("link", {}) if link_meta else {}
+        snap = {
+            "now_time": time.strftime("%H:%M:%S"),
+            "snapshot_epoch": time.time(),
+            "ssid": (link or {}).get("ssid", "-"),
+            "bssid": (link or {}).get("bssid", "-"),
+            "channel": (link or {}).get("channel", "-"),
+            "signal_dbm": (link or {}).get("signal", "-"),
+            "gateway_ip": (link or {}).get("gateway") or self.cfg.interfaces.get("gateway_ip", "-"),
+            "down_if": self.cfg.interfaces.get("downstream", "usb0"),
+            "down_ip": self.cfg.interfaces.get("mgmt_ip", "-"),
+            "up_if": self.cfg.interfaces.get("upstream", "wlan0"),
+            "user_state": self._user_state_from_stage(self.current_stage),
+            "recommendation": summary.get("reason", "確認中"),
+            "reasons": [summary.get("reason", "")] if summary.get("reason") else [],
+            "next_action_hint": "再評価を待機",
+            "quic": "blocked" if self.current_stage in (Stage.PROBE, Stage.DEGRADED, Stage.CONTAIN) else "allowed",
+            "doh": "blocked",
+            "dns_mode": "forced via Azazel DNS",
+            "degrade": {
+                "on": self.current_stage in (Stage.PROBE, Stage.DEGRADED),
+                "rtt_ms": 180 if self.current_stage in (Stage.PROBE, Stage.DEGRADED) else 0,
+                "rate_mbps": 2.0 if self.current_stage == Stage.DEGRADED else 1.0 if self.current_stage == Stage.PROBE else 0,
+            },
+            "probe": {
+                "tls_ok": (self.last_probe.tls_mismatch is False) if self.last_probe else 0,
+                "tls_total": 1 if self.last_probe else 0,
+                "blocked": 1 if (self.last_probe and self.last_probe.tls_mismatch) else 0,
+            },
+            "evidence": self._evidence_lines(link_meta),
+            "internal": {
+                "state_name": self.state_machine.ctx.state.value,
+                "suspicion": summary.get("suspicion", 0),
+                "decay": self.state_machine.ctx.last_transition,
+            },
+        }
+        try:
+            self.snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+            self.snapshot_path.write_text(json.dumps(snap, ensure_ascii=False), encoding="utf-8")
+        except Exception:
+            pass
+
+    def _evidence_lines(self, link_meta: Dict[str, object]) -> List[str]:
+        lines: List[str] = []
+        tags = link_meta.get("wifi_tags") or []
+        if tags:
+            lines.append("• wifi tags: " + ",".join(tags))
+        if self.last_probe:
+            lines.append(f"• captive portal: {'yes' if self.last_probe.captive_portal else 'no'}")
+            lines.append(f"• tls mismatch: {'yes' if self.last_probe.tls_mismatch else 'no'}")
+            lines.append(f"• dns mismatch: {self.last_probe.dns_mismatch}")
+        if not lines:
+            lines.append("• no recent evidence")
+        lines.append(
+            f"↳ decision: state={self.state_machine.ctx.state.value} suspicion={round(self.state_machine.ctx.suspicion,2)}"
+        )
+        return lines
+
+    def _user_state_from_stage(self, stage: Stage) -> str:
+        if stage == Stage.PROBE or stage == Stage.INIT:
+            return "CHECKING"
+        if stage == Stage.NORMAL:
+            return "SAFE"
+        if stage == Stage.DEGRADED:
+            return "LIMITED"
+        if stage == Stage.CONTAIN:
+            return "CONTAINED"
+        if stage == Stage.DECEPTION:
+            return "DECEPTION"
+        return "CHECKING"
 
     def apply_stage(self, stage: Stage) -> None:
         if self.dry_run:
@@ -226,6 +301,7 @@ class FirstMinuteController:
                     "last_probe": self.last_probe.details if self.last_probe else None,
                 }
             )
+            self.write_snapshot(summary, link_meta)
             if self.pretty_console:
                 self.render_console(state, summary, link_meta)
             self.logger.info(json.dumps(self.status_ctx))
