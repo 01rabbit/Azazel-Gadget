@@ -69,10 +69,38 @@ class Snapshot:
     channel_congestion: str = "unknown"  # none, low, medium, high, critical
     channel_ap_count: int = 0  # 周囲のAP数
     recommended_channel: int = -1  # 推奨チャンネル
+    cpu_percent: float = 0.0  # CPU使用率
+    mem_percent: int = 0  # メモリ使用率
+    mem_used_mb: int = 0  # 使用メモリ
+    mem_total_mb: int = 0  # 総メモリ
+    temp_c: float = 0.0  # CPU温度
+    download_mbps: float = 0.0  # ダウンロード速度
+    upload_mbps: float = 0.0  # アップロード速度
+    session_uptime: int = 0  # WiFi接続時間（秒）
+    suricata_critical: int = 0  # Suricata重大アラート
+    suricata_warning: int = 0  # Suricata警告
+    suricata_info: int = 0  # Suricata情報
+    packet_loss_percent: float = 0.0  # パケットロス率
+    latency_avg_ms: float = 0.0  # 平均レイテンシ
+    latency_trend: List[float] = None  # レイテンシ推移
+    dns_avg_ms: float = 0.0  # DNS平均応答時間
+    dns_cache_hit_rate: int = 0  # DNSキャッシュヒット率
+    dns_timeouts: int = 0  # DNSタイムアウト数
+    traffic_total_mb: float = 0.0  # 累計トラフィック
+    traffic_download_mb: float = 0.0  # 累計ダウンロード
+    traffic_upload_mb: float = 0.0  # 累計アップロード
+    traffic_packets: int = 0  # 累計パケット数
+    state_timeline: str = "-"  # 状態遷移タイムライン
+    top_blocked: List[Tuple[str, int]] = None  # ブロックトップ5
+    risk_score: int = 0  # リスクスコア 0-100（優先度：低）
 
     def __post_init__(self):
         if self.dns_stats is None:
             self.dns_stats = {"ok": 0, "anomaly": 0, "blocked": 0}
+        if self.latency_trend is None:
+            self.latency_trend = []
+        if self.top_blocked is None:
+            self.top_blocked = []
 
 
 def detect_unicode(force_ascii: bool, force_unicode: bool) -> bool:
@@ -127,6 +155,30 @@ def build_snapshot(data: Dict[str, object], source: str = "SNAPSHOT") -> Snapsho
         channel_congestion=data.get("channel_congestion", "unknown"),
         channel_ap_count=data.get("channel_ap_count", 0),
         recommended_channel=data.get("recommended_channel", -1),
+        cpu_percent=data.get("cpu_percent", 0.0),
+        mem_percent=data.get("mem_percent", 0),
+        mem_used_mb=data.get("mem_used_mb", 0),
+        mem_total_mb=data.get("mem_total_mb", 512),
+        temp_c=data.get("temp_c", 0.0),
+        download_mbps=data.get("download_mbps", 0.0),
+        upload_mbps=data.get("upload_mbps", 0.0),
+        session_uptime=data.get("session_uptime", 0),
+        suricata_critical=data.get("suricata_critical", 0),
+        suricata_warning=data.get("suricata_warning", 0),
+        suricata_info=data.get("suricata_info", 0),
+        packet_loss_percent=data.get("packet_loss_percent", 0.0),
+        latency_avg_ms=data.get("latency_avg_ms", 0.0),
+        latency_trend=data.get("latency_trend", []),
+        dns_avg_ms=data.get("dns_avg_ms", 0.0),
+        dns_cache_hit_rate=data.get("dns_cache_hit_rate", 0),
+        dns_timeouts=data.get("dns_timeouts", 0),
+        traffic_total_mb=data.get("traffic_total_mb", 0.0),
+        traffic_download_mb=data.get("traffic_download_mb", 0.0),
+        traffic_upload_mb=data.get("traffic_upload_mb", 0.0),
+        traffic_packets=data.get("traffic_packets", 0),
+        state_timeline=data.get("state_timeline", "-"),
+        top_blocked=data.get("top_blocked", []),
+        risk_score=data.get("risk_score", 0),
     )
 
 
@@ -245,6 +297,107 @@ def load_snapshot_from_log() -> Optional[Snapshot]:
     return None
 
 
+# セッション開始時刻（グローバル）
+_session_start_time = time.time()
+
+# スループット計算用の前回統計（優先度：低）
+_last_net_stats = {}
+_last_net_time = time.time()
+
+
+def calculate_risk_score(snap: Snapshot) -> int:
+    """
+    リスクスコアを0-100で算出（優先度：低）
+    高いほど危険
+    """
+    score = 0
+    
+    # 1. Threat Level (0-30点)
+    # threat_levelは0-5の整数なので、直接計算
+    if isinstance(snap.threat_level, int):
+        score += min(snap.threat_level * 6, 30)  # 0-5を0-30にマッピング
+    else:
+        threat_map = {"low": 0, "medium": 10, "high": 20, "critical": 30}
+        score += threat_map.get(str(snap.threat_level).lower(), 0)
+    
+    # 2. Suricata Alerts (0-25点)
+    score += min(snap.suricata_critical * 10, 25)  # critical 1件=10点
+    score += min(snap.suricata_warning * 3, 10)  # warning 1件=3点
+    
+    # 3. WiFi Signal Strength (0-15点)
+    if isinstance(snap.signal_dbm, (int, float)):
+        if snap.signal_dbm < -80:  # 弱い
+            score += 15
+        elif snap.signal_dbm < -70:
+            score += 10
+        elif snap.signal_dbm < -60:
+            score += 5
+    
+    # 4. User State (0-20点)
+    state_risk = {
+        "SAFE": 0,
+        "NORMAL": 5,
+        "LIMITED": 10,
+        "DEGRADED": 12,
+        "DECEPTION": 15,
+        "CONTAINED": 20,
+    }
+    score += state_risk.get(snap.user_state.upper(), 10)
+    
+    # 5. DNS Blocked (0-10点)
+    dns_blocked = snap.dns_stats.get("blocked", 0)
+    score += min(dns_blocked * 2, 10)
+    
+    return min(score, 100)  # 最大100
+
+
+def generate_recommendation(snap: Snapshot) -> str:
+    """
+    現在の状態に応じた推奨アクションを生成（優先度：低）
+    """
+    recommendations = []
+    
+    # 1. チャンネル混雑度チェック
+    if snap.channel_congestion in ["high", "critical"]:
+        if snap.recommended_channel > 0:
+            recommendations.append(f"📡 Ch{snap.recommended_channel}に変更推奨")
+        else:
+            recommendations.append("📡 混雑低チャンネルへ変更推奨")
+    
+    # 2. WiFi信号強度
+    if isinstance(snap.signal_dbm, (int, float)) and snap.signal_dbm < -75:
+        recommendations.append("📶 APに近づくか再接続")
+    
+    # 3. リスクスコア
+    if snap.risk_score >= 70:
+        recommendations.append("⚠️ 危険なネットワーク！切断推奨")
+    elif snap.risk_score >= 50:
+        recommendations.append("🛡️ Containモードへ移行検討")
+    
+    # 4. Suricataアラート
+    if snap.suricata_critical > 0:
+        recommendations.append(f"🚨 {snap.suricata_critical}件の重大脅威検知")
+    
+    # 5. DNSブロック
+    dns_blocked = snap.dns_stats.get("blocked", 0)
+    if dns_blocked >= 10:
+        recommendations.append(f"🚫 {dns_blocked}件DNSブロック！確認推奨")
+    
+    # 6. バッテリー
+    if 0 <= snap.battery_pct < 20:
+        recommendations.append("🔋 バッテリー低下！充電推奨")
+    
+    # 7. 温度
+    if snap.temp_c >= 70:
+        recommendations.append("🌡️ 高温警告！冷却推奨")
+    
+    # 8. 問題なし
+    if not recommendations and snap.user_state.upper() == "SAFE":
+        recommendations.append("✅ ネットワークは安全です")
+    
+    return " | ".join(recommendations[:2]) if recommendations else "✅ 問題なし"
+
+
 def load_snapshot() -> Snapshot:
     path = SNAPSHOT_PATH if SNAPSHOT_PATH.exists() else FALLBACK_SNAPSHOT
     data: Dict[str, object]
@@ -299,6 +452,140 @@ def load_snapshot() -> Snapshot:
     except Exception as e:
         # スキャン失敗時はデフォルト値を保持し、エラーをevidenceに記録
         snap.evidence.append(f"⚠️ Scan error: {str(e)}")
+    
+    # システムメトリクスを収集
+    try:
+        try:
+            from .sensors.system_metrics import collect_all_metrics
+        except ImportError:
+            import sys
+            from pathlib import Path
+            sensors_path = Path(__file__).parent / "sensors"
+            if str(sensors_path) not in sys.path:
+                sys.path.insert(0, str(sensors_path.parent))
+            from sensors.system_metrics import collect_all_metrics
+        
+        metrics = collect_all_metrics(snap.up_if, snap.down_if)
+        snap.cpu_percent = metrics.get("cpu_percent", 0.0)
+        mem = metrics.get("memory", {})
+        snap.mem_percent = mem.get("percent", 0)
+        snap.mem_used_mb = mem.get("used_mb", 0)
+        snap.mem_total_mb = mem.get("total_mb", 512)
+        snap.temp_c = metrics.get("temperature_c", 0.0) or 0.0
+        
+        # スループット計算（前回値との差分）（優先度：低）
+        global _last_net_stats, _last_net_time
+        current_time = time.time()
+        net_stats = metrics.get("network", {})
+        
+        if _last_net_stats.get(snap.up_if):
+            time_diff = current_time - _last_net_time
+            if time_diff > 0:
+                last_rx = _last_net_stats[snap.up_if].get("rx_bytes", 0)
+                last_tx = _last_net_stats[snap.up_if].get("tx_bytes", 0)
+                curr_rx = net_stats.get("rx_bytes", 0)
+                curr_tx = net_stats.get("tx_bytes", 0)
+                
+                rx_diff = max(0, curr_rx - last_rx)
+                tx_diff = max(0, curr_tx - last_tx)
+                
+                # bytes/sec -> Mbps
+                snap.download_mbps = (rx_diff / time_diff) * 8 / 1000000
+                snap.upload_mbps = (tx_diff / time_diff) * 8 / 1000000
+        
+        # 次回のために保存
+        _last_net_stats[snap.up_if] = net_stats
+        _last_net_time = current_time
+        
+        # Suricataアラート
+        alerts = metrics.get("suricata_alerts", {})
+        snap.suricata_critical = alerts.get("critical", 0)
+        snap.suricata_warning = alerts.get("warning", 0)
+        snap.suricata_info = alerts.get("info", 0)
+    except Exception:
+        pass
+    
+    # ネットワーク解析（優先度：中）
+    try:
+        try:
+            from .sensors.network_analytics import get_analytics
+        except ImportError:
+            import sys
+            from pathlib import Path
+            sensors_path = Path(__file__).parent / "sensors"
+            if str(sensors_path) not in sys.path:
+                sys.path.insert(0, str(sensors_path.parent))
+            from sensors.network_analytics import get_analytics
+        
+        analytics = get_analytics()
+        
+        # 状態遷移の記録（前回の状態と比較）
+        current_state = snap.user_state
+        # グローバル変数で前回の状態を記憶（簡易版）
+        if not hasattr(load_snapshot, 'last_state'):
+            load_snapshot.last_state = None
+        
+        if load_snapshot.last_state and load_snapshot.last_state != current_state:
+            # 状態が変化したら記録
+            if not hasattr(load_snapshot, 'state_start_time'):
+                load_snapshot.state_start_time = time.time()
+            
+            duration = int(time.time() - load_snapshot.state_start_time)
+            analytics.add_state_transition(load_snapshot.last_state, current_state, duration)
+            load_snapshot.state_start_time = time.time()
+        
+        load_snapshot.last_state = current_state
+        
+        # パケットロスとレイテンシ測定（軽量化のためcount=3）
+        # ping_result = analytics.measure_packet_loss("8.8.8.8", 3)
+        # snap.packet_loss_percent = ping_result.get("loss_percent", 0.0)
+        # snap.latency_avg_ms = ping_result.get("avg_rtt_ms", 0.0)
+        # snap.latency_trend = analytics.get_ping_trend()
+        
+        # DNS統計
+        dns_stats = analytics.get_dns_stats()
+        snap.dns_avg_ms = dns_stats.get("avg_ms", 0.0)
+        snap.dns_cache_hit_rate = dns_stats.get("cache_hit_rate", 0)
+        snap.dns_timeouts = dns_stats.get("timeouts", 0)
+        
+        # DNS blockedイベントからドメインを記録
+        dns_blocked = snap.dns_stats.get("blocked", 0)
+        if dns_blocked > 0:
+            # evidenceからブロックされたドメインを抽出（簡易版）
+            for ev in snap.evidence[-10:]:
+                if "blocked" in ev.lower() and "dns" in ev.lower():
+                    # "DNS blocked: example.com" のような形式を想定
+                    parts = ev.split(":")
+                    if len(parts) >= 2:
+                        domain = parts[-1].strip().split()[0]  # 最初の単語を取得
+                        analytics.add_blocked_domain(domain)
+        
+        # 状態遷移タイムライン
+        snap.state_timeline = analytics.get_state_timeline()
+        
+        # ブロックトップ5
+        snap.top_blocked = analytics.get_top_blocked(5)
+        
+        # 累計トラフィック（start_statsはnoneで起動からの累計）
+        cumulative = analytics.get_traffic_cumulative(snap.up_if)
+        snap.traffic_total_mb = cumulative.get("total_mb", 0.0)
+        snap.traffic_download_mb = cumulative.get("download_mb", 0.0)
+        snap.traffic_upload_mb = cumulative.get("upload_mb", 0.0)
+        snap.traffic_packets = cumulative.get("packets", 0)
+    except Exception:
+        pass
+    
+    # セッション稼働時間（優先度：低）
+    snap.session_uptime = int(time.time() - _session_start_time)
+    
+    # リスクスコア計算（優先度：低）
+    snap.risk_score = calculate_risk_score(snap)
+    
+    # 推奨アクション生成（優先度：低）
+    auto_recommendation = generate_recommendation(snap)
+    # 既存のrecommendationが空またはデフォルトの場合、自動推奨で上書き
+    if not snap.recommendation or snap.recommendation == "確認中":
+        snap.recommendation = auto_recommendation
     
     return snap
 
@@ -411,7 +698,7 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
     def cp(idx: int):
         return curses.color_pair(idx) if colors_on else curses.A_BOLD
 
-    # Status bar with icons and battery
+    # Status bar with icons, battery, and system metrics
     battery_icon = ""
     if snap.battery_pct >= 0:
         if snap.battery_pct >= 80:
@@ -420,6 +707,19 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
             battery_icon = f"🔋 {snap.battery_pct}%" if unicode_mode else f"Bat:{snap.battery_pct}%"
         else:
             battery_icon = f"🪫 {snap.battery_pct}%" if unicode_mode else f"LOW:{snap.battery_pct}%"
+    
+    # System metrics
+    temp_icon = ""
+    if snap.temp_c > 0:
+        if snap.temp_c >= 70:
+            temp_icon = f"🌡️ {snap.temp_c}°C" if unicode_mode else f"Temp:{snap.temp_c}C"
+            temp_color = cp(2)  # red
+        elif snap.temp_c >= 60:
+            temp_icon = f"🌡️ {snap.temp_c}°C" if unicode_mode else f"Temp:{snap.temp_c}C"
+            temp_color = cp(4)  # yellow
+        else:
+            temp_icon = f"🌡️ {snap.temp_c}°C" if unicode_mode else f"Temp:{snap.temp_c}C"
+            temp_color = cp(1)  # green
     
     bar = (
         f"Azazel-Zero | "
@@ -431,6 +731,10 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
     if battery_icon:
         bar += f"  {battery_icon}"
     stdscr.addnstr(0, 0, bar[: w - 1], w - 1, cp(6) | curses.A_BOLD)
+    
+    # 1行目の右側：システムメトリクス（温度のみ）
+    if temp_icon:
+        stdscr.addnstr(0, w - len(temp_icon) - 2, temp_icon, temp_color)
 
     # View line with age color coding
     live_age = "00:00:00"
@@ -446,18 +750,39 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
             age_color = cp(4)  # yellow
             age_icon = "🟡" if unicode_mode else "OLD"
     
+    # 2行目：CPU/メモリ + View情報
     color_note = "Color: ON" if colors_on else f"Color: OFF (TERM={os.environ.get('TERM','?')})"
-    view = f"View: {snap.source} (manual)  Last: {snap.now_time}  "
+    sys_metrics = f"CPU {snap.cpu_percent}% | Mem {snap.mem_used_mb}/{snap.mem_total_mb}MB ({snap.mem_percent}%)"
+    view = f"{sys_metrics}  |  View: {snap.source} (manual)"
     stdscr.addnstr(1, 0, view[: w - 1], w - 1, cp(6))
+    
+    # 2行目の右側：Age情報
     age_text = f"Age: {age_icon} {live_age}"
-    stdscr.addnstr(1, len(view), age_text, age_color | curses.A_BOLD)
-    stdscr.addnstr(1, len(view) + len(age_text) + 3, f"  {color_note}"[: w - len(view) - len(age_text) - 1], cp(6))
+    stdscr.addnstr(1, w - len(age_text) - 2, age_text, age_color | curses.A_BOLD)
 
     # Conclusion card
     card_w = w - 2
-    card_h = 6  # 1行追加
-    card_y = 3
+    card_h = 7  # リスクスコア追加で1行増
+    card_y = 2  # 元々3だったが、ステータスが2行になったので2に
     draw_box(stdscr, card_y, 0, card_h, card_w, not unicode_mode)
+    
+    # リスクスコア表示（優先度：低）
+    risk_color = cp(1)  # default green
+    risk_icon = "🟢" if unicode_mode else "LOW"
+    if snap.risk_score >= 70:
+        risk_color = cp(2) | curses.A_BOLD  # red
+        risk_icon = "🔴" if unicode_mode else "CRIT"
+    elif snap.risk_score >= 50:
+        risk_color = cp(2)  # red
+        risk_icon = "🟠" if unicode_mode else "HIGH"
+    elif snap.risk_score >= 30:
+        risk_color = cp(4)  # yellow
+        risk_icon = "🟡" if unicode_mode else "MED"
+    
+    risk_line = f"Risk Score: {risk_icon} {snap.risk_score}/100"
+    stdscr.addnstr(card_y + 1, 2, risk_line, risk_color | curses.A_BOLD)
+    
+    # State badge（2行目に移動）
     state_color, state_icon = color_for_state(snap.user_state, unicode_mode)
     
     # 状態ラベル（「安全」は常に緑の太字で強調）
@@ -483,27 +808,27 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
     else:
         badge_attr = cp(state_color) | curses.A_REVERSE | curses.A_BOLD if colors_on else curses.A_REVERSE
     
-    stdscr.addnstr(card_y + 1, 2, badge, min(len(badge), card_w - 4), badge_attr)
+    stdscr.addnstr(card_y + 2, 2, badge, min(len(badge), card_w - 4), badge_attr)
     rec_text = f"  推奨：{snap.recommendation}"
     # 推奨文も状態に応じて強調
     rec_attr = cp(state_color) | curses.A_BOLD
     # 絵文字の実際の表示幅を考慮して、固定位置から表示（20文字目から開始）
     rec_start_pos = 20  # 固定位置
-    stdscr.addnstr(card_y + 1, rec_start_pos, rec_text[: card_w - rec_start_pos - 2], rec_attr)
+    stdscr.addnstr(card_y + 2, rec_start_pos, rec_text[: card_w - rec_start_pos - 2], rec_attr)
     reasons = "理由：" + " / ".join(snap.reasons or ["-"])
     # 理由を状態に応じた色で表示
-    stdscr.addnstr(card_y + 2, 2, reasons[: card_w - 4], cp(state_color))
+    stdscr.addnstr(card_y + 3, 2, reasons[: card_w - 4], cp(state_color))
     
     # 脅威レベル表示
     threat_color = cp(1) if snap.threat_level < 2 else cp(4) if snap.threat_level < 4 else cp(2)
-    stdscr.addnstr(card_y + 3, 2, threat_text[: card_w - 4], threat_color | curses.A_BOLD)
+    stdscr.addnstr(card_y + 4, 2, threat_text[: card_w - 4], threat_color | curses.A_BOLD)
     
     next_line = "次：" + (snap.next_action_hint or "再評価を待機")
-    stdscr.addnstr(card_y + 4, 2, next_line[: card_w - 4], cp(6))
+    stdscr.addnstr(card_y + 5, 2, next_line[: card_w - 4], cp(6))
 
     # Middle panes
     mid_y = card_y + card_h + 1
-    pane_h = 8 if not compact else 5
+    pane_h = 10 if not compact else 7  # 高さを増やしてSuricata/Trafficを表示
     pane_w = (w - 3) // 2
     # Left: Connection
     draw_box(stdscr, mid_y, 0, pane_h, pane_w, not unicode_mode)
@@ -677,12 +1002,66 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
         dns_stat_text = "DNS: (no data)"
         dns_stat_color = 6
     
+    # Suricataアラート統計
+    suri_total = snap.suricata_critical + snap.suricata_warning + snap.suricata_info
+    if suri_total > 0:
+        suri_text = f"IDS: 🔴 {snap.suricata_critical} ⚠️ {snap.suricata_warning} 🟢 {snap.suricata_info}" if unicode_mode else f"IDS: C:{snap.suricata_critical} W:{snap.suricata_warning} I:{snap.suricata_info}"
+        if snap.suricata_critical > 0:
+            suri_color = 2  # red
+        elif snap.suricata_warning > 0:
+            suri_color = 4  # yellow
+        else:
+            suri_color = 1  # green
+    else:
+        suri_text = "IDS: (no alerts)"
+        suri_color = 6
+    
+    # ネットワークスループット
+    traffic_text = f"Traffic: ↓ {snap.download_mbps:.1f} Mbps / ↑ {snap.upload_mbps:.1f} Mbps" if unicode_mode else f"Traffic: D:{snap.download_mbps:.1f} U:{snap.upload_mbps:.1f} Mbps"
+    traffic_color = 6
+    
+    # パケットロス統計（優先度：中）
+    loss_text = ""
+    loss_color = 1  # default green
+    if snap.packet_loss_percent > 0 or snap.latency_avg_ms > 0:
+        loss_text = f"Loss: {snap.packet_loss_percent:.1f}% | RTT: {snap.latency_avg_ms:.1f}ms"
+        if snap.packet_loss_percent >= 10:
+            loss_color = 2  # red
+        elif snap.packet_loss_percent >= 5:
+            loss_color = 4  # yellow
+        else:
+            loss_color = 1  # green
+    
+    # DNS応答時間統計（優先度：中）
+    dns_perf_text = ""
+    dns_perf_color = 1
+    if snap.dns_avg_ms > 0:
+        cache_info = f" | Cache:{snap.dns_cache_hit_rate}%" if snap.dns_cache_hit_rate > 0 else ""
+        timeout_info = f" | TO:{snap.dns_timeouts}" if snap.dns_timeouts > 0 else ""
+        dns_perf_text = f"DNS Time: {snap.dns_avg_ms:.1f}ms{cache_info}{timeout_info}"
+        if snap.dns_avg_ms >= 100:
+            dns_perf_color = 4  # yellow
+        elif snap.dns_timeouts > 0:
+            dns_perf_color = 2  # red
+        else:
+            dns_perf_color = 1  # green
+    
+    # 累計トラフィック（優先度：中）
+    traffic_cum_text = ""
+    if snap.traffic_total_mb > 0:
+        traffic_cum_text = f"Total: {snap.traffic_total_mb:.1f}MB (↓{snap.traffic_download_mb:.1f} ↑{snap.traffic_upload_mb:.1f})"
+    
     ctl_items = [
         ("QUIC(UDP/443)", quic_display, quic_color),
         ("DoH(TCP/443)", doh_display, doh_color),
         ("Degrade", deg_txt, deg_color),
         ("Probe", probe_txt, probe_color),
         ("Stats", dns_stat_text, dns_stat_color),
+        ("", suri_text, suri_color),  # Suricataアラート
+        ("", traffic_text, traffic_color),  # トラフィック
+        ("", loss_text, loss_color) if loss_text else ("", "", 6),  # パケットロス
+        ("", dns_perf_text, dns_perf_color) if dns_perf_text else ("", "", 6),  # DNS性能
+        ("", traffic_cum_text, 6) if traffic_cum_text else ("", "", 6),  # 累計トラフィック
     ]
     
     for i, (label, val, color_idx) in enumerate(ctl_items[: pane_h - 2]):
@@ -732,6 +1111,33 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
     dec = snap.internal or {}
     decision = f"↳ decision: state={dec.get('state_name','-')} suspicion={dec.get('suspicion','-')} decay={dec.get('decay','-')}"
     stdscr.addnstr(ev_y + ev_h - 2, 2, decision[: w - 4], cp(6))
+
+    # 追加パネル：State遷移タイムラインとブロックドメイン（優先度：中）
+    extra_y = ev_y + ev_h
+    extra_h = h - extra_y - 4
+    if extra_h >= 5:
+        draw_box(stdscr, extra_y, 0, extra_h, w, not unicode_mode)
+        stdscr.addnstr(extra_y, 2, "Analytics (State & Blocked)", cp(5) | curses.A_BOLD)
+        
+        # セッション稼働時間（優先度：低）
+        uptime_str = time.strftime("%H:%M:%S", time.gmtime(snap.session_uptime))
+        session_display = f"Session Uptime: ⏱️ {uptime_str}" if unicode_mode else f"Session Uptime: {uptime_str}"
+        stdscr.addnstr(extra_y + 1, 2, session_display[: w - 4], cp(3) | curses.A_BOLD)
+        
+        # State遷移タイムライン
+        timeline_display = f"Timeline: {snap.state_timeline}"
+        stdscr.addnstr(extra_y + 2, 2, timeline_display[: w - 4], cp(6))
+        
+        # ブロックトップ5
+        if snap.top_blocked:
+            blocked_title = "Top Blocked:" if unicode_mode else "Top Blocked:"
+            stdscr.addnstr(extra_y + 3, 2, blocked_title, cp(2) | curses.A_BOLD)
+            for idx, (domain, count) in enumerate(snap.top_blocked[: extra_h - 5]):
+                block_line = f"  {idx+1}. {domain} ({count}x)"
+                stdscr.addnstr(extra_y + 4 + idx, 2, block_line[: w - 4], cp(2))
+        else:
+            no_blocks = "No blocked domains"
+            stdscr.addnstr(extra_y + 3, 2, no_blocks[: w - 4], cp(1))
 
     # Actions + Hint (絵文字なし、シンプル表示)
     actions = "[U] Refresh  [A] Stage-Open  [R] Re-Probe  [C] Contain  [L] Details  [Q] Quit"
