@@ -104,11 +104,10 @@ def _status_lines() -> List[str]:
     usb_ip = _ip4_addr("usb0")
     rssi = _wifi_rssi()
     return [
-        f"First-Minute: {'active' if active else 'inactive'} (unit {'found' if exists else 'missing'})",
-        f"Wi-Fi health: {health}",
-        f"SSID/BSSID: {ssid} / {bssid}",
-        f"IPs: wlan0={wlan_ip}  usb0={usb_ip}  RSSI={rssi if rssi is not None else 'n/a'} dBm",
-        "ENTER:refresh  s:start  x:stop  q:quit",
+        ("First-Minute", "active" if active else ("missing" if not exists else "inactive"), exists and active),
+        ("Wi-Fi health", health, "risk=0" in health or "ok" in health.lower()),
+        ("SSID/BSSID", f"{ssid} / {bssid}", True),
+        ("IPs", f"wlan0={wlan_ip}  usb0={usb_ip}  RSSI={rssi if rssi is not None else 'n/a'} dBm", True),
     ]
 
 
@@ -116,6 +115,12 @@ def _menu(stdscr):
     curses.curs_set(0)
     stdscr.nodelay(False)
     stdscr.keypad(True)
+    curses.start_color()
+    curses.use_default_colors()
+    curses.init_pair(1, curses.COLOR_GREEN, -1)
+    curses.init_pair(2, curses.COLOR_RED, -1)
+    curses.init_pair(3, curses.COLOR_CYAN, -1)
+
     idx = 0
     items = [
         ("Refresh", "refresh"),
@@ -128,13 +133,16 @@ def _menu(stdscr):
         h, w = stdscr.getmaxyx()
         # status lines
         lines = _status_lines()
-        for i, ln in enumerate(lines):
-            stdscr.addnstr(i, 0, ln, w)
-        stdscr.addnstr(len(lines), 0, "-" * max(0, w), w)
+        stdscr.addnstr(0, 0, "Azazel-Zero Unified CLI", w, curses.color_pair(3))
+        for i, (label, text, ok) in enumerate(lines, start=1):
+            color = curses.color_pair(1 if ok else 2)
+            icon = "🟢" if ok else "🔴"
+            stdscr.addnstr(i, 0, f"{icon} {label}: {text}", w, color)
+        stdscr.addnstr(len(lines) + 1, 0, "-" * max(0, w), w)
         # menu
         for i, (label, _) in enumerate(items):
             prefix = ">" if i == idx else " "
-            stdscr.addnstr(len(lines) + 1 + i, 0, f"{prefix} {label}", w)
+            stdscr.addnstr(len(lines) + 2 + i, 0, f"{prefix} {label}", w, curses.A_BOLD if i == idx else 0)
         stdscr.refresh()
         ch = stdscr.getch()
         if ch in (curses.KEY_UP, ord("k")):
