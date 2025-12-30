@@ -28,7 +28,6 @@ OUTIF=${WAN_IF}
 EOF
 
 # systemd unit を配置
-sudo install -m 0644 "${ROOT}/systemd/azazel-console.service" /etc/systemd/system/
 sudo install -m 0644 "${ROOT}/systemd/azazel-epd.service"     /etc/systemd/system/
 sudo install -m 0644 "${ROOT}/systemd/suri-epaper.service"    /etc/systemd/system/
 sudo install -m 0644 "${ROOT}/systemd/opencanary.service"     /etc/systemd/system/
@@ -36,10 +35,11 @@ sudo install -m 0644 "${ROOT}/systemd/azazel-epd-portal.service" /etc/systemd/sy
 sudo install -m 0644 "${ROOT}/systemd/azazel-epd-portal.timer"   /etc/systemd/system/
 sudo install -d /etc/systemd/system/azazel-epd.service.d
 sudo install -m 0644 "${ROOT}/systemd/azazel-epd.service.d/10-portal-detect.conf" /etc/systemd/system/azazel-epd.service.d/
+sudo install -m 0644 "${ROOT}/systemd/azazel-first-minute.service" /etc/systemd/system/
 
 # 反映・起動
 sudo systemctl daemon-reload
-sudo systemctl enable --now azazel-console.service
 sudo systemctl enable --now suri-epaper.service
 sudo systemctl enable --now azazel-epd-portal.timer
+sudo systemctl enable --now azazel-first-minute.service
 echo "Units installed. Edit opencanary.service if needed, then: sudo systemctl enable --now opencanary.service"
