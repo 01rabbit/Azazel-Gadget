@@ -12,7 +12,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
 PY_ROOT = REPO_ROOT / "py"
 if str(PY_ROOT) not in sys.path:
     sys.path.insert(0, str(PY_ROOT))
@@ -27,7 +27,7 @@ from azazel_zero.first_minute.tc import TcManager
 
 def parse_args() -> argparse.Namespace:
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--config", default="configs/first_minute.yaml", help="設定ファイルパス (YAML)")
+    common.add_argument("--config", default=str(REPO_ROOT / "configs/first_minute.yaml"), help="設定ファイルパス (YAML)")
     common.add_argument("--dry-run", action="store_true", help="nft/tcを適用せず計画だけ表示")
     common.add_argument("--no-dns-start", action="store_true", help="dnsmasqを起動しない (外部dnsmasq使用時)")
     common.add_argument("--foreground", action="store_true", help="フォアグラウンド実行（デフォルト）")
