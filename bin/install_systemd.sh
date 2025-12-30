@@ -4,7 +4,6 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 echo "AZAZEL_ROOT=${ROOT}"
 
 # スクリプトを /usr/local/bin へ
-install -m 0755 "${ROOT}/bin/azazel_console.sh"     /usr/local/bin/
 install -m 0755 "${ROOT}/bin/update_epaper_tmux.sh" /usr/local/bin/
 install -m 0755 "${ROOT}/bin/suri_epaper.sh"        /usr/local/bin/
 install -m 0755 "${ROOT}/bin/portal_detect.sh"      /usr/local/bin/

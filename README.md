@@ -87,11 +87,10 @@ Heavy ML models remain a future research track, but the current deterministic st
 
 ## Operator Console & Automation
 
-- **tmux console**  
-  - `py/azazel_menu.py` offers a curses launcher for Wi-Fi selection, Portal/Shield/Lockdown scripts, OpenCanary control, and E-Paper tests.  
-  - `py/azazel_status.py` renders a telemetry pane (SSID/BSSID, gadget IPs, RSSI, captive portal indicator, Wi-Fi health risk/tags).  
-  - 起動: `bash bin/azazel_console.sh`（sudo不要。sudoの場合は自動で元ユーザに切り替えてtmuxを起動）
-  - 過去の固定プロファイル切替スクリプト（delay/portal/shield/lockdown）は `archive/bin/` に退避（First-Minuteが段階制御を担うため）
+- **Unified CLI (manual refresh)**  
+  - `py/azazel_zero/cli_unified.py` で First-Minute の開始/停止と Wi-Fi health を1画面で操作/確認（Enterでリフレッシュ、s:start、x:stop、q:終了）。  
+  - 起動時に First-Minute が未稼働なら開始、終了時に停止を試行。  
+  - シンプルにステータス確認とサービス操作をしたい場合向け（tmux依存なし）。
 - **Bootstrap tooling**  
   - `tools/bootstrap_zero.sh` installs dependencies, systemd units, minimal Suricata rules, and can run smoke tests.  
   - Flags (`--no-epd`, `--no-enable`, `--no-suricata`, `--dry-run`) adapt the flow for lab vs. production builds.
