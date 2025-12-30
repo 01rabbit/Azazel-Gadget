@@ -55,6 +55,7 @@ At the same time, it returns to the original concepts of the Azazel System: the 
   - nftables+tc で段階的開放、dnsmasqログ由来の動的宛先セット、QUIC/DoH抑制  
   - 軽量プローブ(Captive/TLS/DNS/route)とWi-Fiタグを Mock-LLM (`judge_zero`) で統一スコアリング、`wifi_health.json` に書き出し  
 - スクリプト起動: `sudo python3 py/azazel-first-minute.py start --config configs/first_minute.yaml --foreground [--pretty-console]`
+- スコアリング単体テスト: `python3 py/wifi_risk_check.py --iface wlan0 --interval 0`
 
 ### Status Display
 
