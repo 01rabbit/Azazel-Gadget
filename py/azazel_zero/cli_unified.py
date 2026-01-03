@@ -206,6 +206,42 @@ def _user_state_from_stage_name(stage_name: str) -> str:
     return "CHECKING"
 
 
+def export_epd_snapshot(snap: Snapshot) -> None:
+    """
+    EPD表示用にスナップショットをエクスポート
+    TUIで計算済みのrisk_scoreやrecommendationをEPDと共有して重複計算を避ける
+    """
+    try:
+        from dataclasses import asdict
+        
+        # EPDに必要な最小限のフィールドのみをエクスポート
+        epd_data = {
+            "risk_score": snap.risk_score,
+            "recommendation": snap.recommendation,
+            "user_state": snap.user_state,
+            "threat_level": snap.threat_level,
+            "signal_dbm": str(snap.signal_dbm),
+            "ssid": snap.ssid,
+            "suricata_critical": snap.suricata_critical,
+            "suricata_warning": snap.suricata_warning,
+            "cpu_percent": snap.cpu_percent,
+            "temp_c": snap.temp_c,
+            "session_uptime": snap.session_uptime,
+            "download_mbps": snap.download_mbps,
+            "upload_mbps": snap.upload_mbps,
+            "packet_loss_percent": snap.packet_loss_percent,
+            "dns_avg_ms": snap.dns_avg_ms,
+            "now_time": snap.now_time,
+        }
+        
+        # /tmpに保存（権限問題を回避）
+        epd_path = Path("/tmp/epd_snapshot.json")
+        epd_path.write_text(json.dumps(epd_data, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        # エクスポート失敗してもTUI動作に影響しない
+        pass
+
+
 def _parse_log_ts(line: str) -> float:
     """Parse leading timestamp from a log line into epoch seconds."""
     try:
@@ -586,6 +622,9 @@ def load_snapshot() -> Snapshot:
     # 既存のrecommendationが空またはデフォルトの場合、自動推奨で上書き
     if not snap.recommendation or snap.recommendation == "確認中":
         snap.recommendation = auto_recommendation
+    
+    # EPD用にスナップショットをエクスポート（計算済みデータを共有）
+    export_epd_snapshot(snap)
     
     return snap
 
