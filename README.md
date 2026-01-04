@@ -1,34 +1,32 @@
-# Azazel-Zero
+# Azazel-Zero (English translation of README_ja.md)
 
-[English](/README.md) | [日本語](/README_ja.md)
+English | [日本語](/README_ja.md)
 
 ## Concept
 
-**Azazel-Zero** is a prototype of a **"Substitute Barrier"** implemented on Raspberry Pi Zero 2 W.  
+**Azazel-Zero** is a prototype of a **“Substitute Barrier”** running on Raspberry Pi Zero 2 W.  
+It brings the Azazel System’s **delaying action** into a practical form while returning to the roots of the **Substitute Barrier** and **Barrier Maze**.
 
-This system is designed to **practically realize the delaying action of the Azazel System**.  
-At the same time, it returns to the original concepts of the Azazel System: the ideas of a **"Substitute Barrier"** and a **"Barrier Maze"**.  
-
-### Comparison with Azazel-Pi
+### Compared to Azazel-Pi
 
 - **Azazel-Pi**  
-  - Built on Raspberry Pi 5 as a **Portable Security Gateway (Cyber Scapegoat Gateway)**.  
-  - Designed as a **concept model** to provide low-cost protection for **small-scale networks temporarily constructed**.  
-  - Strongly experimental in nature, serving as a testbed for multiple technical elements.  
+  - A **Portable Security Gateway (Cyber Scapegoat Gateway)** based on Raspberry Pi 5  
+  - A **concept model** to cheaply protect **small temporary networks**  
+  - Heavily experimental for trying multiple technical elements
 
 - **Azazel-Zero**  
-  - A **lightweight version**, intended for real-world operation by **limiting use cases and stripping away unnecessary features**.  
-  - Built as a **portable physical barrier**, prioritizing mobility and practicality.  
-  - Unlike the concept-model Azazel-Pi, Azazel-Zero is positioned as a **field-ready practical model**.  
+  - A **trimmed, lightweight edition** with narrowed scope, designed for real operation  
+  - A physical barrier focused on portability and practicality  
+  - Unlike the concept-model Azazel-Pi, this is a **deployable, practical model**
 
 ---
 
 ## Design Principles
 
-- **Portability**: Small enough to fit in a breast pocket  
-- **Inevitability**: Forces itself between the device and the external network  
-- **Simplicity**: Insertion of USB establishes the firewall  
-- **Delaying Action**: Wastes the attacker’s time (a core concept of the Azazel System)  
+- **Portability**: fits in a shirt pocket  
+- **Inevitability**: forcibly interposes between device and external network  
+- **Simplicity**: plug USB and the firewall is in place  
+- **Delaying defense**: waste the attacker’s time (core of the Azazel System)
 
 ---
 
@@ -38,72 +36,223 @@ At the same time, it returns to the original concepts of the Azazel System: the 
 
 - **Raspberry Pi Zero 2 W**
 
-### Networking
+### Network
 
-- **USB OTG Gadget Mode**
-  - Provides both power supply and virtual network via a single USB cable  
-  - Runs immediately when powered by a laptop  
+- **USB OTG gadget mode**  
+  - Single USB cable supplies power and virtual networking  
+  - Plug into a laptop and it boots immediately
 
-### Defense Functions (Lightweight)
+### Lightweight Protection
 
-- Blocking and delaying with **iptables/nftables**  
-- Network delay and jitter insertion with **tc (Traffic Control)**  
-- Dynamic control and notification with **custom Python scripts**  
-- **Wi-Fi safety sensors** (Python + `iw` + `tcpdump`) detect Evil AP / MITM / spoofed DNS-DHCP traffic and emit tags so Azazel-Zero can disconnect risky Wi-Fi automatically  
-- **First-Minute Control (Pi Zero 2 W)**  
-  - Deterministic state machine (INIT→PROBE→DEGRADED→NORMAL→CONTAIN/DECEPTION) with suspicion decay/hysteresis  
-  - nftables+tc で段階的開放、dnsmasqログ由来の動的宛先セット、QUIC/DoH抑制  
-  - 軽量プローブ(Captive/TLS/DNS/route)とWi-Fiタグを Mock-LLM (`judge_zero`) で統一スコアリング、`wifi_health.json` に書き出し  
-- スクリプト起動: `sudo python3 py/azazel-first-minute.py start --config configs/first_minute.yaml --foreground [--pretty-console]`
-- スコアリング単体テスト: `python3 py/wifi_risk_check.py --iface wlan0 --interval 0`
+- Blocking/latency via **iptables/nftables**  
+- Delay/jitter injection with **tc (Traffic Control)**  
+- **Custom Python scripts** for dynamic control and notifications  
+- **Wi-Fi Safety Sensor** (Python + `iw` + `tcpdump`) detects Evil AP / MITM / DNS & DHCP spoofing, issues danger tags, and auto-disconnects
 
 ### Status Display
 
-- **E-Paper (E-Ink)**  
-  - Uses a 2.13-inch monochrome (250×122) display  
-  - UI shows threat level, actions, RTT, queue status, and captive portal detection in a concise format  
+- **E-Paper**  
+  - 2.13" monochrome (250×122)  
+  - Compact view of threat level/action/RTT/queue state/captive-portal detection
 
 ---
 
 ## Threat Evaluation Pipeline
 
-Azazel-Zero now ships with a deterministic two-layer verdict engine tuned for Pi Zero 2 W.
+Uses a deterministic two-layer engine that runs even on Pi Zero 2 W.
 
-- **Layer 1 – Wi-Fi Safety Sensors**  
-  - `py/azazel_zero/sensors/wifi_safety.py` inspects the live link (`iw dev … link`) and watches short `tcpdump` captures for ARP/DHCP/DNS anomalies.  
-  - Emits tags such as `evil_ap`, `mitm`, `arp_spoof`, `dhcp_spoof`, `dns_spoof`, `tls_downgrade`, `captive_portal`, `phish`, with metadata for UI/logs.  
+- **Layer 1: Wi-Fi Safety Sensor**  
+  - `py/azazel_zero/sensors/wifi_safety.py` inspects `iw dev … link` and short `tcpdump` captures to detect ARP/DHCP/DNS anomalies.  
+  - Emits tags and metadata such as `evil_ap`, `mitm`, `arp_spoof`, `dhcp_spoof`, `dns_spoof`, `tls_downgrade`, `captive_portal`, `phish`.
 
-- **Layer 2 – Mock-LLM Core**  
-  - `py/azazel_zero/core/mock_llm_core.py` maps prompts/alerts into the legacy Azazel categories (`scan`, `bruteforce`, `exploit`, `malware`, `sqli`, `dos`, `unknown`).  
-  - Deterministic hashing replaces the old regex+random replies, so repeated tests return identical risk (1–5) and reason strings.  
-  - Profile `"zero"` raises risk whenever Wi-Fi tags indicate Evil AP or MITM, enabling automatic Danger/Disconnect decisions.
+- **Layer 2: Mock-LLM Core**  
+  - `py/azazel_zero/core/mock_llm_core.py` maps inputs to legacy categories (`scan`, `bruteforce`, `exploit`, `malware`, `sqli`, `dos`, `unknown`).  
+  - Modernized from regex + randomness to hash-based deterministic replies, outputting risk (1–5) and rationale consistently.  
+  - Profile `"zero"` raises risk when Evil AP / MITM tags exist, ensuring Danger/Disconnect decisions.
 
 - **Threat Judge wrapper**  
-  - `py/azazel_zero/app/threat_judge.py` pulls tags + verdict into a single JSON payload for the UI or automation hooks (e.g., “risk ≥ 4 or tag contains `evil_ap` → drop link”).  
+  - `py/azazel_zero/app/threat_judge.py` bundles tags and final decisions into JSON that UI/automation can consume (e.g., immediate disconnect for `risk >= 4` or `evil_ap`).
 
-Heavy ML models remain a future research track, but the current deterministic stack already covers the operational needs of the portable shield.
+Heavyweight ML remains a future research theme; the current deterministic stack alone provides the automation needed for a portable shield.
 
 ---
 
 ## Operator Console & Automation
 
-- **Unified CLI (manual refresh)**  
-  - `py/azazel_zero/cli_unified.py` で First-Minute の開始/停止と Wi-Fi health を1画面で操作/確認（Enterでリフレッシュ、s:start、x:stop、q:終了）。  
-  - 起動時に First-Minute が未稼働なら開始、終了時に停止を試行。  
-  - シンプルにステータス確認とサービス操作をしたい場合向け（tmux依存なし）。
-- **Bootstrap tooling**  
-  - `tools/bootstrap_zero.sh` installs dependencies, systemd units, minimal Suricata rules, and can run smoke tests.  
-  - Flags (`--no-epd`, `--no-enable`, `--no-suricata`, `--dry-run`) adapt the flow for lab vs. production builds.
+- **TUI (terminal UI)**  
+  - `py/azazel_zero/cli_unified.py` is the unified monitoring TUI showing Wi-Fi state, threat level, channel congestion, control rules in real time.
+  - Colorful icons and color-coding for intuitive situational awareness.
+  - Manual refresh mode ([U] key).
+  
+- **tmux console**  
+  - `py/azazel_menu.py` is a curses menu with Wi-Fi selector, Portal/Shield/Lockdown scripts, OpenCanary control, and E-Paper tests.  
+  - `py/azazel_status.py` is a telemetry panel showing SSID/BSSID, USB gadget IP, RSSI, captive-portal indicators, etc.
+  
+- **Bootstrap tools**  
+  - `tools/bootstrap_zero.sh` installs dependencies, systemd units, minimal Suricata rules, and smoke tests in one shot.  
+  - Flags `--no-epd`, `--no-enable`, `--no-suricata`, `--dry-run` tailor for lab/production.
 
 ---
 
-## Setup Steps (Overview)
+## How to Read the TUI (Integrated Monitoring)
 
-※ For detailed setup instructions, please refer to [docs/setup-zero.md](docs/setup-zero.md).
+### Launch
 
-### Quickstart
+```bash
+sudo python3 py/azazel_zero/cli_unified.py
+```
 
-For reproducible setup, you can use the automated bootstrap script:
+### Layout
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Azazel-Zero | 📶 SSID: MyWiFi | ⬇️ usb0 | ⬆️ wlan0 | 🕐 12:34:56 │  ← Status bar
+│ View: SNAPSHOT (manual)  Age: 🟢 00:00:15                   │  ← Data freshness
+├─────────────────────────────────────────────────────────────┤
+│ ✅ SAFE        Recommendation: keep as-is                   │  ← State badge (inverted)
+│ Reason: probe ok / DNS ok                                  │
+│ Threat: [🟢🟢⚪⚪⚪] Low                                     │  ← Threat level
+│ Next: waiting for re-eval                                  │
+├──────────────────────┬──────────────────────────────────────┤
+│ Connection           │ Control / Safety                     │
+│ BSSID: aa:bb:cc:...  │ QUIC(UDP/443): ⛔ BLOCKED           │
+│ Channel: 🟢 Ch124    │ DoH(TCP/443): ⛔ BLOCKED            │
+│    - Low (31 APs)    │ Degrade: ✓ OFF                      │
+│ Signal: 🟩🟩🟩 -55dBm │ Probe: ✓ 5/5 ALL OK                │
+│ Gateway: 🏠 192.168… │ Stats: DNS: ✅ 45 ⚠️ 3 🔴 2         │
+├──────────────────────┴──────────────────────────────────────┤
+│ Evidence (last 90s)                                         │
+│ 🟢 Normal probe completed                                   │
+│ 🟡 DNS query to suspicious domain                          │
+│ 💠 action: reprobe command sent                             │
+│ ↳ decision: state=NORMAL suspicion=5 decay=0.9             │
+├─────────────────────────────────────────────────────────────┤
+│ Flow: PROBE → DEGRADED → NORMAL → ✅ SAFE                   │
+│ [U] Refresh  [A] Stage-Open  [R] Re-Probe  [C] Contain  [L] Details  [Q] Quit │
+│ Hint: This screen does not auto-refresh. Press [U] when needed.             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Icons and Colors
+
+#### 🎯 State badge (main status)
+
+| Icon | State | Color | Meaning |
+|------|-------|-------|---------|
+| ⟳ | Checking | Cyan (inverted) | Initial scan |
+| ✅ | **Safe** | **Green (inverted, bold)** | Network is safe |
+| ⚠️ | Limited | Yellow (inverted) | Restrictions like bandwidth limits |
+| ⛔ | Contained | Red (inverted) | Danger detected, containment mode |
+| 👁 | Deception | Purple (inverted) | Decoy mode |
+
+#### 🎯 Threat level indicator
+
+```
+Threat: [🟢🟢⚪⚪⚪] Low      ← Safe
+Threat: [🟡🟡🟡⚪⚪] Med      ← Caution
+Threat: [🔴🔴🔴🔴🔴] Critical ← Dangerous
+```
+
+#### 🎯 Age (freshness)
+
+- 🟢 **0–30s**: freshest, trustworthy
+- 🟡 **30s–2m**: slightly old, verify
+- 🔴 **2m+**: stale, press [U] to refresh
+
+#### 🎯 Signal strength
+
+| Display | Strength | Meaning |
+|---------|----------|---------|
+| 🟩🟩🟩🟩 | >= -50dBm | Excellent |
+| 🟩🟩🟩 | -50 to -60dBm | Good |
+| 🟨🟨 | -60 to -70dBm | Fair |
+| 🟧 | -70 to -80dBm | Weak |
+| 🟥 | <= -80dBm | Very weak |
+
+#### 🎯 Channel congestion (measured)
+
+| Display | Congestion | APs | Meaning |
+|---------|------------|-----|---------|
+| 🟢 Clear/Low | Low | 0–2 | Open (comfortable) |
+| 🟡 Medium | Medium | 3–5 | Normal |
+| 🟧 High | High | 6–10 | Crowded |
+| 🔴 Critical | Very high | 11+ | Extremely crowded |
+
+※ APs around you are scanned when you press [U].
+
+#### 🎯 Gateway IP
+
+- 🏠 **Green**: private IP (normal)
+- ⚠️ **Yellow**: public IP (check)
+
+#### 🎯 Control rules
+
+| Item | Icon | Color | Meaning |
+|------|------|-------|---------|
+| QUIC | ⛔ | Red | Blocked |
+| QUIC | ✓ | Green | Allowed |
+| Degrade | ⚡ | Yellow | Bandwidth limited |
+| Degrade | ✓ | Green | No limit |
+| Probe | ⚠ | Red | Probe detected problems |
+| Probe | ✓ | Green | All good |
+
+#### 🎯 DNS stats
+
+- ✅ Normal queries
+- ⚠️ Suspicious queries
+- 🔴 Blocked queries
+
+#### 🎯 Evidence log
+
+| Icon | Color | Meaning |
+|------|-------|---------|
+| 🔴 | Red (bold) | Anomaly / error (blocked, fail, hijack, etc.) |
+| 🟡 | Yellow | Warning / caution (portal, dns, probe, etc.) |
+| 🟢 | Green | Normal / success (ok, safe, normal, etc.) |
+| 💠 | Cyan | Action (command, transition, etc.) |
+| ⚪ | White | Other |
+
+### Key bindings
+
+| Key | Function | Description |
+|-----|----------|-------------|
+| **[U]** | Refresh | Manually update data (runs Wi-Fi scan) |
+| **[A]** | Stage-Open | Move from restricted to normal mode |
+| **[R]** | Re-Probe | Run probe test again |
+| **[C]** | Contain | Enter containment mode |
+| **[L]** | Details | Detail view (30 evidence entries, internal state) |
+| **[Q]** | Quit | Exit |
+
+### Details screen (via [L])
+
+- **Evidence history**: last 30 evidence entries
+- **Internal state**:
+  - `State`: current state machine status (PROBE/NORMAL/DEGRADED/CONTAIN/DECEPTION)
+  - `Suspicion`: suspicion score (0–100)
+  - `Decay`: decay value
+  - `Rules`: control rule details
+- Press **[B]** to return to main screen
+
+### Color rules
+
+| Color | Meaning | Where used |
+|-------|---------|-----------|
+| 🟢 Green | Good / normal / safe | SAFE, strong signal, clear channel, normal logs |
+| 🟡 Yellow | Caution / warning / medium | LIMITED, weak signal, congestion, warning logs |
+| 🔴 Red | Danger / error / abnormal | CONTAINED, very weak signal, severe congestion, error logs |
+| 🟣 Purple | Special | DECEPTION |
+| 🔵 Cyan | Info / technical | CHECKING, action logs, technical info |
+| ⚪ White | Neutral / unknown | Other logs, unknown states |
+
+---
+
+## Setup (overview)
+
+See [docs/setup-zero.md](docs/setup-zero.md) for details.
+
+### Quick start
+
+Use the automated setup script for reproducible installs.
 
 ```bash
 sudo chmod +x tools/bootstrap_zero.sh
@@ -112,70 +261,69 @@ sudo tools/bootstrap_zero.sh
 
 Options:
 
-- `--no-epd` : Skip E-Paper related dependencies
-- `--no-enable` : Do not enable/start systemd services
-- `--no-suricata` : Skip Suricata minimal rules configuration
-- `--dry-run` : Show steps only (no changes applied)
+- `--no-epd`: skip E-Paper dependencies  
+- `--no-enable`: do not enable systemd services  
+- `--no-suricata`: skip lightweight Suricata rules  
+- `--dry-run`: print actions only
 
 1. Install **Raspberry Pi OS Lite (64bit)**  
-2. Configure **USB Gadget Mode**  
+2. Configure **USB gadget mode**  
    - Add `dtoverlay=dwc2` to `/boot/config.txt`  
    - Add `modules-load=dwc2,g_ether` to `/boot/cmdline.txt`  
-3. Install **E-Paper control libraries** (e.g., Waveshare Python libraries)  
-4. Create a **UI script** to display threat levels and delay status  
-5. Configure as a **systemd service** so the shield and UI run at boot  
+3. Install **E-Paper control library** (e.g., Waveshare Python)  
+4. Deploy **UI scripts** to display threat level and delay state  
+5. Enable **systemd services** to autostart shield/UI
 
-## Boot E-Paper Splash (Azazel-Zero, repo in ~/Azazel-Zero)
+## Boot-time E-Paper splash (~/Azazel-Zero)
 
-※ For detailed setup instructions, please refer to [Boot_E-Paper_Splash.md](/docs/Boot_E-Paper_Splash.md).
+See [Boot_E-Paper_Splash_ja.md](/docs/Boot_E-Paper_Splash_ja.md) for details.
 
-At boot, shows **SSID** and **IPv4** on a Waveshare e-Paper.  
+At boot, display **SSID** and **IPv4** on the Waveshare E-Paper.  
 Script: `py/boot_splash_epd.py`
 
-**Setup**  
+**Setup**
 
-1) Dependencies can be installed in one step:  
-   `sudo bash bin/install_dependencies.sh --with-epd`
-2) Test: `sudo python3 ~/Azazel-Zero/py/boot_splash_epd.py`  
-3) Enable service `azazel-epd.service` (paths are managed via `/etc/default/azazel-zero`).
+1. Install dependencies together: `sudo bash bin/install_dependencies.sh --with-epd`  
+2. Test: `sudo python3 ~/Azazel-Zero/py/boot_splash_epd.py`  
+3. Enable service `azazel-epd.service` (path managed in `/etc/default/azazel-zero`)
 
-If your panel driver is not `epd2in13_V4`, change it to `V3` or `V2` in the import line.
+If your panel driver is not `epd2in13_V4`, change to `V3` or `V2`.
 
-### Waveshare Function Library Install (Raspberry Pi Zero 2 W)
+### Install Waveshare libraries (Raspberry Pi Zero 2 W)
 
-`bin/install_waveshare_epd.sh` mirrors the official Raspberry Pi Zero 2 W steps so that the Waveshare demo works immediately. Run:
+`bin/install_waveshare_epd.sh` automates the official steps so Waveshare demos run immediately:
 
 ```bash
 sudo bash bin/install_waveshare_epd.sh
 ```
 
-The script performs the following sequence (you can also run them manually if you prefer):
+Script contents (can run manually):
 
 ```bash
-# Function library + dependencies
+# Dependencies
 sudo apt-get update
 sudo apt-get install python3-pip
 sudo apt-get install python3-pil
 sudo apt-get install python3-numpy
 sudo python3 -m pip install spidev
 
-# gpiozero (preinstalled on Raspberry Pi OS, reinstall only if missing)
+# gpiozero (only if missing)
 sudo apt-get update
 sudo apt install python3-gpiozero
-sudo apt install python-gpiozero    # For legacy python2 if required
+sudo apt install python-gpiozero
 
-# Waveshare demo download
+# Fetch Waveshare demos
 git clone https://github.com/waveshare/e-Paper.git
 cd e-Paper/RaspberryPi_JetsonNano/
 wget https://files.waveshare.com/upload/7/71/E-Paper_code.zip
 unzip E-Paper_code.zip -d e-Paper
-# Alternate extraction
+# Alternative: use 7zip
 sudo apt-get install p7zip-full
 7z x E-Paper_code.zip -O./e-Paper
 
-# Demo execution (mono 2.13in V4 example)
+# Run demo (2.13in mono V4)
 cd e-Paper/RaspberryPi_JetsonNano/python/examples/
 python3 epd_2in13b_V4_test.py
 ```
 
-`install_waveshare_epd.sh` stores the library under `/opt/waveshare-epd`, fetches the `E-Paper_code.zip` archive, and can run the demo automatically with `--run-demo`.
+`install_waveshare_epd.sh` installs the library under `/opt/waveshare-epd` and fetches `E-Paper_code.zip`. Add `--run-demo` to automatically execute the demo at the end.

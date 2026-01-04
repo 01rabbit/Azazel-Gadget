@@ -13,6 +13,8 @@ import curses
 import json
 import locale
 import os
+import subprocess
+import sys
 import time
 from collections import deque
 from dataclasses import dataclass
@@ -48,6 +50,7 @@ class Snapshot:
     down_if: str
     down_ip: str
     up_if: str
+    up_ip: str
     user_state: str
     recommendation: str
     reasons: List[str]
@@ -134,6 +137,7 @@ def build_snapshot(data: Dict[str, object], source: str = "SNAPSHOT") -> Snapsho
         down_if=data.get("down_if", "-"),
         down_ip=data.get("down_ip", "-"),
         up_if=data.get("up_if", "-"),
+        up_ip=data.get("up_ip", "-"),
         user_state=data.get("user_state", "CHECKING"),
         recommendation=data.get("recommendation", "確認中"),
         reasons=data.get("reasons", [])[:3],
@@ -184,11 +188,39 @@ def build_snapshot(data: Dict[str, object], source: str = "SNAPSHOT") -> Snapsho
 
 def _fill_iface_defaults(data: Dict[str, object]) -> None:
     """Ensure interface fields are present even when rebuilt from logs."""
-    defaults = {"down_if": "usb0", "down_ip": "10.55.0.10", "up_if": "wlan0"}
+    defaults = {"down_if": "usb0", "down_ip": "10.55.0.10", "up_if": "wlan0", "up_ip": "-"}
     for key, val in defaults.items():
         cur = str(data.get(key, "-"))
         if (not cur) or cur == "-":
             data[key] = val
+
+
+def _get_interface_ip(interface: str) -> str:
+    """
+    Get IP address of specified network interface.
+    Returns IP address string or "-" if not found.
+    """
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["ip", "-4", "addr", "show", interface],
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
+        if result.returncode == 0:
+            for line in result.stdout.split("\n"):
+                if "inet " in line:
+                    # Format: "    inet 192.168.1.100/24 brd ..."
+                    parts = line.strip().split()
+                    if len(parts) >= 2:
+                        ip_cidr = parts[1]
+                        # Remove /24 suffix
+                        ip_addr = ip_cidr.split("/")[0]
+                        return ip_addr
+    except Exception:
+        pass
+    return "-"
 
 
 def _user_state_from_stage_name(stage_name: str) -> str:
@@ -623,6 +655,10 @@ def load_snapshot() -> Snapshot:
     if not snap.recommendation or snap.recommendation == "確認中":
         snap.recommendation = auto_recommendation
     
+    # wlan (upstream) の IP アドレスを取得
+    if snap.up_if and snap.up_if != "-":
+        snap.up_ip = _get_interface_ip(snap.up_if)
+    
     # EPD用にスナップショットをエクスポート（計算済みデータを共有）
     export_epd_snapshot(snap)
     
@@ -640,6 +676,7 @@ def default_snapshot() -> Dict[str, object]:
         "down_if": "usb0",
         "down_ip": "-",
         "up_if": "wlan0",
+        "up_ip": "-",
         "user_state": "CHECKING",
         "recommendation": "確認中",
         "reasons": ["情報収集中"],
@@ -662,6 +699,99 @@ def send_command(action: str) -> None:
     try:
         path.write_text(json.dumps(cmd), encoding="utf-8")
     except Exception:
+        pass
+
+
+def update_epd(snap: Snapshot, enable_epd: bool = True) -> None:
+    """
+    Update E-Paper Display based on current snapshot state.
+    Maps TUI states to EPD states:
+      SAFE/CHECKING → normal
+      LIMITED → warning
+      CONTAINED → danger
+      DECEPTION → stale
+    """
+    if not enable_epd:
+        return
+    
+    try:
+        epd_script = DEFAULT_ROOT / "py" / "azazel_epd.py"
+        if not epd_script.exists():
+            return
+        
+        user_state = snap.user_state.upper()
+        
+        # Map TUI state to EPD state
+        if user_state in ("SAFE", "CHECKING"):
+            # NORMAL state: show SSID, wlan IP, wlan signal
+            signal_dbm = snap.signal_dbm
+            signal_value = 0
+            try:
+                # Extract numeric value from "-55dBm" format
+                if signal_dbm and "dBm" in signal_dbm:
+                    dbm = int(signal_dbm.replace("dBm", "").strip())
+                    # Convert dBm to percentage (rough approximation)
+                    # -30dBm = excellent (100%), -90dBm = poor (0%)
+                    signal_value = max(0, min(100, int((dbm + 90) * 100 / 60)))
+            except (ValueError, AttributeError):
+                signal_value = 50  # default to medium
+            
+            # Use wlan (upstream) IP address instead of downstream
+            wlan_ip = snap.up_ip if snap.up_ip and snap.up_ip != "-" else "No IP"
+            
+            cmd = [
+                "python3", str(epd_script),
+                "--state", "normal",
+                "--ssid", snap.ssid or "No SSID",
+                "--ip", wlan_ip,
+                "--signal", str(signal_value)
+            ]
+        
+        elif user_state == "LIMITED":
+            # WARNING state
+            msg = snap.recommendation[:20] if snap.recommendation else "LIMITED MODE"
+            cmd = [
+                "python3", str(epd_script),
+                "--state", "warning",
+                "--msg", msg
+            ]
+        
+        elif user_state == "CONTAINED":
+            # DANGER state
+            msg = snap.recommendation[:20] if snap.recommendation else "ISOLATED"
+            cmd = [
+                "python3", str(epd_script),
+                "--state", "danger",
+                "--msg", msg
+            ]
+        
+        elif user_state == "DECEPTION":
+            # STALE state (repurposed for DECEPTION mode)
+            msg = snap.recommendation[:20] if snap.recommendation else "DECEPTION MODE"
+            cmd = [
+                "python3", str(epd_script),
+                "--state", "stale",
+                "--msg", msg
+            ]
+        
+        else:
+            # Unknown state - show as warning
+            cmd = [
+                "python3", str(epd_script),
+                "--state", "warning",
+                "--msg", "UNKNOWN STATE"
+            ]
+        
+        # Run EPD update in background (non-blocking)
+        subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True
+        )
+    
+    except Exception:
+        # Silently fail - EPD update is optional
         pass
 
 
@@ -1226,13 +1356,24 @@ def main():
     parser = argparse.ArgumentParser(description="Azazel-Zero manual-refresh TUI")
     parser.add_argument("--ascii", action="store_true", help="Force ASCII fallback")
     parser.add_argument("--unicode", action="store_true", help="Force Unicode box/icons")
+    parser.add_argument("--enable-epd", action="store_true", help="Enable E-Paper display updates")
+    parser.add_argument("--disable-epd", action="store_true", help="Disable E-Paper display updates")
     args = parser.parse_args()
 
     unicode_mode = detect_unicode(args.ascii, args.unicode)
     snap = load_snapshot()
+    
+    # EPD update enabled by default, unless explicitly disabled
+    enable_epd = not args.disable_epd
+    if args.enable_epd:
+        enable_epd = True
+    
+    # Initial EPD update
+    update_epd(snap, enable_epd)
 
     def _loop(stdscr):
         nonlocal snap
+        prev_state = snap.user_state
         while True:
             render(stdscr, snap, unicode_mode)
             ch = stdscr.getch()
@@ -1240,6 +1381,10 @@ def main():
                 break
             elif ch in (ord("u"), ord("U")):
                 snap = load_snapshot()
+                # Update EPD if state changed
+                if snap.user_state != prev_state:
+                    update_epd(snap, enable_epd)
+                    prev_state = snap.user_state
             elif ch in (ord("a"), ord("A")):
                 send_command("stage_open")
                 snap.evidence.append("• action: stage-open command sent")
