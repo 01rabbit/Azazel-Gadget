@@ -223,6 +223,22 @@ def _get_interface_ip(interface: str) -> str:
     return "-"
 
 
+def _parse_signal_dbm(raw_val) -> Optional[int]:
+    """Normalize signal strength to an int dBm if possible."""
+    try:
+        if raw_val is None:
+            return None
+        if isinstance(raw_val, (int, float)):
+            return int(raw_val)
+        text = str(raw_val).strip()
+        if not text or text == "-":
+            return None
+        text = text.lower().replace("dbm", "").strip()
+        return int(float(text))
+    except Exception:
+        return None
+
+
 def _user_state_from_stage_name(stage_name: str) -> str:
     name = stage_name.upper()
     if name in ("PROBE", "INIT"):
@@ -393,12 +409,13 @@ def calculate_risk_score(snap: Snapshot) -> int:
     score += min(snap.suricata_warning * 3, 10)  # warning 1件=3点
     
     # 3. WiFi Signal Strength (0-15点)
-    if isinstance(snap.signal_dbm, (int, float)):
-        if snap.signal_dbm < -80:  # 弱い
+    sig_dbm = _parse_signal_dbm(snap.signal_dbm)
+    if sig_dbm is not None:
+        if sig_dbm < -80:  # 弱い
             score += 15
-        elif snap.signal_dbm < -70:
+        elif sig_dbm < -70:
             score += 10
-        elif snap.signal_dbm < -60:
+        elif sig_dbm < -60:
             score += 5
     
     # 4. User State (0-20点)
@@ -702,6 +719,14 @@ def send_command(action: str) -> None:
         pass
 
 
+def _epd_fingerprint(snap: Snapshot) -> Tuple[str, str, str, Optional[int], str]:
+    """Small fingerprint of data rendered on the EPD to avoid redundant refresh."""
+    wlan_ip = snap.up_ip if snap.up_ip and snap.up_ip != "-" else "No IP"
+    rec = (snap.recommendation or "")[:20]
+    sig_dbm = _parse_signal_dbm(snap.signal_dbm)
+    return (snap.user_state.upper(), snap.ssid or "-", wlan_ip, sig_dbm, rec)
+
+
 def update_epd(snap: Snapshot, enable_epd: bool = True) -> None:
     """
     Update E-Paper Display based on current snapshot state.
@@ -724,17 +749,7 @@ def update_epd(snap: Snapshot, enable_epd: bool = True) -> None:
         # Map TUI state to EPD state
         if user_state in ("SAFE", "CHECKING"):
             # NORMAL state: show SSID, wlan IP, wlan signal
-            signal_dbm = snap.signal_dbm
-            signal_value = 0
-            try:
-                # Extract numeric value from "-55dBm" format
-                if signal_dbm and "dBm" in signal_dbm:
-                    dbm = int(signal_dbm.replace("dBm", "").strip())
-                    # Convert dBm to percentage (rough approximation)
-                    # -30dBm = excellent (100%), -90dBm = poor (0%)
-                    signal_value = max(0, min(100, int((dbm + 90) * 100 / 60)))
-            except (ValueError, AttributeError):
-                signal_value = 50  # default to medium
+            signal_dbm = _parse_signal_dbm(snap.signal_dbm)
             
             # Use wlan (upstream) IP address instead of downstream
             wlan_ip = snap.up_ip if snap.up_ip and snap.up_ip != "-" else "No IP"
@@ -744,8 +759,9 @@ def update_epd(snap: Snapshot, enable_epd: bool = True) -> None:
                 "--state", "normal",
                 "--ssid", snap.ssid or "No SSID",
                 "--ip", wlan_ip,
-                "--signal", str(signal_value)
             ]
+            if signal_dbm is not None:
+                cmd += ["--signal", str(signal_dbm)]
         
         elif user_state == "LIMITED":
             # WARNING state
@@ -1369,11 +1385,13 @@ def main():
         enable_epd = True
     
     # Initial EPD update
-    update_epd(snap, enable_epd)
+    last_epd_fp: Optional[Tuple[str, str, str, Optional[int], str]] = None
+    if enable_epd:
+        update_epd(snap, enable_epd)
+        last_epd_fp = _epd_fingerprint(snap)
 
     def _loop(stdscr):
-        nonlocal snap
-        prev_state = snap.user_state
+        nonlocal snap, last_epd_fp
         while True:
             render(stdscr, snap, unicode_mode)
             ch = stdscr.getch()
@@ -1381,10 +1399,10 @@ def main():
                 break
             elif ch in (ord("u"), ord("U")):
                 snap = load_snapshot()
-                # Update EPD if state changed
-                if snap.user_state != prev_state:
+                fp = _epd_fingerprint(snap) if enable_epd else None
+                if enable_epd and fp != last_epd_fp:
                     update_epd(snap, enable_epd)
-                    prev_state = snap.user_state
+                    last_epd_fp = fp
             elif ch in (ord("a"), ord("A")):
                 send_command("stage_open")
                 snap.evidence.append("• action: stage-open command sent")

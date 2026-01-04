@@ -11,7 +11,7 @@ Dependencies:
 
 Usage:
   # NORMAL state
-  python3 py/azazel_epd.py --state normal --ssid "AzazelNet" --ip "172.16.0.1" --signal 72
+  python3 py/azazel_epd.py --state normal --ssid "AzazelNet" --ip "172.16.0.1" --signal -44
   
   # WARNING state
   python3 py/azazel_epd.py --state warning --msg "CHECK WEB"
@@ -53,9 +53,9 @@ EPD_WIDTH = 250
 EPD_HEIGHT = 122
 
 # Icon file names (user-replaceable in icons/epd/)
-ICON_WIFI_STRONG = "wifi_3.png"      # Signal >= 70
-ICON_WIFI_MEDIUM = "wifi_2.png"      # Signal >= 50
-ICON_WIFI_WEAK = "wifi_1.png"        # Signal >= 0
+ICON_WIFI_STRONG = "wifi_3.png"      # Signal >= -60 dBm (very good)
+ICON_WIFI_MEDIUM = "wifi_2.png"      # Signal >= -70 dBm (good)
+ICON_WIFI_WEAK = "wifi_1.png"        # Signal >= -80 dBm (weak)
 ICON_WIFI_DISCONNECTED = "wifi_notconnected.png"  # No connection
 ICON_WARNING = "warning.png"
 ICON_DANGER = "danger.png"
@@ -164,6 +164,23 @@ def convert_to_1bit(img: Image.Image, invert: bool = False) -> Image.Image:
         return gray.point(lambda p: 0 if p < 128 else 255, mode='1')
 
 
+def normalize_signal_dbm(signal: Optional[int]) -> Optional[int]:
+    """
+    Normalize signal strength input to dBm.
+    Accepts negative dBm (preferred) or 0-100 percentage and converts to -90..-30dBm.
+    """
+    if signal is None:
+        return None
+    try:
+        val = int(signal)
+    except Exception:
+        return None
+    if 0 <= val <= 100:
+        # Convert percentage back to approximate dBm (-90 to -30)
+        return int(val * 0.6 - 90)
+    return val
+
+
 def render_normal(ssid: str, ip: str, icon_dir: Path, signal: Optional[int] = None) -> Tuple[Image.Image, Image.Image]:
     """
     Render NORMAL state:
@@ -176,7 +193,7 @@ def render_normal(ssid: str, ip: str, icon_dir: Path, signal: Optional[int] = No
         ssid: Wi-Fi SSID ("Not Connected" if unavailable)
         ip: IP address ("0.0.0.0" if unavailable)
         icon_dir: Path to icon directory
-        signal: Signal strength (0-100) or None for disconnected
+        signal: Signal strength in dBm (e.g., -44) or 0-100% (converted) or None for disconnected
     """
     # Create 1-bit images: 0=black, 255=white for display; 0=no red, 255=red for red layer
     black_img = Image.new('1', (EPD_WIDTH, EPD_HEIGHT), 255)  # White background
@@ -188,12 +205,15 @@ def render_normal(ssid: str, ip: str, icon_dir: Path, signal: Optional[int] = No
     font_ip = load_font(23, "stardos")  # IP address - 23pt
     font_ssid = load_font(20, "stardos")  # SSID - 20pt
     
-    # Select Wi-Fi icon based on signal strength
-    if signal is None or signal < 0:
+    # Select Wi-Fi icon based on signal strength (dBm)
+    # dBm scale: closer to 0 = stronger, closer to -100 = weaker
+    # Thresholds: >= -60 (very good), >= -70 (good), >= -80 (weak), < -80 (very weak)
+    signal_dbm = normalize_signal_dbm(signal)
+    if signal_dbm is None:
         wifi_icon_name = ICON_WIFI_DISCONNECTED
-    elif signal >= 70:
+    elif signal_dbm >= -60:
         wifi_icon_name = ICON_WIFI_STRONG
-    elif signal >= 50:
+    elif signal_dbm >= -70:
         wifi_icon_name = ICON_WIFI_MEDIUM
     else:
         wifi_icon_name = ICON_WIFI_WEAK
@@ -506,7 +526,7 @@ Examples:
                        help='Display state')
     parser.add_argument('--ssid', help='Wi-Fi SSID (for normal state)')
     parser.add_argument('--ip', help='IP address (for normal state)')
-    parser.add_argument('--signal', type=int, help='Wi-Fi signal strength 0-100 (for normal state)')
+    parser.add_argument('--signal', type=int, help='Wi-Fi signal strength in dBm (negative, e.g., -55) or 0-100%')
     parser.add_argument('--msg', help='Message (for warning/danger/stale states)')
     parser.add_argument('--dry-run', action='store_true',
                        help='Generate preview only, do not update EPD')
