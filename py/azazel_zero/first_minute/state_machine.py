@@ -32,7 +32,8 @@ class FirstMinuteStateMachine:
         self.cfg = cfg
 
     def reset_for_new_link(self, bssid: str) -> None:
-        self.ctx.state = Stage.PROBE
+        # デフォルトは開放 (NORMAL) とし、検知時にのみ縮退させる
+        self.ctx.state = Stage.NORMAL
         self.ctx.suspicion = 0.0
         self.ctx.last_transition = time.time()
         self.ctx.probe_started = time.time()

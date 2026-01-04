@@ -226,7 +226,8 @@ class FirstMinuteController:
         if not self.dry_run:
             self.apply_sysctl()
             self.nft.apply_base()
-            self.apply_stage(Stage.PROBE)
+            # まずは開放状態 (NORMAL) から開始し、脅威を検知した場合のみ縮退させる
+            self.apply_stage(Stage.NORMAL)
             self.start_dnsmasq()
             self.start_dns_observer()
             self.start_status_api()
@@ -269,7 +270,7 @@ class FirstMinuteController:
             if new_link:
                 probe_done = False
 
-            if self.current_stage == Stage.PROBE and link_state and not probe_done:
+            if link_state and not probe_done:
                 self.last_probe = run_all(self.cfg.probes, self.cfg.interfaces["upstream"])
                 signals["probe_fail"] = self.last_probe.captive_portal or self.last_probe.tls_mismatch
                 signals["probe_fail_count"] = 1 + self.last_probe.dns_mismatch
@@ -320,7 +321,7 @@ class FirstMinuteController:
         new_link = False
         if connected and bssid and bssid != self.state_machine.ctx.last_link_bssid:
             self.state_machine.reset_for_new_link(bssid)
-            self.current_stage = Stage.PROBE
+            self.current_stage = Stage.NORMAL
             new_link = True
         meta["wifi_tags"] = tags
         return connected, meta, new_link
