@@ -52,7 +52,10 @@ EPD_WIDTH = 250
 EPD_HEIGHT = 122
 
 # Icon file names (user-replaceable in icons/epd/)
-ICON_WIFI = "wifi.png"
+ICON_WIFI_STRONG = "wifi_3.png"      # Signal >= 70
+ICON_WIFI_MEDIUM = "wifi_2.png"      # Signal >= 50
+ICON_WIFI_WEAK = "wifi_1.png"        # Signal >= 0
+ICON_WIFI_DISCONNECTED = "wifi_notconnected.png"  # No connection
 ICON_WARNING = "warning.png"
 ICON_DANGER = "danger.png"
 
@@ -62,7 +65,10 @@ def check_icon_files(icon_dir: Path) -> None:
     Check if required icon files exist.
     Exit with clear error message if any are missing.
     """
-    required_icons = [ICON_WIFI, ICON_WARNING, ICON_DANGER]
+    required_icons = [
+        ICON_WIFI_STRONG, ICON_WIFI_MEDIUM, ICON_WIFI_WEAK, ICON_WIFI_DISCONNECTED,
+        ICON_WARNING, ICON_DANGER
+    ]
     missing = []
     
     for icon_name in required_icons:
@@ -75,7 +81,10 @@ def check_icon_files(icon_dir: Path) -> None:
         for path in missing:
             print(f"  - {path}")
         print("\nPlease place the following PNG files in icons/epd/ directory:")
-        print(f"  - {ICON_WIFI} (Wi-Fi icon for NORMAL state)")
+        print(f"  - {ICON_WIFI_STRONG} (Wi-Fi icon - strong signal)")
+        print(f"  - {ICON_WIFI_MEDIUM} (Wi-Fi icon - medium signal)")
+        print(f"  - {ICON_WIFI_WEAK} (Wi-Fi icon - weak signal)")
+        print(f"  - {ICON_WIFI_DISCONNECTED} (Wi-Fi icon - not connected)")
         print(f"  - {ICON_WARNING} (Warning icon for WARNING state)")
         print(f"  - {ICON_DANGER} (Danger icon for DANGER state)")
         sys.exit(1)
@@ -154,13 +163,19 @@ def convert_to_1bit(img: Image.Image, invert: bool = False) -> Image.Image:
         return gray.point(lambda p: 0 if p < 128 else 255, mode='1')
 
 
-def render_normal(ssid: str, ip: str, icon_dir: Path) -> Tuple[Image.Image, Image.Image]:
+def render_normal(ssid: str, ip: str, icon_dir: Path, signal: Optional[int] = None) -> Tuple[Image.Image, Image.Image]:
     """
     Render NORMAL state:
     - White background
-    - Wi-Fi icon (top-left, black)
+    - Wi-Fi icon (top-left, black) - changes based on signal strength
     - IP address (center, large, black)
     - SSID (bottom, small, black)
+    
+    Args:
+        ssid: Wi-Fi SSID ("Not Connected" if unavailable)
+        ip: IP address ("0.0.0.0" if unavailable)
+        icon_dir: Path to icon directory
+        signal: Signal strength (0-100) or None for disconnected
     """
     # Create 1-bit images: 0=black, 255=white for display; 0=no red, 255=red for red layer
     black_img = Image.new('1', (EPD_WIDTH, EPD_HEIGHT), 255)  # White background
@@ -172,8 +187,18 @@ def render_normal(ssid: str, ip: str, icon_dir: Path) -> Tuple[Image.Image, Imag
     font_ip = load_font(23, "stardos")  # IP address - 23pt
     font_ssid = load_font(20, "stardos")  # SSID - 20pt
     
+    # Select Wi-Fi icon based on signal strength
+    if signal is None or signal < 0:
+        wifi_icon_name = ICON_WIFI_DISCONNECTED
+    elif signal >= 70:
+        wifi_icon_name = ICON_WIFI_STRONG
+    elif signal >= 50:
+        wifi_icon_name = ICON_WIFI_MEDIUM
+    else:
+        wifi_icon_name = ICON_WIFI_WEAK
+    
     # Load and paste Wi-Fi icon (left side, black)
-    wifi_icon_path = icon_dir / ICON_WIFI
+    wifi_icon_path = icon_dir / wifi_icon_name
     wifi_icon = load_icon_with_transparency(wifi_icon_path, max_size=45)
     wifi_icon_1bit = convert_to_1bit(wifi_icon, invert=False)
     icon_x = 10
@@ -480,6 +505,7 @@ Examples:
                        help='Display state')
     parser.add_argument('--ssid', help='Wi-Fi SSID (for normal state)')
     parser.add_argument('--ip', help='IP address (for normal state)')
+    parser.add_argument('--signal', type=int, help='Wi-Fi signal strength 0-100 (for normal state)')
     parser.add_argument('--msg', help='Message (for warning/danger/stale states)')
     parser.add_argument('--dry-run', action='store_true',
                        help='Generate preview only, do not update EPD')
@@ -505,7 +531,7 @@ Examples:
     print(f"Rendering {args.state.upper()} state...")
     
     if args.state == 'normal':
-        black_img, red_img = render_normal(args.ssid, args.ip, icon_dir)
+        black_img, red_img = render_normal(args.ssid, args.ip, icon_dir, args.signal)
     elif args.state == 'warning':
         black_img, red_img = render_warning(args.msg, icon_dir)
     elif args.state == 'danger':
