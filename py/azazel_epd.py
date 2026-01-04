@@ -11,22 +11,23 @@ Dependencies:
 
 Usage:
   # NORMAL state
-  python3 azazel_epd_v2.py --state normal --ssid "AzazelNet" --ip "172.16.0.1"
+  python3 py/azazel_epd.py --state normal --ssid "AzazelNet" --ip "172.16.0.1" --signal 72
   
   # WARNING state
-  python3 azazel_epd_v2.py --state warning --msg "CHECK WEB"
+  python3 py/azazel_epd.py --state warning --msg "CHECK WEB"
   
   # DANGER state
-  python3 azazel_epd_v2.py --state danger --msg "REMOVE DEVICE"
+  python3 py/azazel_epd.py --state danger --msg "REMOVE DEVICE"
   
   # STALE state
-  python3 azazel_epd_v2.py --state stale --msg "NO UPDATE"
+  python3 py/azazel_epd.py --state stale --msg "NO UPDATE"
   
   # Dry-run mode (preview only)
-  python3 azazel_epd_v2.py --state danger --msg "TEST" --dry-run
+  python3 py/azazel_epd.py --state danger --msg "TEST" --dry-run
 
 Icon files in icons/epd/:
-  - wifi.png (for NORMAL state)
+  - wifi_3.png / wifi_2.png / wifi_1.png (signal strength)
+  - wifi_notconnected.png (not connected)
   - warning.png (for WARNING state)
   - danger.png (for DANGER state)
 """
