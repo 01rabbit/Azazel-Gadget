@@ -42,7 +42,7 @@ table inet azazel_fmc {
     iifname "lo" accept
     ct state established,related accept
     # 管理系トラフィックは downstream (usb0) からのみ許可
-    iifname $DOWNSTREAM ip daddr $MGMT_IP udp dport $DNS_PORT accept
+    iifname $DOWNSTREAM udp dport { $DNS_PORT, 67, 68 } accept
     iifname $DOWNSTREAM ip daddr $MGMT_IP tcp dport { 22, 80, 8081, 443 } accept
     # downstream から他ポートへの入力は遮断し、他インタフェースは影響しない
     iifname $DOWNSTREAM drop

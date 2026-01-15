@@ -15,12 +15,12 @@ def _fallback_dir() -> Path:
 
 
 def health_paths() -> Tuple[Path, Path]:
-    """Return (summary_path, pid_path) with /run preferred and fallback under repo/.azazel-zero/run."""
+    """Return (summary_path, legacy_pid_path) with /run preferred and fallback under repo/.azazel-zero/run."""
     run_dir = Path("/run/azazel-zero")
     if run_dir.exists() and os.access(run_dir, os.W_OK):
-        return run_dir / "wifi_health.json", run_dir / "wifi_health_monitor.pid"
+        return run_dir / "wifi_health.json", run_dir / "wifi_health.pid"
     fb = _fallback_dir()
-    return fb / "wifi_health.json", fb / "wifi_health_monitor.pid"
+    return fb / "wifi_health.json", fb / "wifi_health.pid"
 
 
 def health_snapshot(iface: str, known_db: str = "", gateway_ip: Optional[str] = None) -> Dict[str, object]:

@@ -75,6 +75,19 @@ class FirstMinuteController:
         self.last_console = 0.0
         self.snapshot_path = cfg.runtime_dir / "ui_snapshot.json"
         self.snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+        self.epd_last_update = 0.0
+        self.epd_last_fp: Optional[tuple] = None
+        try:
+            self.epd_min_interval = float(os.environ.get("AZAZEL_EPD_MIN_INTERVAL", "8"))
+        except ValueError:
+            self.epd_min_interval = 8.0
+        self.epd_enabled = os.environ.get("AZAZEL_EPD", "1").strip().lower() not in ("0", "false", "no", "off")
+        self.health_last_update = 0.0
+        self.health_last_fp: Optional[tuple] = None
+        try:
+            self.health_min_interval = float(os.environ.get("AZAZEL_HEALTH_INTERVAL", "20"))
+        except ValueError:
+            self.health_min_interval = 20.0
 
     def preflight(self) -> None:
         if os.geteuid() != 0:
@@ -160,6 +173,161 @@ class FirstMinuteController:
         try:
             self.snapshot_path.parent.mkdir(parents=True, exist_ok=True)
             self.snapshot_path.write_text(json.dumps(snap, ensure_ascii=False), encoding="utf-8")
+        except Exception:
+            pass
+
+    def _get_interface_ip(self, iface: str) -> str:
+        if not iface:
+            return "-"
+        try:
+            out = subprocess.check_output(["ip", "-4", "addr", "show", iface], text=True, timeout=1.5)
+        except Exception:
+            return "-"
+        for line in out.splitlines():
+            line = line.strip()
+            if line.startswith("inet "):
+                return line.split()[1].split("/")[0]
+        return "-"
+
+    def _parse_signal_dbm(self, signal: object) -> Optional[int]:
+        if signal is None:
+            return None
+        try:
+            val = int(float(str(signal).strip()))
+        except Exception:
+            return None
+        if 0 <= val <= 100:
+            return int(val * 0.6 - 90)
+        return val
+
+    def _epd_signal_bucket(self, signal_dbm: Optional[int]) -> str:
+        if signal_dbm is None:
+            return "none"
+        if signal_dbm >= -60:
+            return "strong"
+        if signal_dbm >= -70:
+            return "medium"
+        if signal_dbm >= -80:
+            return "weak"
+        return "none"
+
+    def _epd_fingerprint(
+        self,
+        mode: str,
+        ssid: str,
+        up_ip: str,
+        signal_bucket: str,
+        msg: str,
+    ) -> tuple:
+        if mode == "normal":
+            return (mode, ssid, up_ip, signal_bucket)
+        return (mode, msg)
+
+    def _maybe_update_epd(self, stage: Stage, summary: Dict[str, object], link_meta: Dict[str, object]) -> None:
+        if self.dry_run or not self.epd_enabled:
+            return
+        now = time.time()
+        if (now - self.epd_last_update) < self.epd_min_interval:
+            return
+
+        link = link_meta.get("link", {}) if link_meta else {}
+        up_ip = self._get_interface_ip(self.cfg.interfaces.get("upstream", "wlan0"))
+        reason = str(summary.get("reason", "") or "")
+
+        epd_script = Path(__file__).resolve().parents[2] / "azazel_epd.py"
+        if not epd_script.exists():
+            return
+
+        ssid = str(link.get("ssid") or "No SSID")
+        signal_dbm = self._parse_signal_dbm(link.get("signal"))
+        signal_bucket = self._epd_signal_bucket(signal_dbm)
+        msg = (reason or stage.value)[:20]
+
+        epd_ip = up_ip if up_ip and up_ip != "-" else "No IP"
+        if stage in (Stage.INIT, Stage.PROBE, Stage.NORMAL):
+            mode = "normal"
+            fp = self._epd_fingerprint(mode, ssid, epd_ip, signal_bucket, "")
+            if fp == self.epd_last_fp:
+                return
+            cmd = ["python3", str(epd_script), "--state", mode, "--ssid", ssid, "--ip", epd_ip]
+            if signal_dbm is not None:
+                cmd += ["--signal", str(signal_dbm)]
+        elif stage == Stage.DEGRADED:
+            mode = "warning"
+            fp = self._epd_fingerprint(mode, "", "", "", msg)
+            if fp == self.epd_last_fp:
+                return
+            cmd = ["python3", str(epd_script), "--state", mode, "--msg", msg]
+        elif stage == Stage.CONTAIN:
+            mode = "danger"
+            fp = self._epd_fingerprint(mode, "", "", "", msg)
+            if fp == self.epd_last_fp:
+                return
+            cmd = ["python3", str(epd_script), "--state", mode, "--msg", msg]
+        elif stage == Stage.DECEPTION:
+            mode = "stale"
+            fp = self._epd_fingerprint(mode, "", "", "", msg)
+            if fp == self.epd_last_fp:
+                return
+            cmd = ["python3", str(epd_script), "--state", mode, "--msg", msg]
+        else:
+            mode = "warning"
+            msg = "UNKNOWN STATE"
+            fp = self._epd_fingerprint(mode, "", "", "", msg)
+            if fp == self.epd_last_fp:
+                return
+            cmd = ["python3", str(epd_script), "--state", mode, "--msg", msg]
+
+        try:
+            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+            self.epd_last_fp = fp
+            self.epd_last_update = now
+        except Exception:
+            pass
+
+    def _maybe_write_wifi_health(self, link_meta: Dict[str, object]) -> None:
+        now = time.time()
+        link = link_meta.get("link", {}) if link_meta else {}
+        tags = link_meta.get("wifi_tags", []) if link_meta else []
+
+        try:
+            from azazel_zero.core.mock_llm_core import MockLLMCore
+            from azazel_zero.wifi_health import health_paths
+        except Exception:
+            return
+
+        core = MockLLMCore(profile="zero")
+        verdict = core.evaluate("wifi_health", features={"tags": tags, "service": "wifi"})
+        risk = int(verdict.risk)
+        status = "ok" if risk <= 2 else "warn"
+        summary = {
+            "ts": now,
+            "iface": self.cfg.interfaces.get("upstream", "wlan0"),
+            "link": link,
+            "tags": tags,
+            "risk": risk,
+            "category": verdict.category,
+            "reason": verdict.reason,
+            "status": status,
+        }
+
+        fp = (
+            str(link.get("ssid", "")),
+            str(link.get("bssid", "")),
+            tuple(tags),
+            risk,
+            verdict.category,
+            verdict.reason[:60],
+            status,
+        )
+        if self.health_last_fp == fp and (now - self.health_last_update) < self.health_min_interval:
+            return
+
+        out_path, _ = health_paths()
+        try:
+            out_path.write_text(json.dumps(summary, ensure_ascii=False))
+            self.health_last_fp = fp
+            self.health_last_update = now
         except Exception:
             pass
 
@@ -303,6 +471,8 @@ class FirstMinuteController:
                 }
             )
             self.write_snapshot(summary, link_meta)
+            self._maybe_update_epd(state, summary, link_meta)
+            self._maybe_write_wifi_health(link_meta)
             if self.pretty_console:
                 self.render_console(state, summary, link_meta)
             self.logger.info(json.dumps(self.status_ctx))

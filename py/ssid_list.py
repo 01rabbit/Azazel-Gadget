@@ -30,43 +30,6 @@ try:
 except Exception:
     evaluate_wifi_safety = None  # fallback if deps missing
 
-HEALTH_MONITOR = ["/usr/bin/python3", str(ROOT / "py" / "azazel_zero" / "wifi_health_monitor.py")]
-
-def _monitor_pid_path() -> Path:
-    run_dir = Path("/run/azazel-zero")
-    if run_dir.exists() and os.access(run_dir, os.W_OK):
-        return run_dir / "wifi_health_monitor.pid"
-    fb = ROOT / ".azazel-zero" / "run"
-    fb.mkdir(parents=True, exist_ok=True)
-    return fb / "wifi_health_monitor.pid"
-
-
-def _monitor_running() -> bool:
-    pid_path = _monitor_pid_path()
-    if not pid_path.exists():
-        return False
-    try:
-        pid = int(pid_path.read_text().strip())
-    except Exception:
-        return False
-    return Path(f"/proc/{pid}").exists()
-
-
-def start_health_monitor(iface: str) -> None:
-    if not HEALTH_MONITOR or not Path(HEALTH_MONITOR[1]).exists():
-        return
-    if _monitor_running():
-        return
-    try:
-        subprocess.Popen(
-            HEALTH_MONITOR + ["--iface", iface],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    except Exception:
-        pass
-
-
 def run_health_check_once(iface: str) -> None:
     if evaluate_wifi_safety is None:
         return
@@ -458,7 +421,6 @@ def main():
         print(f"Connected to: {ssid}")
         print(ip)
         run_health_check_once(IFACE)
-        start_health_monitor(IFACE)
     else:
         print(f"Failed to connect: {ssid}", file=sys.stderr)
         sys.exit(3)

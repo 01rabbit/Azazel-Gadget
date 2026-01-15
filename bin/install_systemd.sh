@@ -3,14 +3,25 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 echo "AZAZEL_ROOT=${ROOT}"
 
+install_if_exists() {
+  local src="$1"
+  local dest="$2"
+  local mode="$3"
+  if [ -f "$src" ]; then
+    install -m "$mode" "$src" "$dest"
+  else
+    echo "[WARN] missing: ${src} (skip)" >&2
+  fi
+}
+
 # スクリプトを /usr/local/bin へ
-install -m 0755 "${ROOT}/bin/update_epaper_tmux.sh" /usr/local/bin/
+install_if_exists "${ROOT}/bin/update_epaper_tmux.sh" /usr/local/bin/ 0755
 install -m 0755 "${ROOT}/bin/suri_epaper.sh"        /usr/local/bin/
 install -m 0755 "${ROOT}/bin/portal_detect.sh"      /usr/local/bin/
 
 # 環境ファイル
 sudo install -d /etc/default
-sudo tee /etc/default/azazel-zero >/dev/null <<'EOF'
+sudo tee /etc/default/azazel-zero >/dev/null <<EOF
 AZAZEL_ROOT=${ROOT}
 AZAZEL_CANARY_VENV=/home/azazel/canary-venv
 
@@ -24,8 +35,16 @@ USB_IF=usb0
 SUBNET=192.168.7.0/24
 
 # Captive Portal detector 用（WAN_IF を使うなら同じにする）
-OUTIF=${WAN_IF}
+OUTIF=\${WAN_IF}
 EOF
+
+# Azazel-Zero config files
+sudo install -d /etc/azazel-zero
+sudo install -d /etc/azazel-zero/nftables
+sudo install -m 0644 "${ROOT}/configs/first_minute.yaml" /etc/azazel-zero/first_minute.yaml
+sudo install -m 0644 "${ROOT}/configs/dnsmasq-first_minute.conf" /etc/azazel-zero/dnsmasq-first_minute.conf
+sudo install -m 0644 "${ROOT}/configs/known_wifi.json" /etc/azazel-zero/known_wifi.json
+sudo install -m 0644 "${ROOT}/nftables/first_minute.nft" /etc/azazel-zero/nftables/first_minute.nft
 
 # systemd unit を配置
 sudo install -m 0644 "${ROOT}/systemd/azazel-epd.service"     /etc/systemd/system/
