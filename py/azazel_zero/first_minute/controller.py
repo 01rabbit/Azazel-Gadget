@@ -475,7 +475,23 @@ class FirstMinuteController:
             self._maybe_write_wifi_health(link_meta)
             if self.pretty_console:
                 self.render_console(state, summary, link_meta)
-            self.logger.info(json.dumps(self.status_ctx))
+            
+            # ★ NEW: ログデバウンス
+            # 状態遷移時のみ INFO ログ出力；その他は DEBUG
+            if summary.get("changed", False):
+                # 状態遷移時は常にログ出力
+                log_entry = {
+                    **self.status_ctx,
+                    "transitioned": True,
+                }
+                self.logger.info(json.dumps(log_entry))
+            
+            # DEBUG ログ：詳細（毎ループ）
+            self.logger.debug(
+                f"step: state={state.value} susp={summary.get('suspicion', 0):.1f} "
+                f"reason={summary.get('reason', '')} changed={summary.get('changed', False)}"
+            )
+            
             time.sleep(2.0)
         self.stop()
 

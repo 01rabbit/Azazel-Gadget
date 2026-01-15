@@ -32,6 +32,12 @@ table inet azazel_fmc {
     elements = { $MGMT_IP }
   }
 
+  # ★ NEW: 管理通信ポート定義（fast-path）
+  set mgmt_ports {
+    type inet_service
+    elements = { 22, 80, 443, 8081 }
+  }
+
   chain stage_switch {
     type filter hook prerouting priority -300; policy accept;
     ct mark set $STAGE_PROBE
@@ -41,11 +47,17 @@ table inet azazel_fmc {
     type filter hook input priority 0; policy accept;
     iifname "lo" accept
     ct state established,related accept
-    # 管理系トラフィックは downstream (usb0) からのみ許可
-    iifname $DOWNSTREAM udp dport { $DNS_PORT, 67, 68 } accept
-    iifname $DOWNSTREAM ip daddr $MGMT_IP tcp dport { 22, 80, 8081, 443 } accept
-    # downstream から他ポートへの入力は遮断し、他インタフェースは影響しない
-    iifname $DOWNSTREAM drop
+    
+    # ★ REDESIGN: 管理通信 fast-path（両インタフェース対応）
+    # SSH/VSCode/HTTP/StatusAPI は source/iface を問わず許可
+    ip daddr $MGMT_IP tcp dport @mgmt_ports accept comment "management fast-path (all iface)"
+    
+    # downstream (usb0) 専用の最小限トラフィック許可
+    iifname $DOWNSTREAM udp dport { $DNS_PORT, 67, 68 } accept comment "downstream DHCP/DNS"
+    
+    # ★ downstream からの他ポートはここで遮断
+    # upstream (wlan0) からのトラフィックは影響なし
+    iifname $DOWNSTREAM counter drop comment "downstream drop (other ports)"
   }
 
   chain forward {
@@ -90,6 +102,11 @@ table inet azazel_fmc {
   }
 
   chain stage_contain {
+    # ★ REDESIGN: CONTAIN 中もホスト宛管理通信は許可
+    # これにより SSH/VSCode が機能停止しない
+    ip daddr $MGMT_IP tcp dport @mgmt_ports accept comment "contain: host mgmt allowed"
+    
+    # 外向き（攻撃者側）トラフィック制限
     udp dport { 53, 67, 68 } accept
     tcp dport { 80, 443 } ip daddr @allow_probe_v4 accept
     ip daddr @allow_probe_v4 accept

@@ -37,6 +37,13 @@ state_machine:
   contain_threshold: 50
   stable_normal_sec: 20     # time below normal_threshold before upgrading from DEGRADED
   stable_probe_sec: 10      # minimum probe dwell before upgrade
+  
+  # ★ NEW: Suricata アラート抑制
+  suricata_cooldown_sec: 30.0  # アラート 1 回あたりの有効期間（秒）
+  
+  # ★ NEW: CONTAIN 復帰制御
+  contain_min_duration_sec: 20.0  # CONTAIN 状態の最小継続時間（秒）
+  contain_exit_suspicion: 30.0    # CONTAIN から脱出する suspicion 閾値
 
 probes:
   captive_portal:
