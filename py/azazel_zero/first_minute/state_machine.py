@@ -68,10 +68,20 @@ class FirstMinuteStateMachine:
         return stage
 
     def _decay(self, now: float) -> None:
+        # ★ BUG FIX: decay should NOT update last_transition
+        # last_transition is set only on state changes, not on every step
+        if self.ctx.state == Stage.INIT:
+            return  # INIT では decay しない
+        
+        # Calculate elapsed time since last_transition (state change)
         dt = now - self.ctx.last_transition
-        decay = self.cfg.get("decay_per_sec", 2)
-        self.ctx.suspicion = max(0.0, self.ctx.suspicion - decay * dt)
-        self.ctx.last_transition = now
+        decay_rate = self.cfg.get("decay_per_sec", 2)
+        
+        # Apply decay
+        self.ctx.suspicion = max(0.0, self.ctx.suspicion - decay_rate * dt)
+        
+        # ★ FIX: Do NOT update last_transition here
+        # This stays tied to the state change timestamp, not the current step
 
     def _apply_signals(
         self,
@@ -209,6 +219,8 @@ class FirstMinuteStateMachine:
                     changed = True
                     self.ctx.last_reason = "contain->degraded (recovered)"
                     self.ctx.stable_since = now
+                    # ★ FIX: Reset Suricata cooldown on exit so new alerts can trigger
+                    self.ctx.last_suricata_alert = 0.0
                 # else: suspicion がまだ高い → CONTAIN 継続
 
         if changed:

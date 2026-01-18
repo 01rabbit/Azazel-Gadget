@@ -260,10 +260,12 @@ class FirstMinuteController:
             cmd = ["python3", str(epd_script), "--state", mode, "--msg", msg]
         elif stage == Stage.CONTAIN:
             mode = "danger"
-            fp = self._epd_fingerprint(mode, "", "", "", msg)
+            # ★ Phase 2: CONTAIN状態で統一メッセージを表示
+            contain_msg = "ATTACK DETECTED"
+            fp = self._epd_fingerprint(mode, "", "", "", contain_msg)
             if fp == self.epd_last_fp:
                 return
-            cmd = ["python3", str(epd_script), "--state", mode, "--msg", msg]
+            cmd = ["python3", str(epd_script), "--state", mode, "--msg", contain_msg]
         elif stage == Stage.DECEPTION:
             mode = "stale"
             fp = self._epd_fingerprint(mode, "", "", "", msg)

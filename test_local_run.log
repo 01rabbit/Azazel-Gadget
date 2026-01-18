@@ -1,0 +1,79 @@
+
+[1/5] 基本機能テスト
+  SSH接続テスト (10回)...
+    → 0/10 OK
+  VSCode Remote-SSH 接続テスト...
+    → mode: preflight
+  HTTP/HTTPS ブラウジング...
+    → 0/2 OK
+
+[2/5] Contain テスト
+  eve.json へアラート注入...
+    → FAIL
+  suspicion 値の推移記録...
+    → 0 エントリ記録
+  CONTAIN 到達待機 (timeout: 120s)...
+  [poll 10] Waiting for CONTAIN... (current: None, remaining: 101s)
+  [poll 20] Waiting for CONTAIN... (current: None, remaining: 80s)
+  [poll 30] Waiting for CONTAIN... (current: None, remaining: 59s)
+  [poll 40] Waiting for CONTAIN... (current: None, remaining: 38s)
+  [poll 50] Waiting for CONTAIN... (current: None, remaining: 17s)
+  ✗ Timeout waiting for CONTAIN (last state: None)
+  DEGRADED 復帰待機 (スキップ: CONTAIN未到達)
+
+[3/5] ログテスト
+  24時間ログ行数カウント...
+    → None 行
+  状態遷移ログ検証...
+    → 0 エントリ, 0 遷移
+
+[4/5] メトリクス収集
+  JSON ログ抽出...
+    → None エントリ抽出
+  ping レイテンシ測定 (20回)...
+    → avg: 0.139ms
+  状態遷移時間計算...
+    → 0 遷移
+
+[5/5] 最終判定
+=== Azazel-Zero Test Report ===
+Timestamp: 2026-01-18T16:49:47+09:00
+SSH target: localhost
+
+[基本機能テスト]
+  SSH 接続テスト（10回）: 0/10 OK, avg=0.077s max=0.129s
+  VSCode Remote-SSH 接続テスト: mode=preflight (real=False)
+  HTTP/HTTPS ブラウジング:
+    http://example.com: FAIL [] 0.094s
+    https://example.com: FAIL [] 0.072s
+
+[Contain テスト]
+  Suricata eve.json 手動更新: FAIL (backup=/var/log/suricata/eve.json.bak.20260118-164948)
+  suspicion 値の推移記録: FAIL (entries=0)
+  CONTAIN 到達確認: FAIL (t=Nones)
+  CONTAIN → DEGRADED 復帰確認: SKIP (t=Nones)
+
+[ログテスト]
+  24時間でのログ行数カウント: FAIL (lines=None)
+  状態遷移ログの出力確認: entries=0 changes=0
+  transitioned フラグの検証: transitioned_true=0
+
+[メトリクス収集]
+  JSON ログ抽出: FAIL (reason=log file read failed)
+  ping レイテンシ測定: OK (avg=0.139ms mdev=0.043ms)
+  状態遷移時間の記録: transitions=0
+
+[最終判定]
+  Go/No-Go: NO-GO
+  Phase 2 着手判断: NO-GO (fix Phase 1 issues)
+  Checks:
+    - SSH 10/10: FAIL
+    - HTTP/HTTPS reachable: FAIL
+    - Ping avg <= 50.0ms: OK (value=0.139)
+    - 24h log lines <= 200000: FAIL (value=None)
+    - transitioned true >= 0: OK (value=0)
+    - Reach CONTAIN: FAIL
+    - Recover to DEGRADED: FAIL
+
+[Saved] azazel_test_result.json
+[Saved] azazel_extracted_logs.jsonl
