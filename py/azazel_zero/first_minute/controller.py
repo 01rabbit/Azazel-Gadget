@@ -11,6 +11,7 @@ import threading
 import time
 import shutil
 import sys
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Dict, Optional
@@ -89,6 +90,10 @@ class FirstMinuteController:
         self.snapshot_path.parent.mkdir(parents=True, exist_ok=True)
         self.epd_last_update = 0.0
         self.epd_last_fp: Optional[tuple] = None
+        self._eve_offset = 0
+        self._eve_inode: Optional[int] = None
+        self._eve_partial = ""
+        self._eve_initialized = False
         try:
             self.epd_min_interval = float(os.environ.get("AZAZEL_EPD_MIN_INTERVAL", "8"))
         except ValueError:
@@ -100,6 +105,8 @@ class FirstMinuteController:
             self.health_min_interval = float(os.environ.get("AZAZEL_HEALTH_INTERVAL", "20"))
         except ValueError:
             self.health_min_interval = 20.0
+        # Suricata alert context
+        self._last_suricata_severity: int = 0
 
     def preflight(self) -> None:
         if os.geteuid() != 0:
@@ -429,14 +436,117 @@ class FirstMinuteController:
         signal.signal(signal.SIGTERM, lambda *_: self.stop_event.set())
         signal.signal(signal.SIGINT, lambda *_: self.stop_event.set())
 
+    def _parse_eve_timestamp(self, ts: object) -> Optional[float]:
+        if not isinstance(ts, str) or not ts:
+            return None
+        norm = ts
+        if norm.endswith("Z"):
+            norm = norm[:-1] + "+00:00"
+        if len(norm) >= 5 and norm[-5] in ("+", "-") and norm[-3] != ":":
+            norm = f"{norm[:-2]}:{norm[-2:]}"
+        try:
+            return datetime.fromisoformat(norm).timestamp()
+        except ValueError:
+            pass
+        for fmt in ("%Y-%m-%dT%H:%M:%S.%f%z", "%Y-%m-%dT%H:%M:%S%z"):
+            try:
+                return datetime.strptime(norm, fmt).timestamp()
+            except ValueError:
+                continue
+        return None
+
+    def _read_new_eve_events(self, eve: Path) -> list[Dict[str, object]]:
+        try:
+            stat = eve.stat()
+        except OSError:
+            return []
+        if not self._eve_initialized:
+            self._eve_inode = stat.st_ino
+            self._eve_offset = 0  # Start from beginning to catch alerts added during initialization
+            self._eve_partial = ""
+            self._eve_initialized = True
+            # Read once on initialization to catch any events already present
+            try:
+                with eve.open("r", encoding="utf-8", errors="ignore") as handle:
+                    data = handle.read()
+                    self._eve_offset = handle.tell()
+                    lines = data.splitlines()
+                    if data and not data.endswith("\n"):
+                        self._eve_partial = lines.pop() if lines else data
+                    else:
+                        self._eve_partial = ""
+                    events = []
+                    for line in lines:
+                        try:
+                            obj = json.loads(line)
+                            if isinstance(obj, dict):
+                                events.append(obj)
+                        except (json.JSONDecodeError, Exception):
+                            continue
+                    return events
+            except Exception:
+                return []
+        if self._eve_inode is None or stat.st_ino != self._eve_inode:
+            self._eve_inode = stat.st_ino
+            self._eve_offset = 0
+            self._eve_partial = ""
+        elif stat.st_size < self._eve_offset:
+            self._eve_offset = 0
+            self._eve_partial = ""
+        try:
+            with eve.open("r", encoding="utf-8", errors="ignore") as handle:
+                handle.seek(self._eve_offset)
+                data = handle.read()
+                self._eve_offset = handle.tell()
+        except Exception:
+            return []
+        if not data:
+            return []
+        data = self._eve_partial + data
+        lines = data.splitlines()
+        if data and not data.endswith("\n"):
+            self._eve_partial = lines.pop() if lines else data
+        else:
+            self._eve_partial = ""
+        events: list[Dict[str, object]] = []
+        for line in lines:
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            except Exception:
+                continue
+            if isinstance(obj, dict):
+                events.append(obj)
+        return events
+
     def suricata_bumped(self) -> bool:
         eve = Path(self.cfg.suricata.get("eve_path", "/var/log/suricata/eve.json"))
         if not self.cfg.suricata.get("enabled", False) or not eve.exists():
             return False
-        try:
-            return time.time() - eve.stat().st_mtime < 30
-        except Exception:
+        events = self._read_new_eve_events(eve)
+        if not events:
             return False
+        now = time.time()
+        found_alert = False
+        for event in events:
+            if event.get("event_type") != "alert" and "alert" not in event:
+                continue
+            try:
+                sev = int((event.get("alert") or {}).get("severity", 3))
+            except Exception:
+                sev = 3
+            self._last_suricata_severity = max(1, min(3, sev))
+            ts = self._parse_eve_timestamp(event.get("timestamp"))
+            if ts is not None:
+                dt = now - ts
+                self.logger.debug(f"[suricata] alert: ts={ts:.0f} sev={sev} dt={dt:.1f}s")
+                if dt < 30:
+                    found_alert = True
+                    return True
+        if not found_alert and events:
+            self.logger.debug(f"[suricata] {len(events)} alerts found but all outside 30s window")
+        return False
 
     def run_loop(self) -> None:
         self.handle_signals()
@@ -463,6 +573,7 @@ class FirstMinuteController:
 
             if self.suricata_bumped():
                 signals["suricata_alert"] = True
+                signals["suricata_severity"] = max(1, min(3, int(self._last_suricata_severity or 3)))
 
             state, summary = self.state_machine.step(signals)
             if (

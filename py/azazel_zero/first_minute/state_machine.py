@@ -113,12 +113,18 @@ class FirstMinuteStateMachine:
             add += 10
             reasons.append("route_anomaly")
         
-        # ★ NEW: Suricata アラート クールダウン
+        # ★ NEW: Suricata アラート クールダウン + 重み付け（severity）
         if signals.get("suricata_alert"):
             dt_since_last = now - self.ctx.last_suricata_alert
             if dt_since_last >= self.ctx.suricata_cooldown_sec:
-                # 最後のアラートから cooldown 期間経過 → 新規とカウント
-                add += 15
+                sev = int(float(signals.get("suricata_severity", 3)))
+                # severity: 1(Critical)=+50, 2(Major)=+30, 3(Minor)=+15
+                if sev <= 1:
+                    add += 50
+                elif sev == 2:
+                    add += 30
+                else:
+                    add += 15
                 reasons.append("suricata_alert")
                 self.ctx.last_suricata_alert = now
             # else: cooldown 中 → アラート加算なし（抑制）
