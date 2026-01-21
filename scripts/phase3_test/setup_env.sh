@@ -2,7 +2,7 @@
 # Phase 3 テスト環境セットアップスクリプト
 # 使用方法: ./scripts/phase3_test/setup_env.sh
 
-set -e
+# set -e は最後にエラーになる可能性があるため、個別に管理
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -34,11 +34,16 @@ fi
 
 # 3. Web API 疎通確認
 echo "[3/7] Web API 疎通確認..."
-if curl -s http://10.55.0.10:8081/ > /dev/null 2>&1; then
-  CURRENT_STATE=$(curl -s http://10.55.0.10:8081/ | jq -r '.state')
-  echo "  ✓ Web API 応答正常 (current state: $CURRENT_STATE)"
+# API ホストとポートを設定から取得
+API_HOST=$(grep -A 2 "status_api:" configs/first_minute.yaml | grep "host:" | awk '{print $NF}' || echo "10.55.0.10")
+API_PORT=$(grep -A 2 "status_api:" configs/first_minute.yaml | grep "port:" | awk '{print $NF}' || echo "8082")
+API_URL="http://${API_HOST}:${API_PORT}/"
+
+if curl -s "$API_URL" > /dev/null 2>&1; then
+  CURRENT_STATE=$(curl -s "$API_URL" | jq -r '.state')
+  echo "  ✓ Web API 応答正常 (current state: $CURRENT_STATE, endpoint: $API_URL)"
 else
-  echo "  ✗ ERROR: Web API に接続できません (http://10.55.0.10:8081/)"
+  echo "  ✗ ERROR: Web API に接続できません ($API_URL)"
   exit 1
 fi
 
@@ -103,7 +108,7 @@ else
 fi
 
 # API ベースライン
-curl -s http://10.55.0.10:8081/ | jq '.' > /tmp/phase3_artifacts/api_baseline.json 2>/dev/null
+curl -s "${API_URL}" | jq '.' > /tmp/phase3_artifacts/api_baseline.json 2>/dev/null
 echo "  ✓ API ベースライン保存"
 
 # Journal ベースライン
@@ -132,7 +137,7 @@ echo "================================================"
 echo ""
 echo "📁 スナップショット保存先:"
 echo "   /tmp/phase3_artifacts/"
-ls -lh /tmp/phase3_artifacts/ | tail -n +2 | awk '{print "   - " $9 " (" $5 ")"}'
+ls -lh /tmp/phase3_artifacts/ 2>/dev/null | tail -n +2 | awk '{print "   - " $9 " (" $5 ")"}' || echo "   (ファイル一覧取得失敗)"
 echo ""
 echo "次のコマンドでテスト開始:"
 echo "  cd $PROJECT_ROOT"
@@ -140,7 +145,7 @@ echo "  # ターミナル1: ログ監視"
 echo "  journalctl -u azazel-first-minute -f | grep -E 'state|suspicion|wifi_tags'"
 echo ""
 echo "  # ターミナル2: API監視"
-echo "  watch -n 2 'curl -s http://10.55.0.10:8081/ | jq \".state, .suspicion\"'"
+echo "  watch -n 2 'curl -s ${API_URL} | jq \".state, .suspicion\"'"
 echo ""
 echo "  # ターミナル3: テスト実行"
 echo "  ./scripts/phase3_test/run_test1_wifi.sh  # 不審AP検知テスト"
