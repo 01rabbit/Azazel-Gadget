@@ -3,6 +3,12 @@
 # 使用方法: ./scripts/phase3_test/run_test2_suricata.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# API ホスト・ポート設定ファイルから取得
+API_HOST=$(grep -A 2 "status_api:" "$PROJECT_ROOT/configs/first_minute.yaml" | grep "host:" | awk '{print $NF}' || echo "10.55.0.10")
+API_PORT=$(grep -A 2 "status_api:" "$PROJECT_ROOT/configs/first_minute.yaml" | grep "port:" | awk '{print $NF}' || echo "8082")
+API_URL="http://${API_HOST}:${API_PORT}/"
 
 echo "================================================"
 echo "  テスト2: Suricata→CONTAIN遷移テスト"
@@ -11,8 +17,8 @@ echo ""
 
 # 初期状態確認
 echo "[1/4] 初期状態確認..."
-INITIAL_STATE=$(curl -s http://10.55.0.10:8081/ | jq -r '.state')
-INITIAL_SUSP=$(curl -s http://10.55.0.10:8081/ | jq '.suspicion')
+INITIAL_STATE=$(curl -s "$API_URL" | jq -r '.state')
+INITIAL_SUSP=$(curl -s "$API_URL" | jq '.suspicion')
 echo "  state: $INITIAL_STATE"
 echo "  suspicion: $INITIAL_SUSP"
 echo ""
@@ -34,8 +40,8 @@ echo "[3/4] CONTAIN遷移監視 (最大15秒)..."
 CONTAIN_REACHED=false
 for i in {1..15}; do
   sleep 1
-  CURRENT_STATE=$(curl -s http://10.55.0.10:8081/ | jq -r '.state')
-  CURRENT_SUSP=$(curl -s http://10.55.0.10:8081/ | jq '.suspicion')
+  CURRENT_STATE=$(curl -s "$API_URL" | jq -r '.state')
+  CURRENT_SUSP=$(curl -s "$API_URL" | jq '.suspicion')
   
   echo "  T=${i}秒: state=$CURRENT_STATE, suspicion=$CURRENT_SUSP"
   
@@ -51,8 +57,8 @@ echo ""
 
 # 最終状態確認
 echo "[4/4] 最終状態確認..."
-FINAL_STATE=$(curl -s http://10.55.0.10:8081/ | jq -r '.state')
-FINAL_SUSP=$(curl -s http://10.55.0.10:8081/ | jq '.suspicion')
+FINAL_STATE=$(curl -s "$API_URL" | jq -r '.state')
+FINAL_SUSP=$(curl -s "$API_URL" | jq '.suspicion')
 echo "  state: $INITIAL_STATE → $FINAL_STATE"
 echo "  suspicion: $INITIAL_SUSP → $FINAL_SUSP"
 echo ""
@@ -78,11 +84,23 @@ else
   PASS=false
 fi
 
-if (( $(echo "$FINAL_SUSP >= 50" | bc -l) )); then
-  echo "✓ suspicion が50以上に達しました ($FINAL_SUSP)"
+# bc コマンドがない場合の簡易比較
+if command -v bc &> /dev/null; then
+  if (( $(echo "$FINAL_SUSP >= 50" | bc -l) )); then
+    echo "✓ suspicion が50以上に達しました ($FINAL_SUSP)"
+  else
+    echo "✗ suspicion が50未満です ($FINAL_SUSP)"
+    PASS=false
+  fi
 else
-  echo "✗ suspicion が50未満です ($FINAL_SUSP)"
-  PASS=false
+  # bc なしでの数値比較（整数のみ）
+  FINAL_SUSP_INT=${FINAL_SUSP%.*}
+  if [ "$FINAL_SUSP_INT" -ge 50 ]; then
+    echo "✓ suspicion が50以上に達しました ($FINAL_SUSP)"
+  else
+    echo "✗ suspicion が50未満です ($FINAL_SUSP)"
+    PASS=false
+  fi
 fi
 
 echo ""
