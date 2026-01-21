@@ -22,6 +22,7 @@ class FirstMinuteConfig:
     status_api: Dict[str, Any]
     suricata: Dict[str, Any]
     deception: Dict[str, Any]
+    yaml_path: str | Path = ""  # Track the config file path for reproducibility
 
     @staticmethod
     def load(path: str | Path) -> "FirstMinuteConfig":
@@ -43,7 +44,9 @@ class FirstMinuteConfig:
         }
         for key, val in defaults.items():
             data.setdefault(key, val)
-        return FirstMinuteConfig(**data)
+        cfg = FirstMinuteConfig(**data)
+        cfg.yaml_path = p  # Set the path after construction
+        return cfg
 
     @property
     def runtime_dir(self) -> Path:
