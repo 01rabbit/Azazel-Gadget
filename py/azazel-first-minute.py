@@ -76,7 +76,9 @@ def setup_logging(cfg: FirstMinuteConfig) -> None:
         handlers.append(logging.FileHandler(log_path))
     except OSError:
         pass
-    logging.basicConfig(level=logging.INFO, handlers=handlers, format="%(asctime)s %(levelname)s %(message)s")
+    # Phase 3: enable DEBUG for suricata diagnostics
+    level = logging.DEBUG if os.environ.get("AZAZEL_DEBUG") else logging.INFO
+    logging.basicConfig(level=level, handlers=handlers, format="%(asctime)s %(levelname)s %(message)s")
 
 
 def cmd_start(args: argparse.Namespace, cfg: FirstMinuteConfig) -> None:
