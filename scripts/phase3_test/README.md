@@ -1,6 +1,8 @@
-# Phase 3 テストスクリプト
+# Phase 3 テストスクリプト (v3.0 対応)
 
 このディレクトリには Phase 3 テスト実施用のスクリプトが含まれています。
+
+**対応テスト計画**: PHASE3_TEST_PLAN.md v3.0（実装準拠・パラメータスナップショット方式）
 
 ## 📁 ディレクトリ構成
 
@@ -83,7 +85,7 @@ scripts/phase3_test/
 ```
 
 ### setup_env.sh
-テスト環境を初期化します。
+テスト環境を初期化し、実装パラメータのスナップショットを取得します。
 
 **実行内容**:
 1. 構文チェック (test_redesign_verification.py)
@@ -92,12 +94,27 @@ scripts/phase3_test/
 4. eve.json 準備
 5. 既知悪質AP設定確認
 6. EPD ドライバテスト
-7. ログ初期化
+7. **実装パラメータ・スナップショット取得** (v3.0 追加)
+   - Git コミット情報記録
+   - first_minute.yaml バックアップ
+   - API ベースライン保存
+   - Journal ベースライン保存
+8. ログ初期化
+9. テスト開始時刻記録
+
+**スナップショット保存先**: `/tmp/phase3_artifacts/`
 
 **使用例**:
 ```bash
 ./scripts/phase3_test/setup_env.sh
-# [✓] セットアップ完了 - テスト実施準備完了
+# [7/9] 実装パラメータ・スナップショット取得...
+#   ✓ Git コミット: a1b2c3d4
+#   ✓ first_minute.yaml スナップショット保存
+#   主要パラメータ:
+#     contain_threshold: 50
+#     decay_per_sec: 3
+#   ✓ スナップショット保存先: /tmp/phase3_artifacts/
+# [✓] セットアップ完了
 ```
 
 ### inject_suricata_alert.sh
@@ -234,9 +251,32 @@ sudo systemctl restart azazel-first-minute.service
 各スクリプトは実行結果を標準出力に表示します。
 
 ### ログファイル
+- `/tmp/phase3_artifacts/` - **スナップショット＆証跡保存ディレクトリ** (v3.0)
+  - `git_commit.txt` - テスト実施時のコミットハッシュ
+  - `first_minute.yaml` - 実装パラメータのスナップショット
+  - `api_baseline.json` - テスト開始時の API 状態
+  - `journal_baseline.log` - テスト開始時のログ
+  - `test_start_time.txt` - テスト開始時刻
+  - `contain_recovery_timeline.jsonl` - CONTAIN復帰測定データ
+  - `epd_preview_*.png` - EPD プレビュー画像
 - `/tmp/phase3_test_results.txt` - テスト結果サマリー
-- `/tmp/contain_recovery.log` - CONTAIN復帰測定ログ
+- `/tmp/contain_recovery.log` - CONTAIN復帰測定ログ (旧形式)
 - `journalctl -u azazel-first-minute` - システムログ
+
+### スナップショット値の確認
+v3.0 では期待値を固定せず、スナップショット値に基づいてテストを判定します。
+
+```bash
+# スナップショットの確認
+cat /tmp/phase3_artifacts/first_minute.yaml | grep -E "contain|decay|cooldown"
+
+# 出力例:
+#   contain_threshold: 50
+#   contain_exit_threshold: 30
+#   contain_min_duration_sec: 20
+#   decay_per_sec: 3
+#   suricata_cooldown_sec: 30
+```
 
 ### 期待される結果
 すべてのテストがPASSの場合、Phase 3 は完了です。
@@ -247,9 +287,14 @@ sudo systemctl restart azazel-first-minute.service
 判定: GO (全テストPASS)
 ```
 
+**証跡のアーカイブ** (推奨):
+```bash
+tar -czf /tmp/phase3_artifacts_$(date +%Y%m%d_%H%M).tar.gz /tmp/phase3_artifacts
+```
+
 ## 🔗 関連ドキュメント
 
-- [PHASE3_TEST_PLAN.md](../../PHASE3_TEST_PLAN.md) - 詳細テスト計画書
+- [PHASE3_TEST_PLAN.md](../../PHASE3_TEST_PLAN.md) - 詳細テスト計画書 v3.0
 - [test_redesign_verification.py](../../test_redesign_verification.py) - ユニットテスト
 - [azazel_test.py](../../azazel_test.py) - 統合テスト
 

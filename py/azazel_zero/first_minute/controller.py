@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 from azazel_zero.sensors.wifi_safety import evaluate_wifi_safety
+from azazel_zero.tactics_engine import ConfigHash
 
 from .config import FirstMinuteConfig
 from .dns_observer import DNSObserver, seed_probe_ips
@@ -69,7 +70,18 @@ class FirstMinuteController:
         )
         self.tc = TcManager(cfg.interfaces["downstream"], cfg.interfaces["upstream"])
         self.dns_thread: Optional[DNSObserver] = None
-        self.status_ctx: Dict[str, object] = {"state": "INIT", "suspicion": 0, "last_probe": None}
+        
+        # Tactics Engine: config_hash を計算して status_ctx に追加
+        self.config_hash = ConfigHash.compute(config_file=Path(cfg.yaml_path) if cfg.yaml_path else None)
+        self.last_decision_id: Optional[str] = None
+        
+        self.status_ctx: Dict[str, object] = {
+            "state": "INIT",
+            "suspicion": 0,
+            "last_probe": None,
+            "config_hash": self.config_hash,
+            "last_decision_id": self.last_decision_id,
+        }
         self.status_server: Optional[ThreadingHTTPServer] = None
         self.processes: Dict[str, subprocess.Popen] = {}
         self.last_console = 0.0
@@ -463,6 +475,8 @@ class FirstMinuteController:
                 self.current_stage = state
                 probe_done = state != Stage.PROBE
                 self.apply_stage(state)
+            
+            # Tactics Engine: status_ctx を更新（config_hash は常に含める）
             self.status_ctx.update(
                 {
                     "state": state.value,
@@ -470,6 +484,8 @@ class FirstMinuteController:
                     "reason": summary.get("reason", ""),
                     "wifi": link_meta,
                     "last_probe": self.last_probe.details if self.last_probe else None,
+                    "config_hash": self.config_hash,
+                    "last_decision_id": self.last_decision_id,
                 }
             )
             self.write_snapshot(summary, link_meta)

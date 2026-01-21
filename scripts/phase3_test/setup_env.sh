@@ -81,18 +81,58 @@ else
   exit 1
 fi
 
-# 7. ログ初期化
-echo "[7/7] ログ初期化..."
+# 7. 実装パラメータ・スナップショット取得 (v3.0 要件)
+echo "[7/9] 実装パラメータ・スナップショット取得..."
+mkdir -p /tmp/phase3_artifacts
+
+# Git コミット情報
+git rev-parse --abbrev-ref HEAD > /tmp/phase3_artifacts/git_branch.txt 2>/dev/null || echo "unknown" > /tmp/phase3_artifacts/git_branch.txt
+git rev-parse HEAD > /tmp/phase3_artifacts/git_commit.txt 2>/dev/null || echo "unknown" > /tmp/phase3_artifacts/git_commit.txt
+echo "  ✓ Git コミット: $(cat /tmp/phase3_artifacts/git_commit.txt | cut -c1-8)"
+
+# 設定ファイルコピー
+if [ -f configs/first_minute.yaml ]; then
+  cp -a configs/first_minute.yaml /tmp/phase3_artifacts/first_minute.yaml
+  echo "  ✓ first_minute.yaml スナップショット保存"
+  
+  # 主要パラメータ抽出
+  echo "  主要パラメータ:"
+  grep -E "contain_threshold|contain_min_duration|decay_per_sec|suricata_cooldown" configs/first_minute.yaml | sed 's/^/    /' || true
+else
+  echo "  ⚠ WARNING: configs/first_minute.yaml が見つかりません"
+fi
+
+# API ベースライン
+curl -s http://10.55.0.10:8081/ | jq '.' > /tmp/phase3_artifacts/api_baseline.json 2>/dev/null
+echo "  ✓ API ベースライン保存"
+
+# Journal ベースライン
+journalctl -u azazel-first-minute -n 80 --no-pager > /tmp/phase3_artifacts/journal_baseline.log 2>/dev/null
+echo "  ✓ Journal ベースライン保存"
+
+echo "  ✓ スナップショット保存先: /tmp/phase3_artifacts/"
+
+# 8. ログ初期化
+echo "[8/9] ログ初期化..."
 echo "  - journalctl 古いログを削除中..."
 sudo journalctl --vacuum-time=1d > /dev/null 2>&1
 echo "  - eve.json をクリア中..."
 sudo sh -c 'echo "" > /var/log/suricata/eve.json'
 echo "  ✓ ログ初期化完了"
 
+# 9. テスト開始時刻記録
+echo "[9/9] テスト開始時刻記録..."
+date '+%Y-%m-%d %H:%M:%S' > /tmp/phase3_artifacts/test_start_time.txt
+echo "  ✓ 開始時刻: $(cat /tmp/phase3_artifacts/test_start_time.txt)"
+
 echo ""
 echo "================================================"
 echo "  ✓ セットアップ完了 - テスト実施準備完了"
 echo "================================================"
+echo ""
+echo "📁 スナップショット保存先:"
+echo "   /tmp/phase3_artifacts/"
+ls -lh /tmp/phase3_artifacts/ | tail -n +2 | awk '{print "   - " $9 " (" $5 ")"}'
 echo ""
 echo "次のコマンドでテスト開始:"
 echo "  cd $PROJECT_ROOT"
