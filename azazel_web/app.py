@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-Azazel-Gadget Web UI (Flask)
-Single source of truth: /run/azazel/state.json
-Control via Unix socket: /run/azazel/control.sock
+Azazel-Gadget Web UI - Flask Application
+非特権プロセスとして動作し、state.json を読み取り専用で提供。
+アクションは Unix socket 経由で Control Daemon へ委譲。
+AI Coding Spec v1 準拠
 """
 
 from flask import Flask, jsonify, request, render_template, send_from_directory
@@ -11,6 +12,7 @@ import os
 import socket
 import time
 from pathlib import Path
+from datetime import datetime
 from typing import Dict, Any, Optional
 
 app = Flask(__name__)
@@ -18,14 +20,29 @@ app = Flask(__name__)
 # Configuration
 STATE_PATH = Path("/run/azazel/state.json")
 CONTROL_SOCKET = Path("/run/azazel/control.sock")
-AUTH_TOKEN = os.environ.get("AZAZEL_TOKEN", "azazel-default-token-change-me")
+TOKEN_FILE = Path.home() / ".azazel-zero" / "web_token.txt"
 BIND_HOST = os.environ.get("AZAZEL_WEB_HOST", "0.0.0.0")
-BIND_PORT = int(os.environ.get("AZAZEL_WEB_PORT", "8080"))
+BIND_PORT = int(os.environ.get("AZAZEL_WEB_PORT", "8084"))
 
 # Allowed actions
 ALLOWED_ACTIONS = {
     "refresh", "reprobe", "contain", "details", "stage_open", "disconnect"
 }
+
+def load_token() -> Optional[str]:
+    """Web UI 認証トークンをロード"""
+    if TOKEN_FILE.exists():
+        return TOKEN_FILE.read_text().strip()
+    return None
+
+def verify_token() -> bool:
+    """リクエストのトークン検証（ヘッダーまたはクエリパラメータ）"""
+    token = load_token()
+    if not token:
+        return True  # トークン未設定の場合はスルー
+    
+    req_token = request.headers.get('X-Auth-Token') or request.args.get('token')
+    return req_token == token
 
 
 def read_state() -> Dict[str, Any]:
@@ -125,21 +142,47 @@ def index():
 @app.route("/api/state")
 def api_state():
     """GET /api/state - Return current state.json"""
+    if not verify_token():
+        return jsonify({"error": "Unauthorized"}), 403
+    
     state = read_state()
     return jsonify(state)
 
 
+@app.route("/api/action", methods=["POST"])
+def api_action_new():
+    """POST /api/action - Execute control action (AI Coding Spec v1 format)"""
+    if not verify_token():
+        return jsonify({"error": "Unauthorized"}), 403
+    
+    data = request.json
+    if not data or 'action' not in data:
+        return jsonify({
+            "status": "error",
+            "message": "Missing action"
+        }), 400
+    
+    action = data['action']
+    if action not in ALLOWED_ACTIONS:
+        return jsonify({
+            "status": "error",
+            "message": f"Forbidden action: {action}"
+        }), 403
+    
+    result = send_control_command(action)
+    
+    # Convert to AI Coding Spec format
+    if result.get("ok"):
+        return jsonify({"status": "ok", "message": result.get("message", "Action executed")}), 200
+    else:
+        return jsonify({"status": "error", "message": result.get("error", "Unknown error")}), 500
+
+
 @app.route("/api/action/<action>", methods=["POST"])
 def api_action(action: str):
-    """POST /api/action/<action> - Execute control action"""
-    
-    # Token authentication
-    token = request.headers.get("X-AZAZEL-TOKEN")
-    if token != AUTH_TOKEN:
-        return jsonify({
-            "ok": False,
-            "error": "Unauthorized"
-        }), 401
+    """POST /api/action/<action> - Execute control action (legacy format)"""
+    if not verify_token():
+        return jsonify({"ok": False, "error": "Unauthorized"}), 403
     
     # Validate action
     if action not in ALLOWED_ACTIONS:
@@ -163,6 +206,16 @@ def static_files(filename):
     return send_from_directory("static", filename)
 
 
+@app.route("/health")
+def health():
+    """ヘルスチェック（認証不要）"""
+    return jsonify({
+        "status": "ok",
+        "service": "azazel-web",
+        "timestamp": datetime.now().isoformat()
+    })
+
+
 # Error handlers
 
 @app.errorhandler(404)
@@ -180,6 +233,11 @@ if __name__ == "__main__":
     print(f"   Bind: {BIND_HOST}:{BIND_PORT}")
     print(f"   State: {STATE_PATH}")
     print(f"   Control: {CONTROL_SOCKET}")
+    
+    if load_token():
+        print(f"   🔒 Token authentication enabled")
+    else:
+        print(f"   ⚠️  WARNING: No token configured (open access)")
     
     app.run(
         host=BIND_HOST,
