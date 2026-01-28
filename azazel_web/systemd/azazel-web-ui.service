@@ -1,0 +1,24 @@
+[Unit]
+Description=Azazel Web UI (Flask App)
+After=azazel-control-daemon.service azazel-state-generator.service
+Requires=azazel-state-generator.service
+
+[Service]
+Type=simple
+User=azazel
+Group=azazel
+WorkingDirectory=/home/azazel/Azazel-Zero/azazel_web
+Environment="AZAZEL_WEB_HOST=0.0.0.0"
+Environment="AZAZEL_WEB_PORT=8084"
+ExecStart=/usr/bin/python3 /home/azazel/Azazel-Zero/azazel_web/app.py
+Restart=on-failure
+RestartSec=5s
+
+# Non-privileged Flask app
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadOnlyPaths=/home/azazel/Azazel-Zero/azazel_web /run/azazel
+
+[Install]
+WantedBy=multi-user.target

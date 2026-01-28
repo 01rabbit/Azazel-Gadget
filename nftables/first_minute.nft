@@ -35,7 +35,7 @@ table inet azazel_fmc {
   # ★ NEW: 管理通信ポート定義（fast-path）
   set mgmt_ports {
     type inet_service
-    elements = { 22, 80, 443, 8081, 8082, 8083 }
+    elements = { 22, 80, 443, 8081, 8082, 8083, 8084 }
   }
 
   chain stage_switch {

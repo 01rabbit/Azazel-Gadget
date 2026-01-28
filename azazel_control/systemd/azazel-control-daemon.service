@@ -1,0 +1,24 @@
+[Unit]
+Description=Azazel Control Daemon (Unix Socket Listener)
+After=network.target azazel-first-minute.service
+Requires=azazel-first-minute.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/home/azazel/Azazel-Zero/azazel_control
+ExecStartPre=/usr/bin/mkdir -p /run/azazel
+ExecStart=/usr/bin/python3 /home/azazel/Azazel-Zero/azazel_control/daemon.py
+Restart=on-failure
+RestartSec=5s
+
+# Security hardening
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/run/azazel
+ReadOnlyPaths=/home/azazel/Azazel-Zero/azazel_control
+
+[Install]
+WantedBy=multi-user.target

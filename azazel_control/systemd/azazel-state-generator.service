@@ -1,0 +1,20 @@
+[Unit]
+Description=Azazel State Generator (Legacy API → state.json Bridge)
+After=azazel-first-minute.service
+Requires=azazel-first-minute.service
+
+[Service]
+Type=simple
+User=azazel
+Group=azazel
+WorkingDirectory=/home/azazel/Azazel-Zero/azazel_control
+ExecStartPre=/usr/bin/mkdir -p /run/azazel
+ExecStart=/usr/bin/python3 /home/azazel/Azazel-Zero/azazel_control/state_generator.py
+Restart=always
+RestartSec=3s
+
+# State Generator は非特権で動作可能（ただし /run/azazel に書き込み必要）
+# tmpfiles.d で /run/azazel の権限を設定推奨
+
+[Install]
+WantedBy=multi-user.target
