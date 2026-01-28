@@ -17,7 +17,10 @@ from pathlib import Path
 from typing import Dict, Optional
 
 from azazel_zero.sensors.wifi_safety import evaluate_wifi_safety
-from azazel_zero.tactics_engine import ConfigHash
+from azazel_zero.tactics_engine import ConfigHash, DecisionLogger
+from azazel_zero.tactics_engine.decision_logger import (
+    StateSnapshot, InputSnapshot, ScoreDelta, ChosenAction, DecisionRecord,
+)
 
 from .config import FirstMinuteConfig
 from .dns_observer import DNSObserver, seed_probe_ips
@@ -75,6 +78,7 @@ class FirstMinuteController:
         # Tactics Engine: config_hash を計算して status_ctx に追加
         self.config_hash = ConfigHash.compute(config_file=Path(cfg.yaml_path) if cfg.yaml_path else None)
         self.last_decision_id: Optional[str] = None
+        self.decision_logger = DecisionLogger(output_dir=Path("/opt/azazel/logs/tactics_engine"))
         
         self.status_ctx: Dict[str, object] = {
             "state": "INIT",
@@ -94,6 +98,7 @@ class FirstMinuteController:
         self._eve_inode: Optional[int] = None
         self._eve_partial = ""
         self._eve_initialized = False
+        self._eve_parse_errors = {"json_decode_fail": 0, "skipped_lines": 0}
         try:
             self.epd_min_interval = float(os.environ.get("AZAZEL_EPD_MIN_INTERVAL", "8"))
         except ValueError:
@@ -513,8 +518,10 @@ class FirstMinuteController:
             try:
                 obj = json.loads(line)
             except json.JSONDecodeError:
+                self._eve_parse_errors["json_decode_fail"] += 1
                 continue
             except Exception:
+                self._eve_parse_errors["skipped_lines"] += 1
                 continue
             if isinstance(obj, dict):
                 events.append(obj)
@@ -586,6 +593,66 @@ class FirstMinuteController:
                 self.current_stage = state
                 probe_done = state != Stage.PROBE
                 self.apply_stage(state)
+            
+            # Tactics Engine: DecisionRecord を作成・ログ（状態遷移時のみ）
+            if state != self.current_stage or "suricata_alert" in signals:
+                try:
+                    # 簡略版：suricata_alert のみを記録
+                    if "suricata_alert" in signals:
+                        source = "suricata"
+                        event_digest = "sha256:pending"  # 本実装ではeve.json全体のハッシュを想定
+                        event_min = None
+                    else:
+                        source = "internal"
+                        event_digest = "sha256:internal"
+                        event_min = None
+
+                    state_before = StateSnapshot(
+                        state=self.current_stage.value,
+                        user_state=str(summary.get("reason", "")),
+                        suspicion=float(summary.get("suspicion", 0)),
+                        risk_score=0,
+                    )
+                    state_after = StateSnapshot(
+                        state=state.value,
+                        user_state=str(summary.get("reason", "")),
+                        suspicion=float(summary.get("suspicion", 0)),
+                        risk_score=0,
+                    )
+                    score_delta = ScoreDelta(
+                        suspicion_add=max(0.0, float(summary.get("suspicion", 0))),
+                        suspicion_decay=0.0,
+                    )
+                    constraints_triggered = summary.get("constraints", []) if isinstance(summary.get("constraints", []), list) else []
+
+                    chosen = [
+                        ChosenAction(
+                            action_type="transition",
+                            detail={"from": self.current_stage.value, "to": state.value}
+                        )
+                    ]
+
+                    record = DecisionLogger.create_record(
+                        engine_version="0.1.0",
+                        config_hash=self.config_hash,
+                        inputs_source=source,
+                        event_digest=event_digest,
+                        event_min=event_min,
+                        features={
+                            "suricata_alert": "suricata_alert" in signals,
+                            "suricata_severity": int(signals.get("suricata_severity", 0)),
+                        },
+                        state_before=state_before,
+                        score_delta=score_delta,
+                        constraints_triggered=constraints_triggered,
+                        chosen=chosen,
+                        state_after=state_after,
+                        parse_errors=self._eve_parse_errors.copy(),
+                    )
+                    self.decision_logger.log_decision(record)
+                    self.last_decision_id = record.decision_id
+                except Exception as e:
+                    self.logger.warning(f"Failed to log decision: {e}")
             
             # Tactics Engine: status_ctx を更新（config_hash は常に含める）
             self.status_ctx.update(
