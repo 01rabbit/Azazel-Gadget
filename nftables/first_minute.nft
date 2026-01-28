@@ -48,6 +48,9 @@ table inet azazel_fmc {
     iifname "lo" accept
     ct state established,related accept
     
+    # ★ Web UI (port 8084) は全インタフェース、全 IP で許可（リモートアクセス対応）
+    tcp dport 8084 accept comment "web ui (remote access)"
+    
     # ★ REDESIGN: 管理通信 fast-path（両インタフェース対応）
     # SSH/VSCode/HTTP/StatusAPI は source/iface を問わず許可
     ip daddr $MGMT_IP tcp dport @mgmt_ports accept comment "management fast-path (all iface)"
