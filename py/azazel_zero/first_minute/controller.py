@@ -162,12 +162,18 @@ class FirstMinuteController:
         self.status_server = make_status_server(host, port, self.status_ctx)
         thread = threading.Thread(target=self.status_server.serve_forever, daemon=True)
         thread.start()
-        # Web UI サーバー（ポート +1）
+        
+        # Web UI サーバー（リモートアクセス対応）
+        web_host = self.cfg.status_api.get("web_host", "0.0.0.0")  # デフォルトは全インターフェース
         web_port = int(self.cfg.status_api.get("web_port", port + 1))
-        self.web_server = make_web_server(host, web_port, self.status_ctx)
+        self.web_server = make_web_server(web_host, web_port, self.status_ctx)
         web_thread = threading.Thread(target=self.web_server.serve_forever, daemon=True)
         web_thread.start()
-        self.logger.info(f"Web UI started at http://{host}:{web_port}/")
+        
+        # ログ出力（アクセス可能なアドレスを表示）
+        self.logger.info(f"Web UI started at http://0.0.0.0:{web_port}/ (all interfaces)")
+        self.logger.info(f"  Local: http://127.0.0.1:{web_port}/")
+        self.logger.info(f"  Management: http://10.55.0.10:{web_port}/")
 
     def write_snapshot(self, summary: Dict[str, object], link_meta: Dict[str, object]) -> None:
         """Write a UI snapshot JSON for the TUI to consume."""

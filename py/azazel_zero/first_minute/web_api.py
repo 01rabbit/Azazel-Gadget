@@ -39,6 +39,8 @@ class WebAPIHandler(BaseHTTPRequestHandler):
             self._serve_signals()
         elif self.path == "/api/config":
             self._serve_config()
+        elif self.path == "/api/access":
+            self._serve_access()
         elif self.path.startswith("/static/"):
             self._serve_static()
         else:
@@ -114,6 +116,25 @@ class WebAPIHandler(BaseHTTPRequestHandler):
             },
             "decay_per_sec": self.status_ctx.get("decay_per_sec", 3),
             "suricata_cooldown_sec": self.status_ctx.get("suricata_cooldown_sec", 30),
+        }
+        self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+    
+    def _serve_access(self):
+        """現在のアクセス情報を JSON で返す（リモートアクセス用）"""
+        self._set_headers()
+        # リクエスト元のホストアドレスを検出
+        client_addr = self.client_address[0]
+        host_header = self.headers.get("Host", "localhost:8083")
+        server_addr = host_header.split(":")[0] if ":" in host_header else host_header
+        
+        data = {
+            "access_urls": {
+                "current": f"http://{server_addr}:8083/",
+                "localhost": "http://127.0.0.1:8083/",
+                "management": "http://10.55.0.10:8083/",
+            },
+            "client_ip": client_addr,
+            "access_method": "remote" if client_addr not in ("127.0.0.1", "::1") else "local",
         }
         self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
     
@@ -380,6 +401,34 @@ class WebAPIHandler(BaseHTTPRequestHandler):
                 </div>
             </div>
             
+            <!-- リモートアクセス情報 -->
+            <div class="card">
+                <h2>🌐 アクセス情報</h2>
+                <div class="metric">
+                    <span class="metric-label">アクセス方式</span>
+                    <span id="accessMethod" class="metric-value">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">クライアント IP</span>
+                    <span id="clientIp" class="metric-value">-</span>
+                </div>
+                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
+                    <p style="color: #aaa; font-size: 0.85em; margin-bottom: 8px;">📍 アクセス URL:</p>
+                    <div class="metric">
+                        <span class="metric-label">現在</span>
+                        <span id="urlCurrent" class="metric-value" style="font-size: 0.85em;">-</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">ローカル</span>
+                        <span id="urlLocal" class="metric-value" style="font-size: 0.85em;">127.0.0.1:8083</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">管理</span>
+                        <span id="urlMgmt" class="metric-value" style="font-size: 0.85em;">10.55.0.10:8083</span>
+                    </div>
+                </div>
+            </div>
+            
             <!-- 履歴 -->
             <div class="card" style="grid-column: 1 / -1;">
                 <h2>📜 ステージ遷移履歴</h2>
@@ -409,7 +458,8 @@ class WebAPIHandler(BaseHTTPRequestHandler):
                 fetchStatus(),
                 fetchSignals(),
                 fetchConfig(),
-                fetchHistory()
+                fetchHistory(),
+                fetchAccessInfo()
             ]);
             document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('ja-JP');
         }
@@ -513,6 +563,23 @@ class WebAPIHandler(BaseHTTPRequestHandler):
                 }
             } catch (e) {
                 console.error('Failed to fetch history:', e);
+            }
+        }
+        
+        // アクセス情報取得
+        async function fetchAccessInfo() {
+            try {
+                const res = await fetch('/api/access');
+                const data = await res.json();
+                
+                document.getElementById('accessMethod').textContent = 
+                    data.access_method === 'remote' ? '🌍 リモート' : '🖥️ ローカル';
+                document.getElementById('clientIp').textContent = data.client_ip;
+                document.getElementById('urlCurrent').textContent = data.access_urls.current;
+                document.getElementById('urlLocal').textContent = data.access_urls.localhost;
+                document.getElementById('urlMgmt').textContent = data.access_urls.management;
+            } catch (e) {
+                console.error('Failed to fetch access info:', e);
             }
         }
         

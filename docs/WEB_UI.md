@@ -3,6 +3,8 @@
 ## 概要
 Azazel-Zero の Web UI ダッシュボードです。リアルタイムでシステムの状態、疑わしさスコア、ネットワーク情報、検知シグナルを可視化します。
 
+**リモートアクセス対応**：ラップトップやスマートフォンから Wi-Fi 経由でリモート監視可能。
+
 ## 機能
 
 ### 📊 ダッシュボード
@@ -13,6 +15,7 @@ Azazel-Zero の Web UI ダッシュボードです。リアルタイムでシス
 - **検知シグナル**：Wi-Fi 安全性、プローブ失敗、DNS 不一致、Suricata アラート、証明書不一致
 - **設定閾値**：DEGRADED、NORMAL、CONTAIN の閾値表示
 - **ステージ遷移履歴**：最新50件の遷移ログ
+- **アクセス情報**：リモートアクセス方式、クライアント IP、複数アクセス URL
 
 ### 🔄 リアルタイム更新
 - 2秒ごとに自動更新
@@ -21,15 +24,26 @@ Azazel-Zero の Web UI ダッシュボードです。リアルタイムでシス
 
 ## アクセス方法
 
-### 1. 通常運用時
-Azazel-Zero が稼働している場合、以下の URL にアクセス：
+### 1. 通常運用時（複数の方法）
+Azazel-Zero が稼働している場合、以下の URL でアクセス可能：
 
+#### ローカル（Raspberry Pi 直接接続）
+```
+http://127.0.0.1:8083/
+```
+
+#### 管理ネットワーク経由（ダウンストリーム USB）
 ```
 http://10.55.0.10:8083/
 ```
 
-- **ホスト**: 設定ファイル (`configs/first_minute.yaml`) の `status_api.host`
-- **ポート**: 設定ファイルの `status_api.web_port`（デフォルト：8083）
+#### リモートアクセス（Wi-Fi 同一ネットワーク）
+Raspberry Pi のアップストリーム Wi-Fi IP を確認してアクセス：
+```
+http://<Raspberry Pi の Wi-Fi IP>:8083/
+```
+
+**注**: リモートアクセスは設定ファイルで有効化（デフォルト有効）
 
 ### 2. テストサーバー起動
 開発・デバッグ用のテストサーバーを起動：
@@ -40,6 +54,37 @@ PYTHONPATH=/home/azazel/Azazel-Zero/py python3 test_web_ui.py
 ```
 
 起動後、ブラウザで `http://127.0.0.1:8083/` にアクセス。
+
+## リモートアクセス設定
+
+### デフォルト設定（すべてのインターフェースでリッスン）
+[configs/first_minute.yaml](../configs/first_minute.yaml) に以下の設定があります：
+
+```yaml
+status_api:
+  host: 10.55.0.10          # レガシー JSON API（管理ネットワークのみ）
+  port: 8082
+  web_host: 0.0.0.0         # Web UI バインド（全インターフェース）
+  web_port: 8083
+  enable_remote_access: true # リモートアクセス有効
+```
+
+### リモートアクセスを無効化
+特定のインターフェースのみに限定する場合：
+
+```yaml
+status_api:
+  web_host: 10.55.0.10  # 管理ネットワークのみ
+```
+
+設定後、サービスを再起動：
+```bash
+sudo systemctl restart azazel-first-minute
+```
+
+### ファイアウォール ルール
+ファイアウォールで Web UI ポート（デフォルト 8083）が許可されています。
+[nftables/first_minute.nft](../nftables/first_minute.nft) の `mgmt_ports` セットに自動追加。
 
 ## API エンドポイント
 
@@ -124,12 +169,34 @@ PYTHONPATH=/home/azazel/Azazel-Zero/py python3 test_web_ui.py
 }
 ```
 
+### `GET /api/access` ⭐ (リモートアクセス用)
+現在のアクセス情報（IP、アクセス方式、推奨 URL）を JSON で返します。
+
+**レスポンス例：**
+```json
+{
+  "access_urls": {
+    "current": "http://192.168.1.100:8083/",
+    "localhost": "http://127.0.0.1:8083/",
+    "management": "http://10.55.0.10:8083/"
+  },
+  "client_ip": "192.168.1.50",
+  "access_method": "remote"
+}
+```
+
+**用途**：
+- UI が複数インターフェースでアクセス可能な場合、現在のアクセス IP を返す
+- リモートアクセス確認、複数デバイスからのアクセス シナリオに対応
+- JavaScript から自動検出して UI に表示
+
 ## アーキテクチャ
 
 ### バックエンド
 - **モジュール**: [py/azazel_zero/first_minute/web_api.py](../py/azazel_zero/first_minute/web_api.py)
 - **ベース**: Python 標準ライブラリ `http.server.HTTPServer`
 - **統合**: [controller.py](../py/azazel_zero/first_minute/controller.py) の `start_status_api()` で起動
+- **リモートアクセス**: `web_host: 0.0.0.0` で全インターフェースでリッスン
 
 ### フロントエンド
 - **技術スタック**: Pure HTML + CSS + JavaScript（ライブラリ不要）
