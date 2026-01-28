@@ -265,7 +265,18 @@ class FirstMinuteController:
         ssid = str(link.get("ssid") or "No SSID")
         signal_dbm = self._parse_signal_dbm(link.get("signal"))
         signal_bucket = self._epd_signal_bucket(signal_dbm)
-        msg = (reason or stage.value)[:20]
+        
+        # EPD表示用に簡潔なメッセージを作成（文字数制限考慮）
+        if stage == Stage.DEGRADED:
+            # DEGRADEDの場合、reasonから簡潔な表示を作成
+            if "contain" in reason.lower() and "degraded" in reason.lower():
+                msg = "RECOVERED"  # CONTAIN→DEGRADED の場合
+            elif "degraded" in reason.lower():
+                msg = "CAUTION"    # その他のDEGRADED
+            else:
+                msg = (reason or "LIMITED")[:12]  # 12文字制限
+        else:
+            msg = (reason or stage.value)[:12]  # その他のステートも12文字制限
 
         epd_ip = up_ip if up_ip and up_ip != "-" else "No IP"
         if stage in (Stage.INIT, Stage.PROBE, Stage.NORMAL):
