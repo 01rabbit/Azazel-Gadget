@@ -28,6 +28,7 @@ from .nft import NftManager
 from .probes import ProbeOutcome, run_all
 from .state_machine import FirstMinuteStateMachine, Stage
 from .tc import TcManager
+from .web_api import make_web_server, add_history_event
 
 
 class StatusHandler(BaseHTTPRequestHandler):
@@ -80,14 +81,19 @@ class FirstMinuteController:
         self.last_decision_id: Optional[str] = None
         self.decision_logger = DecisionLogger(output_dir=Path("/opt/azazel/logs/tactics_engine"))
         
+        # Web UI 用：起動時刻を記録
+        self._start_time = time.time()
+        
         self.status_ctx: Dict[str, object] = {
             "state": "INIT",
             "suspicion": 0,
             "last_probe": None,
             "config_hash": self.config_hash,
             "last_decision_id": self.last_decision_id,
+            "start_time": self._start_time,
         }
         self.status_server: Optional[ThreadingHTTPServer] = None
+        self.web_server: Optional[object] = None
         self.processes: Dict[str, subprocess.Popen] = {}
         self.last_console = 0.0
         self.snapshot_path = cfg.runtime_dir / "ui_snapshot.json"
@@ -152,9 +158,16 @@ class FirstMinuteController:
     def start_status_api(self) -> None:
         host = self.cfg.status_api.get("host", "127.0.0.1")
         port = int(self.cfg.status_api.get("port", 8081))
+        # 従来のステータス API（既存コードとの互換性）
         self.status_server = make_status_server(host, port, self.status_ctx)
         thread = threading.Thread(target=self.status_server.serve_forever, daemon=True)
         thread.start()
+        # Web UI サーバー（ポート +1）
+        web_port = int(self.cfg.status_api.get("web_port", port + 1))
+        self.web_server = make_web_server(host, web_port, self.status_ctx)
+        web_thread = threading.Thread(target=self.web_server.serve_forever, daemon=True)
+        web_thread.start()
+        self.logger.info(f"Web UI started at http://{host}:{web_port}/")
 
     def write_snapshot(self, summary: Dict[str, object], link_meta: Dict[str, object]) -> None:
         """Write a UI snapshot JSON for the TUI to consume."""
@@ -444,6 +457,8 @@ class FirstMinuteController:
         self.stop_dnsmasq()
         if self.status_server:
             self.status_server.shutdown()
+        if self.web_server:
+            self.web_server.shutdown()
         if not self.dry_run:
             self.tc.clear()
             self.nft.clear()
@@ -601,6 +616,13 @@ class FirstMinuteController:
             ):
                 state = Stage.DECEPTION
             if state != self.current_stage:
+                # Web UI 履歴に記録
+                add_history_event(
+                    from_stage=self.current_stage.value,
+                    to_stage=state.value,
+                    suspicion=summary.get("suspicion", 0),
+                    reason=summary.get("reason", "")
+                )
                 self.current_stage = state
                 probe_done = state != Stage.PROBE
                 self.apply_stage(state)
@@ -666,15 +688,32 @@ class FirstMinuteController:
                     self.logger.warning(f"Failed to log decision: {e}")
             
             # Tactics Engine: status_ctx を更新（config_hash は常に含める）
+            link = link_meta.get("link", {}) if link_meta else {}
             self.status_ctx.update(
                 {
-                    "state": state.value,
+                    "stage": state.value,
                     "suspicion": summary.get("suspicion", 0),
                     "reason": summary.get("reason", ""),
                     "wifi": link_meta,
                     "last_probe": self.last_probe.details if self.last_probe else None,
                     "config_hash": self.config_hash,
                     "last_decision_id": self.last_decision_id,
+                    # Web UI 用の追加データ
+                    "start_time": getattr(self, "_start_time", time.time()),
+                    "upstream_if": self.cfg.interfaces.get("upstream", "wlan0"),
+                    "downstream_if": self.cfg.interfaces.get("downstream", "usb0"),
+                    "mgmt_ip": self.cfg.interfaces.get("mgmt_ip", "10.55.0.10"),
+                    "ssid": (link or {}).get("ssid", "-"),
+                    "bssid": (link or {}).get("bssid", "-"),
+                    "signal_dbm": (link or {}).get("signal", "-"),
+                    "rtt_ms": 180 if state in (Stage.PROBE, Stage.DEGRADED) else 0,
+                    "rate_mbps": 2.0 if state == Stage.DEGRADED else 1.0 if state == Stage.PROBE else 0,
+                    "last_signals": signals,
+                    "degrade_threshold": self.cfg.state_machine.get("degrade_threshold", 20),
+                    "normal_threshold": self.cfg.state_machine.get("normal_threshold", 8),
+                    "contain_threshold": self.cfg.state_machine.get("contain_threshold", 50),
+                    "decay_per_sec": self.cfg.state_machine.get("decay_per_sec", 3),
+                    "suricata_cooldown_sec": self.cfg.state_machine.get("suricata_cooldown_sec", 30),
                 }
             )
             self.write_snapshot(summary, link_meta)

@@ -80,7 +80,8 @@ policy:
 
 status_api:
   host: 10.55.0.10
-  port: 8082
+  port: 8082      # レガシー JSON API
+  web_port: 8083  # Web UI ダッシュボード
 
 suricata:
   enabled: true
