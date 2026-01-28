@@ -18,9 +18,9 @@ python3 << 'PYTHON_CHECK'
 import sys
 sys.path.insert(0, '/home/azazel/Azazel-Zero/py')
 
-modules = ["azazel_zero.app.tactics_engine.config_hash", 
-           "azazel_zero.app.tactics_engine.eve_parser",
-           "azazel_zero.app.tactics_engine.decision_logger"]
+modules = ["azazel_zero.tactics_engine.config_hash", 
+           "azazel_zero.tactics_engine.eve_parser",
+           "azazel_zero.tactics_engine.decision_logger"]
 
 for mod in modules:
     try:
@@ -41,12 +41,15 @@ import sys
 sys.path.insert(0, '/home/azazel/Azazel-Zero/py')
 
 try:
-    from azazel_zero.app.tactics_engine.config_hash import ConfigHash
+    from azazel_zero.tactics_engine import ConfigHash
     from pathlib import Path
     
     config_path = Path('/etc/azazel-zero/first_minute.yaml')
-    ch = ConfigHash(config_path)
-    print(ch.compute())
+    if not config_path.exists():
+        config_path = Path('/home/azazel/Azazel-Zero/configs/first_minute.yaml')
+    
+    config_hash = ConfigHash.compute(config_file=config_path)
+    print(config_hash)
 except Exception as e:
     print(f"ERROR: {e}")
 PYTHON
@@ -101,12 +104,21 @@ import sys
 sys.path.insert(0, '/home/azazel/Azazel-Zero/py')
 
 try:
-    from azazel_zero.app.tactics_engine.eve_parser import EveParser
+    from azazel_zero.tactics_engine import EVEParser
     from pathlib import Path
     
     eve_path = Path('/var/log/suricata/eve.json')
-    parser = EveParser(eve_path)
-    events = parser.parse_recent(limit=5)
+    parser = EVEParser()
+    
+    # ファイルを読んで解析
+    events = []
+    if eve_path.exists():
+        with open(eve_path) as f:
+            for line in f:
+                obj = parser.parse_line(line)
+                if obj:
+                    events.append(obj)
+    
     print(f"OK:{len(events)}")
 except Exception as e:
     print(f"ERROR:{e}")
@@ -136,17 +148,31 @@ sys.path.insert(0, '/home/azazel/Azazel-Zero/py')
 from pathlib import Path
 
 try:
-    from azazel_zero.app.tactics_engine.decision_logger import DecisionLogger
+    from azazel_zero.tactics_engine import DecisionLogger
+    from azazel_zero.tactics_engine.decision_logger import (
+        StateSnapshot, InputSnapshot, ScoreDelta, ChosenAction
+    )
     
     log_path = Path('/tmp/test_decision.jsonl')
     logger = DecisionLogger(log_path)
-    logger.log_decision(
-        decision_id="TEST001",
-        state="NORMAL",
-        suspicion=0.0,
-        signals={"test": True},
-        reason="Test log"
+    
+    # テスト用レコード作成
+    from datetime import datetime, timezone
+    record = DecisionLogger.create_record(
+        engine_version="0.1.0",
+        config_hash="sha256:test",
+        inputs_source="test",
+        event_digest="sha256:test",
+        event_min=None,
+        features={"test": True},
+        state_before=StateSnapshot("NORMAL", "safe", 0.0, 0),
+        score_delta=ScoreDelta(),
+        constraints_triggered=[],
+        chosen=[ChosenAction("test", {})],
+        state_after=StateSnapshot("NORMAL", "safe", 0.0, 0),
     )
+    
+    logger.log_decision(record)
     
     # 記録確認
     if log_path.exists() and log_path.stat().st_size > 0:
