@@ -49,6 +49,11 @@ class NftManager:
         return self._render()
 
     def apply_base(self) -> None:
+        # Delete existing table to ensure clean state
+        subprocess.run(["nft", "delete", "table", "inet", "azazel_fmc"], 
+                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        
+        # Apply rendered template
         rendered = self._render()
         subprocess.run(["nft", "-f", "-"], input=rendered, text=True, check=True)
 
