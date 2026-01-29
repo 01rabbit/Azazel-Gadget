@@ -30,7 +30,7 @@ from .notifier import NtfyNotifier  # ★ ntfy 通知統合
 from .probes import ProbeOutcome, run_all
 from .state_machine import FirstMinuteStateMachine, Stage
 from .tc import TcManager
-from .web_api import make_web_server, add_history_event
+from .web_api import add_history_event
 
 
 class StatusHandler(BaseHTTPRequestHandler):
@@ -164,23 +164,12 @@ class FirstMinuteController:
 
     def start_status_api(self) -> None:
         host = self.cfg.status_api.get("host", "127.0.0.1")
-        port = int(self.cfg.status_api.get("port", 8081))
-        # 従来のステータス API（既存コードとの互換性）
+        port = int(self.cfg.status_api.get("port", 8082))
+        # ステータス API（JSON）
         self.status_server = make_status_server(host, port, self.status_ctx)
         thread = threading.Thread(target=self.status_server.serve_forever, daemon=True)
         thread.start()
-        
-        # Web UI サーバー（リモートアクセス対応）
-        web_host = self.cfg.status_api.get("web_host", "0.0.0.0")  # デフォルトは全インターフェース
-        web_port = int(self.cfg.status_api.get("web_port", port + 1))
-        self.web_server = make_web_server(web_host, web_port, self.status_ctx)
-        web_thread = threading.Thread(target=self.web_server.serve_forever, daemon=True)
-        web_thread.start()
-        
-        # ログ出力（アクセス可能なアドレスを表示）
-        self.logger.info(f"Web UI started at http://0.0.0.0:{web_port}/ (all interfaces)")
-        self.logger.info(f"  Local: http://127.0.0.1:{web_port}/")
-        self.logger.info(f"  Management: http://10.55.0.10:{web_port}/")
+        self.logger.info(f"Status API started on {host}:{port}")
 
     def write_snapshot(self, summary: Dict[str, object], link_meta: Dict[str, object]) -> None:
         """Write a UI snapshot JSON for the TUI to consume."""

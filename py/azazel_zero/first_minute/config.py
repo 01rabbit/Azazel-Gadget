@@ -40,11 +40,8 @@ class FirstMinuteConfig:
             "probes": {},
             "policy": {},
             "status_api": {
-                "host": "192.168.7.1",
-                "port": 8081,
-                "web_host": "0.0.0.0",  # リモートアクセス対応：全インターフェース
-                "web_port": 8083,
-                "enable_remote_access": True
+                "host": "127.0.0.1",
+                "port": 8082
             },
             "suricata": {"enabled": False},
             "deception": {"enable_if_opencanary_present": True},
