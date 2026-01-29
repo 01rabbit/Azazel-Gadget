@@ -26,6 +26,7 @@ from azazel_zero.tactics_engine.decision_logger import (
 from .config import FirstMinuteConfig
 from .dns_observer import DNSObserver, seed_probe_ips
 from .nft import NftManager
+from .notifier import NtfyNotifier  # ★ ntfy 通知統合
 from .probes import ProbeOutcome, run_all
 from .state_machine import FirstMinuteStateMachine, Stage
 from .tc import TcManager
@@ -76,6 +77,11 @@ class FirstMinuteController:
         )
         self.tc = TcManager(cfg.interfaces["downstream"], cfg.interfaces["upstream"])
         self.dns_thread: Optional[DNSObserver] = None
+        
+        # ★ ntfy 通知クライアントを初期化
+        self.notifier: Optional[NtfyNotifier] = None
+        if cfg.notify.get("enabled", False):
+            self._init_notifier()
         
         # Tactics Engine: config_hash を計算して status_ctx に追加
         self.config_hash = ConfigHash.compute(config_file=Path(cfg.yaml_path) if cfg.yaml_path else None)
@@ -665,11 +671,33 @@ class FirstMinuteController:
                 signals["dns_mismatch"] = self.last_probe.dns_mismatch
                 signals["cert_mismatch"] = self.last_probe.tls_mismatch
                 signals["route_anomaly"] = self.last_probe.route_anomaly
+                
+                # ★ DNS 不一致を通知（閾値超過時）
+                dns_mismatch_alert_threshold = int(
+                    self.cfg.notify.get("thresholds", {}).get("dns_mismatch_alert", 3)
+                )
+                if self.last_probe.dns_mismatch >= dns_mismatch_alert_threshold:
+                    self._notify_signal_alert(
+                        signal_type="dns_mismatch",
+                        reason=f"DNS mismatch detected: {self.last_probe.dns_mismatch} mismatches",
+                        tags=["dns", "warning"],
+                    )
+                
                 probe_done = True
 
             if self.suricata_bumped():
                 signals["suricata_alert"] = True
                 signals["suricata_severity"] = max(1, min(3, int(self._last_suricata_severity or 3)))
+                
+                # ★ Suricata アラートを通知
+                severity_name = {1: "Low", 2: "Medium", 3: "High"}.get(
+                    int(self._last_suricata_severity or 3), "Unknown"
+                )
+                self._notify_signal_alert(
+                    signal_type="suricata_alert",
+                    reason=f"Suricata detected suspicious activity (severity: {severity_name})",
+                    tags=["suricata", "ids", severity_name.lower()],
+                )
 
             state, summary = self.state_machine.step(signals)
             if (
@@ -679,6 +707,9 @@ class FirstMinuteController:
             ):
                 state = Stage.DECEPTION
             if state != self.current_stage:
+                # ★ 状態遷移を通知
+                self._notify_state_transition(self.current_stage, state)
+                
                 # Web UI 履歴に記録
                 add_history_event(
                     from_stage=self.current_stage.value,
@@ -852,3 +883,72 @@ class FirstMinuteController:
         out.append("Ctrl+Cで停止 / JSONログ: first_minute.log")
         sys.stdout.write("\n".join(out) + "\n")
         sys.stdout.flush()
+    def _init_notifier(self) -> None:
+        """★ ntfy 通知クライアントを初期化（トークンファイルから読込）"""
+        try:
+            ntfy_cfg = self.cfg.notify.get("ntfy", {})
+            token_file = Path(ntfy_cfg.get("token_file", "/etc/azazel/ntfy.token"))
+            
+            if not token_file.exists():
+                self.logger.warning(f"ntfy token file not found: {token_file}, notifications disabled")
+                return
+            
+            token = token_file.read_text().strip()
+            if not token:
+                self.logger.warning(f"ntfy token file is empty: {token_file}, notifications disabled")
+                return
+            
+            self.notifier = NtfyNotifier(
+                base_url=ntfy_cfg.get("base_url", "http://10.55.0.10:8081"),
+                token=token,
+                topic_alert=ntfy_cfg.get("topic_alert", "azg-alert-critical"),
+                topic_info=ntfy_cfg.get("topic_info", "azg-info-status"),
+                cooldown_sec=int(ntfy_cfg.get("cooldown_sec", 30)),
+            )
+            self.logger.info("ntfy notifier initialized successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize ntfy notifier: {e}")
+            self.notifier = None
+    
+    def _notify_state_transition(self, from_stage: Stage, to_stage: Stage) -> None:
+        """★ 状態遷移を通知"""
+        if not self.notifier:
+            return
+        
+        # 危険側（DEGRADED/CONTAIN）のみアラート通知、それ以外は情報通知
+        is_danger = to_stage in (Stage.DEGRADED, Stage.CONTAIN)
+        title = f"State: {from_stage.value} → {to_stage.value}"
+        event_key = f"state_change:{from_stage.value}->{to_stage.value}"
+        
+        if is_danger:
+            self.notifier.notify_alert(
+                title=title,
+                body=f"Azazel-Gadget transitioned to {to_stage.value}",
+                tags=["state-change", to_stage.value.lower()],
+                priority=4,
+                event_key=event_key,
+            )
+        else:
+            self.notifier.notify_info(
+                title=title,
+                body=f"Azazel-Gadget transitioned to {to_stage.value}",
+                tags=["state-change", to_stage.value.lower()],
+                priority=2,
+                event_key=event_key,
+            )
+    
+    def _notify_signal_alert(self, signal_type: str, reason: str, tags: Optional[list] = None) -> None:
+        """★ シグナルアラートを通知（suricata, dns_mismatch など）"""
+        if not self.notifier:
+            return
+        
+        event_key = f"signal:{signal_type}"
+        tag_list = tags or [signal_type.lower()]
+        
+        self.notifier.notify_alert(
+            title=f"Signal Alert: {signal_type}",
+            body=reason,
+            tags=tag_list,
+            priority=5,
+            event_key=event_key,
+        )

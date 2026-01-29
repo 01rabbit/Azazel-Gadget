@@ -92,3 +92,15 @@ suricata:
 deception:
   enable_if_opencanary_present: true
   opencanary_cfg: /etc/opencanaryd/opencanary.conf
+# ★ ntfy 通知基盤設定
+notify:
+  enabled: true
+  ntfy:
+    base_url: "http://10.55.0.10:8081"  # ntfy サーバベース URL
+    token_file: "/etc/azazel/ntfy.token"  # Bearer トークンファイル（パーミッション 600）
+    topic_alert: "azg-alert-critical"    # 重大イベント用 topic
+    topic_info: "azg-info-status"        # 状態遷移用 topic
+    cooldown_sec: 30                      # イベント重複抑制の冷却時間（秒）
+  thresholds:
+    temp_c_alert: 75                      # CPU 温度アラート閾値（℃）
+    dns_mismatch_alert: 3                 # DNS 不一致検知回数閾値

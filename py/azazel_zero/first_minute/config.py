@@ -22,6 +22,7 @@ class FirstMinuteConfig:
     status_api: Dict[str, Any]
     suricata: Dict[str, Any]
     deception: Dict[str, Any]
+    notify: Dict[str, Any] = field(default_factory=dict)  # ★ ntfy 通知設定
     yaml_path: str | Path = ""  # Track the config file path for reproducibility
 
     @staticmethod
@@ -47,6 +48,20 @@ class FirstMinuteConfig:
             },
             "suricata": {"enabled": False},
             "deception": {"enable_if_opencanary_present": True},
+            "notify": {  # ★ ntfy デフォルト設定
+                "enabled": False,
+                "ntfy": {
+                    "base_url": "http://10.55.0.10:8081",
+                    "token_file": "/etc/azazel/ntfy.token",
+                    "topic_alert": "azg-alert-critical",
+                    "topic_info": "azg-info-status",
+                    "cooldown_sec": 30,
+                },
+                "thresholds": {
+                    "temp_c_alert": 75,
+                    "dns_mismatch_alert": 3,
+                },
+            },
         }
         for key, val in defaults.items():
             data.setdefault(key, val)
