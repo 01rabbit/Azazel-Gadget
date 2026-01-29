@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Azazel-Gadget Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-left">
+            <h1>🛡️ Azazel-Gadget</h1>
+            <span id="headerSSID" class="header-ssid">-</span>
+        </div>
+        <div class="header-right">
+            <span id="headerClock" class="header-clock">--:--:--</span>
+            <span id="headerTemp" class="header-temp">--°C</span>
+            <span id="headerCPU" class="header-cpu">--%</span>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="container">
+        <!-- PC: Two-column layout | Mobile: Single column -->
+        <div class="grid">
+            <!-- Left Column -->
+            <div class="column-left">
+                <!-- Risk Card -->
+                <div class="card card-risk" id="cardRisk">
+                    <h2>🎯 Risk Assessment</h2>
+                    <div class="risk-score">
+                        <div class="score-value" id="riskScore">0</div>
+                        <div class="score-label">Risk Score</div>
+                    </div>
+                    <div class="risk-status" id="riskStatus">SAFE</div>
+                    <div class="metric">
+                        <span class="metric-label">Status</span>
+                        <span class="metric-value" id="riskStatusValue">SAFE</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Threat Level</span>
+                        <span class="metric-value" id="riskThreatLevel">LOW</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Recommendation</span>
+                        <span class="metric-value text-wrap" id="riskRecommendation">-</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Reason</span>
+                        <span class="metric-value text-wrap" id="riskReason">-</span>
+                    </div>
+                </div>
+
+                <!-- Connection Card -->
+                <div class="card card-connection">
+                    <h2>📡 Connection</h2>
+                    <div class="metric">
+                        <span class="metric-label">BSSID</span>
+                        <span class="metric-value mono" id="connBSSID">-</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Channel</span>
+                        <span class="metric-value" id="connChannel">-</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Signal</span>
+                        <span class="metric-value" id="connSignal">- dBm</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Gateway</span>
+                        <span class="metric-value mono" id="connGateway">-</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Congestion</span>
+                        <span class="metric-value" id="connCongestion">-</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">AP Count</span>
+                        <span class="metric-value" id="connAPCount">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column -->
+            <div class="column-right">
+                <!-- Control / Safety Card -->
+                <div class="card card-control">
+                    <h2>🚦 Control & Safety</h2>
+                    
+                    <div class="control-section">
+                        <h3>Traffic Filtering</h3>
+                        <div class="metric">
+                            <span class="metric-label">QUIC (UDP/443)</span>
+                            <span class="badge" id="ctrlQUIC">ALLOWED</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">DoH (DNS/443)</span>
+                            <span class="badge" id="ctrlDoH">BLOCKED</span>
+                        </div>
+                    </div>
+
+                    <div class="control-section">
+                        <h3>Traffic Shaping</h3>
+                        <div class="metric">
+                            <span class="metric-label">Degrade Mode</span>
+                            <span class="badge" id="ctrlDegrade">OFF</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Download</span>
+                            <span class="metric-value" id="ctrlDownMbps">- Mbps</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Upload</span>
+                            <span class="metric-value" id="ctrlUpMbps">- Mbps</span>
+                        </div>
+                    </div>
+
+                    <div class="control-section">
+                        <h3>Security Services</h3>
+                        <div class="metric">
+                            <span class="metric-label">Probe Status</span>
+                            <span class="metric-value text-wrap" id="ctrlProbe">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">DNS Stats</span>
+                            <span class="metric-value text-wrap" id="ctrlDNS">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">IDS</span>
+                            <span class="metric-value text-wrap" id="ctrlIDS">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Evidence (Full Width) -->
+        <div class="card card-evidence">
+            <h2>📜 Evidence & State</h2>
+            <div class="evidence-grid">
+                <div class="metric">
+                    <span class="metric-label">State</span>
+                    <span class="badge" id="evidState">NORMAL</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Suspicion</span>
+                    <span class="metric-value" id="evidSuspicion">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">CPU Temp</span>
+                    <span class="metric-value" id="sysCPUTemp">--°C</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">CPU Usage</span>
+                    <span class="metric-value" id="sysCPUUsage">--%</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Memory Usage</span>
+                    <span class="metric-value" id="sysMemUsage">--%</span>
+                </div>
+            </div>
+            <div class="metric">
+                <span class="metric-label">Scan Results</span>
+                <span class="metric-value text-wrap" id="evidScan">-</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">Decision</span>
+                <span class="metric-value text-wrap" id="evidDecision">-</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Bar (Fixed Bottom) -->
+    <div class="action-bar">
+        <button class="btn btn-primary" onclick="executeAction('refresh')">
+            🔄 Refresh
+        </button>
+        <button class="btn btn-secondary" onclick="executeAction('reprobe')">
+            🔍 Re-Probe
+        </button>
+        <button class="btn btn-warning" onclick="executeAction('contain')">
+            🛡️ Contain
+        </button>
+        <button class="btn btn-danger" onclick="executeAction('disconnect')">
+            ⛔ Disconnect
+        </button>
+        <button class="btn btn-info mobile-more" onclick="showMoreMenu()">
+            ⋮ More
+        </button>
+    </div>
+
+    <!-- More Menu (Mobile) -->
+    <div class="more-menu" id="moreMenu" style="display: none;">
+        <button class="btn btn-secondary" onclick="executeAction('details'); hideMoreMenu();">
+            📄 Details
+        </button>
+        <button class="btn btn-secondary" onclick="executeAction('stage_open'); hideMoreMenu();">
+            🚪 Stage Open
+        </button>
+        <button class="btn btn-secondary" onclick="hideMoreMenu()">
+            ❌ Close
+        </button>
+    </div>
+
+    <!-- Status Toast -->
+    <div class="toast" id="toast"></div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

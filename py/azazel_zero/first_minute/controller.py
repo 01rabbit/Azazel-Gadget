@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import signal
 import socket
 from urllib.parse import urlparse
@@ -28,6 +29,7 @@ from .nft import NftManager
 from .probes import ProbeOutcome, run_all
 from .state_machine import FirstMinuteStateMachine, Stage
 from .tc import TcManager
+from .web_api import make_web_server, add_history_event
 
 
 class StatusHandler(BaseHTTPRequestHandler):
@@ -80,14 +82,19 @@ class FirstMinuteController:
         self.last_decision_id: Optional[str] = None
         self.decision_logger = DecisionLogger(output_dir=Path("/opt/azazel/logs/tactics_engine"))
         
+        # Web UI 用：起動時刻を記録
+        self._start_time = time.time()
+        
         self.status_ctx: Dict[str, object] = {
             "state": "INIT",
             "suspicion": 0,
             "last_probe": None,
             "config_hash": self.config_hash,
             "last_decision_id": self.last_decision_id,
+            "start_time": self._start_time,
         }
         self.status_server: Optional[ThreadingHTTPServer] = None
+        self.web_server: Optional[object] = None
         self.processes: Dict[str, subprocess.Popen] = {}
         self.last_console = 0.0
         self.snapshot_path = cfg.runtime_dir / "ui_snapshot.json"
@@ -152,13 +159,32 @@ class FirstMinuteController:
     def start_status_api(self) -> None:
         host = self.cfg.status_api.get("host", "127.0.0.1")
         port = int(self.cfg.status_api.get("port", 8081))
+        # 従来のステータス API（既存コードとの互換性）
         self.status_server = make_status_server(host, port, self.status_ctx)
         thread = threading.Thread(target=self.status_server.serve_forever, daemon=True)
         thread.start()
+        
+        # Web UI サーバー（リモートアクセス対応）
+        web_host = self.cfg.status_api.get("web_host", "0.0.0.0")  # デフォルトは全インターフェース
+        web_port = int(self.cfg.status_api.get("web_port", port + 1))
+        self.web_server = make_web_server(web_host, web_port, self.status_ctx)
+        web_thread = threading.Thread(target=self.web_server.serve_forever, daemon=True)
+        web_thread.start()
+        
+        # ログ出力（アクセス可能なアドレスを表示）
+        self.logger.info(f"Web UI started at http://0.0.0.0:{web_port}/ (all interfaces)")
+        self.logger.info(f"  Local: http://127.0.0.1:{web_port}/")
+        self.logger.info(f"  Management: http://10.55.0.10:{web_port}/")
 
     def write_snapshot(self, summary: Dict[str, object], link_meta: Dict[str, object]) -> None:
         """Write a UI snapshot JSON for the TUI to consume."""
         link = link_meta.get("link", {}) if link_meta else {}
+        
+        # Gather system metrics
+        cpu_temp = self._get_cpu_temp()
+        cpu_usage = self._get_cpu_usage()
+        mem_usage = self._get_memory_usage()
+        
         snap = {
             "now_time": time.strftime("%H:%M:%S"),
             "snapshot_epoch": time.time(),
@@ -193,6 +219,10 @@ class FirstMinuteController:
                 "suspicion": summary.get("suspicion", 0),
                 "decay": self.state_machine.ctx.last_transition,
             },
+            # System metrics (shared with Web UI)
+            "cpu_percent": cpu_usage,
+            "mem_percent": mem_usage,
+            "temp_c": cpu_temp,
         }
         try:
             self.snapshot_path.parent.mkdir(parents=True, exist_ok=True)
@@ -397,6 +427,52 @@ class FirstMinuteController:
             return "DECEPTION"
         return "CHECKING"
 
+    def _get_cpu_temp(self) -> float:
+        """Get CPU temperature in Celsius"""
+        try:
+            with open('/sys/class/thermal/thermal_zone0/temp', 'r') as f:
+                temp_millidegrees = int(f.read().strip())
+                return round(temp_millidegrees / 1000, 1)
+        except Exception:
+            return 0.0
+
+    def _get_cpu_usage(self) -> float:
+        """Get CPU usage percentage"""
+        try:
+            result = subprocess.run(
+                ['top', '-bn1'],
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+            match = re.search(r'%Cpu\(s\):\s+([\d.]+)\s+us', result.stdout)
+            if match:
+                return round(float(match.group(1)), 1)
+        except Exception:
+            pass
+        return 0.0
+
+    def _get_memory_usage(self) -> float:
+        """Get memory usage percentage"""
+        try:
+            result = subprocess.run(
+                ['free', '-b'],
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+            lines = result.stdout.split('\n')
+            if len(lines) > 1:
+                mem_line = lines[1].split()
+                if len(mem_line) >= 3:
+                    total = int(mem_line[1])
+                    used = int(mem_line[2])
+                    percentage = round((used / total) * 100, 1)
+                    return percentage
+        except Exception:
+            pass
+        return 0.0
+
     def apply_stage(self, stage: Stage) -> None:
         if self.dry_run:
             self.logger.info("dry-run stage change -> %s", stage.value)
@@ -444,6 +520,8 @@ class FirstMinuteController:
         self.stop_dnsmasq()
         if self.status_server:
             self.status_server.shutdown()
+        if self.web_server:
+            self.web_server.shutdown()
         if not self.dry_run:
             self.tc.clear()
             self.nft.clear()
@@ -601,6 +679,13 @@ class FirstMinuteController:
             ):
                 state = Stage.DECEPTION
             if state != self.current_stage:
+                # Web UI 履歴に記録
+                add_history_event(
+                    from_stage=self.current_stage.value,
+                    to_stage=state.value,
+                    suspicion=summary.get("suspicion", 0),
+                    reason=summary.get("reason", "")
+                )
                 self.current_stage = state
                 probe_done = state != Stage.PROBE
                 self.apply_stage(state)
@@ -666,15 +751,32 @@ class FirstMinuteController:
                     self.logger.warning(f"Failed to log decision: {e}")
             
             # Tactics Engine: status_ctx を更新（config_hash は常に含める）
+            link = link_meta.get("link", {}) if link_meta else {}
             self.status_ctx.update(
                 {
-                    "state": state.value,
+                    "stage": state.value,
                     "suspicion": summary.get("suspicion", 0),
                     "reason": summary.get("reason", ""),
                     "wifi": link_meta,
                     "last_probe": self.last_probe.details if self.last_probe else None,
                     "config_hash": self.config_hash,
                     "last_decision_id": self.last_decision_id,
+                    # Web UI 用の追加データ
+                    "start_time": getattr(self, "_start_time", time.time()),
+                    "upstream_if": self.cfg.interfaces.get("upstream", "wlan0"),
+                    "downstream_if": self.cfg.interfaces.get("downstream", "usb0"),
+                    "mgmt_ip": self.cfg.interfaces.get("mgmt_ip", "10.55.0.10"),
+                    "ssid": (link or {}).get("ssid", "-"),
+                    "bssid": (link or {}).get("bssid", "-"),
+                    "signal_dbm": (link or {}).get("signal", "-"),
+                    "rtt_ms": 180 if state in (Stage.PROBE, Stage.DEGRADED) else 0,
+                    "rate_mbps": 2.0 if state == Stage.DEGRADED else 1.0 if state == Stage.PROBE else 0,
+                    "last_signals": signals,
+                    "degrade_threshold": self.cfg.state_machine.get("degrade_threshold", 20),
+                    "normal_threshold": self.cfg.state_machine.get("normal_threshold", 8),
+                    "contain_threshold": self.cfg.state_machine.get("contain_threshold", 50),
+                    "decay_per_sec": self.cfg.state_machine.get("decay_per_sec", 3),
+                    "suricata_cooldown_sec": self.cfg.state_machine.get("suricata_cooldown_sec", 30),
                 }
             )
             self.write_snapshot(summary, link_meta)

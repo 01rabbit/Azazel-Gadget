@@ -327,3 +327,73 @@ python3 epd_2in13b_V4_test.py
 ```
 
 `install_waveshare_epd.sh` installs the library under `/opt/waveshare-epd` and fetches `E-Paper_code.zip`. Add `--run-demo` to automatically execute the demo at the end.
+---
+
+## Web UI
+
+### Overview
+
+A responsive Flask-based Web UI accessible from MacBook via USB gadget network. Provides real-time security status, system metrics, and control actions.
+
+### Architecture
+
+- **Backend**: Python Flask (port 8084)
+  - Reads shared state from `/run/azazel-zero/ui_snapshot.json` (first-minute controller)
+  - Unix socket control daemon for action execution
+  - JSON API endpoints: `/api/state`, `/api/action/*`, `/health`
+
+- **Frontend**: HTML5 + CSS3 + JavaScript
+  - Responsive 2-column layout (PC) / stacked (mobile)
+  - 2-second polling interval for real-time updates
+  - Risk Assessment, Connection Info, Control & Safety panels
+  - System Health metrics (CPU temp, usage; memory usage)
+
+### Access
+
+**MacBook via USB gadget:**
+```bash
+# Network configuration
+usb0 (ラズパイ): 10.55.0.10/24
+en17 (MacBook):  10.55.0.114/24 (DHCP assigned)
+
+# Web UI
+http://10.55.0.10:8084
+```
+
+### State Information
+
+All data flows through single source: `/run/azazel-zero/ui_snapshot.json`
+
+```json
+{
+  "ssid": "JCOM_NYRY",
+  "temp_c": 30.7,
+  "cpu_percent": 2.2,
+  "mem_percent": 25.7,
+  "internal": {
+    "state_name": "NORMAL",
+    "suspicion": 0.0
+  }
+}
+```
+
+Shared between:
+- **Web UI (Flask)** - Remote access via HTTP
+- **TUI (Terminal UI)** - Local text-based interface
+- **Control Daemon** - Action execution (refresh, reprobe, contain, etc.)
+
+### Firewall Rules
+
+Port whitelisting on `usb0` (downstream):
+
+| Port | Purpose |
+|------|---------|
+| 22   | SSH management |
+| 80   | HTTP probes, redirects |
+| 443  | HTTPS/TLS probes |
+| 8081 | Status API |
+| 8084 | **Web UI** |
+
+ICMP (ping) and IGMP fully supported for network diagnostics.
+
+---

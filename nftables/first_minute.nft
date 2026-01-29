@@ -35,7 +35,7 @@ table inet azazel_fmc {
   # ★ NEW: 管理通信ポート定義（fast-path）
   set mgmt_ports {
     type inet_service
-    elements = { 22, 80, 443, 8081 }
+    elements = { 22, 80, 443, 8081, 8082, 8083, 8084 }
   }
 
   chain stage_switch {
@@ -48,16 +48,26 @@ table inet azazel_fmc {
     iifname "lo" accept
     ct state established,related accept
     
-    # ★ REDESIGN: 管理通信 fast-path（両インタフェース対応）
-    # SSH/VSCode/HTTP/StatusAPI は source/iface を問わず許可
-    ip daddr $MGMT_IP tcp dport @mgmt_ports accept comment "management fast-path (all iface)"
+    # ★ USB ガジェット接続対応
+    # ICMP (ping) と IGMP を許可（MacBook からの疎通確認用）
+    icmp type echo-request accept comment "icmp echo-request"
+    icmp type echo-reply accept comment "icmp echo-reply"
+    ip protocol igmp accept comment "igmp"
     
-    # downstream (usb0) 専用の最小限トラフィック許可
-    iifname $DOWNSTREAM udp dport { $DNS_PORT, 67, 68 } accept comment "downstream DHCP/DNS"
+    # ★ 本運用向けフィルタリング
+    # Phase 1: usb0 (downstream) トラフィック許可
+    # - 管理通信: SSH(22), HTTP(80), HTTPS(443), StatusAPI(8081), WebUI(8084)
+    # - ネットワーク: DHCP(67/68), DNS(53)
+    iifname $DOWNSTREAM tcp dport { 22, 80, 443, 8081, 8084 } accept comment "usb0 management"
+    iifname $DOWNSTREAM udp dport { 53, 67, 68 } accept comment "usb0 DHCP/DNS"
     
-    # ★ downstream からの他ポートはここで遮断
-    # upstream (wlan0) からのトラフィックは影響なし
-    iifname $DOWNSTREAM counter drop comment "downstream drop (other ports)"
+    # Phase 2: wlan0 (upstream) トラフィック拒否
+    # 本運用では wlan0 からのアクセスは一切受け付けない
+    iifname $UPSTREAM drop comment "wlan0 blocked (production mode)"
+    
+    # Phase 3: その他の入力トラフィック（管理目的で保持）
+    # loopback, established, ICMP は既に処理済み
+    counter drop comment "default drop"
   }
 
   chain forward {
