@@ -48,19 +48,20 @@ table inet azazel_fmc {
     iifname "lo" accept
     ct state established,related accept
     
-    # ★ Web UI (port 8084) は全インタフェース、全 IP で許可（リモートアクセス対応）
-    tcp dport 8084 accept comment "web ui (remote access)"
+    # ★ 本運用向けフィルタリング
+    # Phase 1: usb0 (downstream) トラフィック許可
+    # - 管理通信: SSH(22), HTTP(80), HTTPS(443), StatusAPI(8081), WebUI(8084)
+    # - ネットワーク: DHCP(67/68), DNS(53)
+    iifname $DOWNSTREAM tcp dport { 22, 80, 443, 8081, 8084 } accept comment "usb0 management"
+    iifname $DOWNSTREAM udp dport { 53, 67, 68 } accept comment "usb0 DHCP/DNS"
     
-    # ★ REDESIGN: 管理通信 fast-path（両インタフェース対応）
-    # SSH/VSCode/HTTP/StatusAPI は source/iface を問わず許可
-    ip daddr $MGMT_IP tcp dport @mgmt_ports accept comment "management fast-path (all iface)"
+    # Phase 2: wlan0 (upstream) トラフィック拒否
+    # 本運用では wlan0 からのアクセスは一切受け付けない
+    iifname $UPSTREAM drop comment "wlan0 blocked (production mode)"
     
-    # downstream (usb0) 専用の最小限トラフィック許可
-    iifname $DOWNSTREAM udp dport { $DNS_PORT, 67, 68 } accept comment "downstream DHCP/DNS"
-    
-    # ★ downstream からの他ポートはここで遮断
-    # upstream (wlan0) からのトラフィックは影響なし
-    iifname $DOWNSTREAM counter drop comment "downstream drop (other ports)"
+    # Phase 3: その他の入力トラフィック（管理目的で保持）
+    # loopback, established は既に処理済みなので、ここは fallback
+    counter drop comment "default drop"
   }
 
   chain forward {
