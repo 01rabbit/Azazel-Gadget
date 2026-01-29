@@ -78,6 +78,49 @@ notify:
 sudo systemctl restart azazel-first-minute
 ```
 
+## ユーザが知るべき設定
+
+### ntfy サーバ設定（/etc/ntfy/server.yml）
+- `listen-http: ":8081"`（USBローカルのみ）
+- `web-root: /`（WebUI を有効化。`disable` で無効）
+- `auth-default-access: read-only`
+  - **購読（subscribe）は認証なしで可**
+  - **送信（publish）は Bearer トークン必須**
+
+### Azazel 側設定（/etc/azazel-zero/first_minute.yaml）
+- `notify.enabled: true` で通知有効化
+- `notify.ntfy.base_url` は **http://10.55.0.10:8081** 固定
+- `notify.ntfy.token_file` は **/etc/azazel/ntfy.token**
+- `notify.ntfy.topic_alert` / `topic_info` を購読先に使用
+- `notify.ntfy.cooldown_sec` で重複抑制（既定 30s）
+- `notify.thresholds.dns_mismatch_alert` を閾値として使用（既定 3）
+
+### アプリ側の認証
+- **購読のみ**ならユーザ/パスワード不要（read-only）
+- **送信**には Bearer トークンが必要
+- WebUI にログインしたい場合のみユーザを作成
+  ```bash
+  sudo ntfy user add --role=admin ntfy_admin
+  sudo ntfy user change-password ntfy_admin
+  ```
+
+## 発動条件（通知を出すタイミング）
+
+### 1) 状態遷移
+- `state != current_stage` になった瞬間に通知
+- **DEGRADED / CONTAIN へ遷移** → ALERT（priority=4）
+- **それ以外の遷移** → INFO（priority=2）
+
+### 2) Suricata アラート
+- `suricata_alert` 検知時に ALERT（priority=5）
+- **クールダウン 30秒**（重複通知抑制）
+
+### 3) DNS 不一致
+- `dns_mismatch >= notify.thresholds.dns_mismatch_alert` で ALERT
+
+### 通知されないケース
+- `force-state` コマンドは controller を通らないため**通知しない**
+
 ## 動作確認
 
 ### テスト送信 (curl)
@@ -107,10 +150,9 @@ curl -H "Authorization: Bearer ${NTFY_TOKEN}" \
 ## 通知イベント
 
 ### 状態遷移通知
-- **INIT** → **PROBE**: `INFO_TOPIC` (priority=2)
-- **PROBE** → **DEGRADED**: `ALERT_TOPIC` (priority=4)
-- **DEGRADED** → **CONTAIN**: `ALERT_TOPIC` (priority=5)
-- **CONTAIN** → **NORMAL**: `INFO_TOPIC` (priority=2)
+- 遷移発生時のみ通知
+- **DEGRADED / CONTAIN** は alert（priority=4）
+- それ以外は info（priority=2）
 
 ### シグナル通知
 - **Suricata アラート**: `ALERT_TOPIC` (priority=5, tags: suricata, ids, 重大度)
@@ -126,13 +168,12 @@ curl -H "Authorization: Bearer ${NTFY_TOKEN}" \
 |--------|---------|-----|------|
 | 8081 | ntfy | usb0 | プッシュ通知 |
 | 8082 | Status API | 127.0.0.1 | 内部 JSON API |
-| 8083 | WebUI (旧) | 0.0.0.0 | ダッシュボード |
 | 8084 | WebUI (新) | 0.0.0.0 | ダッシュボード |
 
 ### nftables ルール
 ```
 input chain:
-  iifname usb0 tcp dport { 22, 80, 443, 8081, 8084 } accept
+  iifname usb0 tcp dport { 22, 80, 443, 8081, 8082, 8084 } accept
 
 stage_contain:
   ip daddr 10.55.0.10 tcp dport @mgmt_ports accept
@@ -256,9 +297,9 @@ python3 test_ntfy_notifier.py
 3. **重複抑制**: 30 秒クールダウンでスパム防止。イベントキー単位で管理。
 4. **エラー耐性**: 通知送信失敗時、control loop は停止しない。ログに記録のみ。
 5. **セキュリティ**:
-   - auth-default-access: deny-all（トピックは明示的に read/write 許可）
-   - HTTPS 未対応（ローカル限定のため HTTP で十分）
-   - トークンは環境変数・ログに出力されない
+  - auth-default-access: read-only（購読は許可、送信はトークン必須）
+  - HTTPS 未対応（ローカル限定のため HTTP で十分）
+  - トークンは環境変数・ログに出力されない
 
 ## 今後の拡張
 
