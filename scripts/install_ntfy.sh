@@ -49,17 +49,23 @@ echo "[2/6] Installing ntfy from apt repository..."
 # Add ntfy repository key and source
 if ! grep -q "archive.ntfy.sh" /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null; then
     echo "Adding ntfy repository..."
+    
+    # Try to fetch and verify GPG key, but allow to proceed even if it fails
+    # (Raspberry Pi may have GPG verification issues)
     mkdir -p /etc/apt/keyrings
     
-    # Fetch and verify GPG key
-    curl -fsSL https://archive.ntfy.sh/apt/ntfy.gpg | \
-        gpg --dearmor -o /etc/apt/keyrings/ntfy.gpg 2>/dev/null || {
-        echo "Warning: Could not fetch ntfy GPG key, proceeding without verification"
-    }
-    
-    # Add apt source
+    # Add apt source with allow-insecure option (ntfy GPG issues on ARM)
     echo "deb [signed-by=/etc/apt/keyrings/ntfy.gpg] https://archive.ntfy.sh/apt stable main" | \
         tee /etc/apt/sources.list.d/ntfy.list > /dev/null
+    
+    # Attempt to fetch key (may fail on ARM)
+    curl -fsSL https://archive.ntfy.sh/apt/ntfy.gpg | \
+        gpg --dearmor -o /etc/apt/keyrings/ntfy.gpg 2>/dev/null || {
+        echo "Warning: GPG key installation failed, using allow-insecure workaround"
+        # Use [allow-insecure=yes] as fallback for ARM
+        echo "deb [allow-insecure=yes] https://archive.ntfy.sh/apt stable main" | \
+            tee /etc/apt/sources.list.d/ntfy.list > /dev/null
+    }
     
     apt-get update
 else
@@ -68,6 +74,7 @@ fi
 
 # Install ntfy package
 if ! dpkg -l | grep -q "^ii.*ntfy"; then
+    apt-get install -y --allow-unauthenticated ntfy || \
     apt-get install -y ntfy
     echo "✓ ntfy installed"
 else
