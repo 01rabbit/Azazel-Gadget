@@ -1,0 +1,19 @@
+[Unit]
+Description=Azazel-Zero State Generator (Legacy API → state.json bridge)
+After=network-online.target azazel-first-minute.service
+Wants=network-online.target
+ConditionPathExists=/home/azazel/Azazel-Zero/py/azazel_control/state_generator.py
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/azazel/Azazel-Zero
+ExecStart=/usr/bin/python3 /home/azazel/Azazel-Zero/py/azazel_control/state_generator.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=azazel-state-gen
+
+[Install]
+WantedBy=multi-user.target
