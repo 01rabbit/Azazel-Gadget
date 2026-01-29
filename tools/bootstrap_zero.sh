@@ -10,6 +10,7 @@ WITH_EPD=1
 ENABLE_SERVICES=1
 RUN_SURICATA_UPDATE=1
 DISABLE_USB_AUTOSUSPEND=1
+WITH_WEBUI=0  # Web UI is optional, use --with-webui to enable
 LOG=${LOG:-/var/log/azazel-bootstrap.log}
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 AZAZEL_ROOT="${AZAZEL_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
@@ -106,11 +107,24 @@ suricata_minimal(){
   fi
 }
 
+install_webui(){
+  if [ "$WITH_WEBUI" -eq 1 ]; then
+    log "Installing Web UI components"
+    cmd "bash $AZAZEL_ROOT/bin/install_webui.sh"
+  else
+    log "Skipping Web UI installation (use --with-webui to enable)"
+  fi
+}
+
 enable_services(){
   if [ "$ENABLE_SERVICES" -eq 1 ]; then
     log "Enabling services"
     systemctl enable --now azazel-epd.service suri-epaper.service azazel-console.service || true
     systemctl enable --now opencanary.service || true
+    if [ "$WITH_WEBUI" -eq 1 ]; then
+      systemctl enable --now azazel-control-daemon.service || true
+      log "Web UI control daemon enabled"
+    fi
   else
     log "Skipping systemctl enable --now"
   fi
@@ -125,31 +139,46 @@ smoke_test(){
 
 usage(){
   cat <<USAGE
-Usage: sudo tools/bootstrap_zero.sh [--no-epd] [--no-enable] [--no-suricata] [--no-usb-autosuspend] [--dry-run]
-  --no-epd        Skip E-Paper optional deps
-  --no-enable     Do not enable/start services
-  --no-suricata   Skip minimal Suricata rules
-  --no-usb-autosuspend  Keep USB autosuspend enabled (do not edit cmdline.txt)
-  --dry-run       Show steps only
+Usage: sudo tools/bootstrap_zero.sh [OPTIONS]
+
+Options:
+  --no-epd               Skip E-Paper optional deps
+  --no-enable            Do not enable/start services
+  --no-suricata          Skip minimal Suricata rules
+  --no-usb-autosuspend   Keep USB autosuspend enabled (do not edit cmdline.txt)
+  --with-webui           Install Web UI components (Flask, control daemon)
+  --dry-run              Show steps only
+  -h, --help             Show this help message
+
+Web UI (--with-webui):
+  - Flask web server on port 8084
+  - Remote monitoring dashboard
+  - Control daemon for actions
+  - USB gadget access: http://10.55.0.10:8084
 USAGE
 }
 
 main(){
-  require_root
-  mkdir -p "$(dirname "$LOG")" && : >"$LOG"
-
+  # Parse arguments first (before root check for --help)
   local DRY=0
   for a in "$@"; do
     case "$a" in
+      -h|--help)
+        usage
+        exit 0
+        ;;
       --no-epd) WITH_EPD=0 ;;
       --no-enable) ENABLE_SERVICES=0 ;;
       --no-suricata) RUN_SURICATA_UPDATE=0 ;;
       --no-usb-autosuspend) DISABLE_USB_AUTOSUSPEND=0 ;;
+      --with-webui) WITH_WEBUI=1 ;;
       --dry-run) DRY=1 ;;
-      -h|--help) usage; exit 0 ;;
-      *) fail "Unknown arg: $a" ;;
+      *) echo "[x] Unknown arg: $a"; exit 1 ;;
     esac
   done
+
+  require_root
+  mkdir -p "$(dirname "$LOG")" && : >"$LOG"
 
   log "Bootstrap start (AZAZEL_ROOT=$AZAZEL_ROOT)"
   check_spi
@@ -161,13 +190,14 @@ main(){
   fi
 
   if [ "$DRY" -eq 1 ]; then
-    echo "Would run: disable_usb_autosuspend -> install_deps -> install_systemd -> suricata_minimal -> enable_services -> smoke_test"
+    echo "Would run: disable_usb_autosuspend -> install_deps -> install_systemd -> suricata_minimal -> install_webui (if --with-webui) -> enable_services -> smoke_test"
     exit 0
   fi
 
   install_deps
   install_systemd
   suricata_minimal
+  install_webui
   enable_services
   smoke_test
   log "Bootstrap complete"
