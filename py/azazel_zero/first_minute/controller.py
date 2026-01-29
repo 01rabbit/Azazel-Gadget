@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import signal
 import socket
 from urllib.parse import urlparse
@@ -178,6 +179,12 @@ class FirstMinuteController:
     def write_snapshot(self, summary: Dict[str, object], link_meta: Dict[str, object]) -> None:
         """Write a UI snapshot JSON for the TUI to consume."""
         link = link_meta.get("link", {}) if link_meta else {}
+        
+        # Gather system metrics
+        cpu_temp = self._get_cpu_temp()
+        cpu_usage = self._get_cpu_usage()
+        mem_usage = self._get_memory_usage()
+        
         snap = {
             "now_time": time.strftime("%H:%M:%S"),
             "snapshot_epoch": time.time(),
@@ -212,6 +219,10 @@ class FirstMinuteController:
                 "suspicion": summary.get("suspicion", 0),
                 "decay": self.state_machine.ctx.last_transition,
             },
+            # System metrics (shared with Web UI)
+            "cpu_percent": cpu_usage,
+            "mem_percent": mem_usage,
+            "temp_c": cpu_temp,
         }
         try:
             self.snapshot_path.parent.mkdir(parents=True, exist_ok=True)
@@ -415,6 +426,52 @@ class FirstMinuteController:
         if stage == Stage.DECEPTION:
             return "DECEPTION"
         return "CHECKING"
+
+    def _get_cpu_temp(self) -> float:
+        """Get CPU temperature in Celsius"""
+        try:
+            with open('/sys/class/thermal/thermal_zone0/temp', 'r') as f:
+                temp_millidegrees = int(f.read().strip())
+                return round(temp_millidegrees / 1000, 1)
+        except Exception:
+            return 0.0
+
+    def _get_cpu_usage(self) -> float:
+        """Get CPU usage percentage"""
+        try:
+            result = subprocess.run(
+                ['top', '-bn1'],
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+            match = re.search(r'%Cpu\(s\):\s+([\d.]+)\s+us', result.stdout)
+            if match:
+                return round(float(match.group(1)), 1)
+        except Exception:
+            pass
+        return 0.0
+
+    def _get_memory_usage(self) -> float:
+        """Get memory usage percentage"""
+        try:
+            result = subprocess.run(
+                ['free', '-b'],
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+            lines = result.stdout.split('\n')
+            if len(lines) > 1:
+                mem_line = lines[1].split()
+                if len(mem_line) >= 3:
+                    total = int(mem_line[1])
+                    used = int(mem_line[2])
+                    percentage = round((used / total) * 100, 1)
+                    return percentage
+        except Exception:
+            pass
+        return 0.0
 
     def apply_stage(self, stage: Stage) -> None:
         if self.dry_run:

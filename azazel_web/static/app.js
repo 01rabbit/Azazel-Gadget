@@ -31,25 +31,22 @@ async function fetchState() {
 
 // Update UI with state data
 function updateUI(state) {
-    // System metrics (from new API format)
-    const system = state.system || {};
-    const wifiInfo = system.wifi || {};
-    const cpuInfo = system.cpu || {};
-    const memInfo = system.memory || {};
+    // Map ui_snapshot.json fields to UI elements
     
     // Header
-    updateElement('headerSSID', wifiInfo.ssid || '-');
-    updateElement('headerClock', getCurrentTime());
-    updateElement('headerTemp', `${cpuInfo.temp_c || '--'}°C`);
-    updateElement('headerCPU', `${cpuInfo.usage_percent || '--'}%`);
+    updateElement('headerSSID', state.ssid || '-');
+    updateElement('headerClock', state.now_time || '--:--:--');
+    updateElement('headerTemp', `${state.temp_c || '--'}°C`);
+    updateElement('headerCPU', `${state.cpu_percent || '--'}%`);
     
-    // Risk Assessment (from state machine)
-    const suspicion = state.suspicion || 0;
-    const stateVal = (state.state || 'INIT').toUpperCase();
+    // Risk Assessment (based on internal state)
+    const internal = state.internal || {};
+    const suspicion = internal.suspicion || 0;
+    const stateVal = (internal.state_name || 'NORMAL').toUpperCase();
     
     updateElement('riskScore', suspicion);
-    updateElement('riskStatusValue', stateVal);
-    updateElement('riskReason', state.reason || '-');
+    updateElement('riskStatusValue', mapState(stateVal));
+    updateElement('riskReason', (state.reasons || [])[0] || state.recommendation || '-');
     
     // Threat level based on suspicion
     let threatLevel = 'LOW';
@@ -66,39 +63,44 @@ function updateUI(state) {
     
     scoreEl.className = `score-value ${statusClass}`;
     statusEl.className = `risk-status ${statusClass}`;
-    statusEl.textContent = stateVal;
+    statusEl.textContent = mapState(stateVal);
     cardEl.className = `card card-risk ${statusClass}`;
     
-    // Connection Info (WiFi)
-    updateElement('connBSSID', wifiInfo.ssid ? wifiInfo.ssid : 'Not connected');
-    updateElement('connGateway', wifiInfo.ip || '-');
+    // Connection Info
+    updateElement('connBSSID', state.ssid || '-');
+    updateElement('connGateway', state.gateway_ip || '-');
+    updateElement('connChannel', state.channel || '-');
+    updateElement('connSignal', `${state.signal_dbm || '-'} dBm`);
     
     // Control & Safety
-    updateBadge('ctrlDegrade', stateVal === 'DEGRADED' ? 'ON' : 'OFF');
+    const degrade = state.degrade || {};
+    updateBadge('ctrlDegrade', degrade.on ? 'ON' : 'OFF');
+    updateBadge('ctrlQUIC', state.quic || 'ALLOWED');
+    updateBadge('ctrlDoH', state.doh || 'BLOCKED');
+    updateElement('ctrlDownMbps', `${degrade.rate_mbps || 0} Mbps`);
+    updateElement('ctrlUpMbps', `-`);
     
     // Evidence
-    updateBadge('evidState', stateVal);
+    updateBadge('evidState', mapState(stateVal));
     updateElement('evidSuspicion', suspicion);
     
-    // System Health
-    if (!document.getElementById('sysHealth')) {
-        addSystemHealthCard(system);
-    } else {
-        updateElement('sysCPUTemp', `${cpuInfo.temp_c || '--'}°C`);
-        updateElement('sysCPUUsage', `${cpuInfo.usage_percent || '--'}%`);
-        updateElement('sysMemUsage', `${memInfo.usage_percent || '--'}%`);
-    }
+    // System Health Card
+    updateElement('sysCPUTemp', `${state.temp_c || '--'}°C`);
+    updateElement('sysCPUUsage', `${state.cpu_percent || '--'}%`);
+    updateElement('sysMemUsage', `${state.mem_percent || '--'}%`);
 }
 
-// Get current time string
-function getCurrentTime() {
-    const now = new Date();
-    return now.toLocaleTimeString('en-US', { 
-        hour12: false,
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-    });
+// Map state names between different systems
+function mapState(state) {
+    const map = {
+        'NORMAL': 'SAFE',
+        'PROBE': 'CHECKING',
+        'DEGRADED': 'LIMITED',
+        'CONTAIN': 'CONTAINED',
+        'DECEPTION': 'DECEPTION',
+        'INIT': 'CHECKING'
+    };
+    return map[state] || state;
 }
 
 // Get CSS class for status
@@ -110,36 +112,6 @@ function getStatusClass(status) {
     if (lower === 'contain') return 'contained';
     if (lower === 'deception') return 'lockdown';
     return 'normal';
-}
-
-// Add system health card if not exists
-function addSystemHealthCard(system) {
-    const evidCard = document.querySelector('.card-evidence');
-    if (!evidCard) return;
-    
-    const cpuInfo = system.cpu || {};
-    const memInfo = system.memory || {};
-    
-    const html = `
-        <div class="metric" id="sysHealth">
-            <span class="metric-label">CPU Temp</span>
-            <span class="metric-value" id="sysCPUTemp">${cpuInfo.temp_c || '--'}°C</span>
-        </div>
-        <div class="metric">
-            <span class="metric-label">CPU Usage</span>
-            <span class="metric-value" id="sysCPUUsage">${cpuInfo.usage_percent || '--'}%</span>
-        </div>
-        <div class="metric">
-            <span class="metric-label">Memory Usage</span>
-            <span class="metric-value" id="sysMemUsage">${memInfo.usage_percent || '--'}%</span>
-        </div>
-    `;
-    
-    // Insert after state metric
-    const stateMetric = evidCard.querySelector('.evidence-grid');
-    if (stateMetric) {
-        stateMetric.insertAdjacentHTML('beforeend', html);
-    }
 }
 
 // Helper: Update element text

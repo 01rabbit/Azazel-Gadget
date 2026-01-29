@@ -18,7 +18,8 @@ from typing import Dict, Any, Optional
 app = Flask(__name__)
 
 # Configuration
-STATE_PATH = Path("/run/azazel/state.json")
+STATE_PATH = Path("/run/azazel-zero/ui_snapshot.json")  # Share TUI snapshot
+FALLBACK_STATE_PATH = Path(".azazel-zero/run/ui_snapshot.json")  # Fallback for testing
 CONTROL_SOCKET = Path("/run/azazel/control.sock")
 TOKEN_FILE = Path.home() / ".azazel-zero" / "web_token.txt"
 BIND_HOST = os.environ.get("AZAZEL_WEB_HOST", "0.0.0.0")
@@ -46,16 +47,22 @@ def verify_token() -> bool:
 
 
 def read_state() -> Dict[str, Any]:
-    """Read state.json from filesystem"""
+    """Read state.json from filesystem (shared with TUI)"""
     try:
-        if not STATE_PATH.exists():
+        # Try primary path (TUI snapshot)
+        path = STATE_PATH
+        if not path.exists():
+            # Try fallback path (for dev/testing)
+            path = FALLBACK_STATE_PATH
+        
+        if not path.exists():
             return {
                 "ok": False,
-                "error": "state.json not found",
+                "error": "ui_snapshot.json not found",
                 "ts": time.strftime("%Y-%m-%dT%H:%M:%S")
             }
         
-        data = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
         data["ok"] = True
         return data
     except Exception as e:
