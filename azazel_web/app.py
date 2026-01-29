@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
-Azazel-Gadget Web UI - Flask Application
-非特権プロセスとして動作し、state.json を読み取り専用で提供。
-アクションは Unix socket 経由で Control Daemon へ委譲。
-AI Coding Spec v1 準拠
+Azazel-Zero Web UI - Flask Application
+
+Provides HTTP API for remote monitoring and control via USB gadget network.
+- Reads: /run/azazel-zero/ui_snapshot.json (shared with TUI)
+- Executes: Actions via Unix socket to control daemon
+- Serves: HTML dashboard + JSON API endpoints
 """
 
 from flask import Flask, jsonify, request, render_template, send_from_directory
