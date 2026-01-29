@@ -31,58 +31,115 @@ async function fetchState() {
 
 // Update UI with state data
 function updateUI(state) {
-    // Header
-    updateElement('headerSSID', state.header?.ssid || '-');
-    updateElement('headerClock', state.header?.clock || '--:--:--');
-    updateElement('headerTemp', `${state.header?.temp_c || '--'}°C`);
-    updateElement('headerCPU', `${state.header?.cpu_pct || '--'}%`);
+    // System metrics (from new API format)
+    const system = state.system || {};
+    const wifiInfo = system.wifi || {};
+    const cpuInfo = system.cpu || {};
+    const memInfo = system.memory || {};
     
-    // Risk
-    const risk = state.risk || {};
-    updateElement('riskScore', risk.score || 0);
-    updateElement('riskStatusValue', risk.status || 'SAFE');
-    updateElement('riskThreatLevel', risk.threat_level || 'LOW');
-    updateElement('riskRecommendation', risk.recommendation || '-');
-    updateElement('riskReason', risk.reason || '-');
+    // Header
+    updateElement('headerSSID', wifiInfo.ssid || '-');
+    updateElement('headerClock', getCurrentTime());
+    updateElement('headerTemp', `${cpuInfo.temp_c || '--'}°C`);
+    updateElement('headerCPU', `${cpuInfo.usage_percent || '--'}%`);
+    
+    // Risk Assessment (from state machine)
+    const suspicion = state.suspicion || 0;
+    const stateVal = (state.state || 'INIT').toUpperCase();
+    
+    updateElement('riskScore', suspicion);
+    updateElement('riskStatusValue', stateVal);
+    updateElement('riskReason', state.reason || '-');
+    
+    // Threat level based on suspicion
+    let threatLevel = 'LOW';
+    if (suspicion >= 50) threatLevel = 'CRITICAL';
+    else if (suspicion >= 30) threatLevel = 'HIGH';
+    else if (suspicion >= 15) threatLevel = 'MEDIUM';
+    updateElement('riskThreatLevel', threatLevel);
     
     // Update risk score color
     const scoreEl = document.getElementById('riskScore');
     const statusEl = document.getElementById('riskStatus');
     const cardEl = document.getElementById('cardRisk');
-    const status = (risk.status || 'SAFE').toLowerCase();
+    const statusClass = getStatusClass(stateVal);
     
-    scoreEl.className = `score-value ${status}`;
-    statusEl.className = `risk-status ${status}`;
-    statusEl.textContent = risk.status || 'SAFE';
-    cardEl.className = `card card-risk ${status}`;
+    scoreEl.className = `score-value ${statusClass}`;
+    statusEl.className = `risk-status ${statusClass}`;
+    statusEl.textContent = stateVal;
+    cardEl.className = `card card-risk ${statusClass}`;
     
-    // Connection
-    const conn = state.connection || {};
-    updateElement('connBSSID', conn.bssid || '-');
-    updateElement('connChannel', conn.channel || '-');
-    updateElement('connSignal', `${conn.signal_dbm || '-'} dBm`);
-    updateElement('connGateway', conn.gateway_ip || '-');
-    updateElement('connCongestion', conn.congestion || '-');
-    updateElement('connAPCount', conn.ap_count || '-');
+    // Connection Info (WiFi)
+    updateElement('connBSSID', wifiInfo.ssid ? wifiInfo.ssid : 'Not connected');
+    updateElement('connGateway', wifiInfo.ip || '-');
     
-    // Control
-    const ctrl = state.control || {};
-    updateBadge('ctrlQUIC', ctrl.quic_443 || 'ALLOWED');
-    updateBadge('ctrlDoH', ctrl.doh_443 || 'BLOCKED');
-    updateBadge('ctrlDegrade', ctrl.degrade || 'OFF');
-    updateElement('ctrlDownMbps', `${ctrl.traffic_down_mbps || '-'} Mbps`);
-    updateElement('ctrlUpMbps', `${ctrl.traffic_up_mbps || '-'} Mbps`);
-    updateElement('ctrlProbe', ctrl.probe || '-');
-    updateElement('ctrlDNS', ctrl.stats_dns || '-');
-    updateElement('ctrlIDS', ctrl.ids || '-');
+    // Control & Safety
+    updateBadge('ctrlDegrade', stateVal === 'DEGRADED' ? 'ON' : 'OFF');
     
     // Evidence
-    const evid = state.evidence || {};
-    updateBadge('evidState', evid.state || 'NORMAL');
-    updateElement('evidSuspicion', evid.suspicion || 0);
-    updateElement('evidWindow', `${evid.window_sec || '-'} sec`);
-    updateElement('evidScan', evid.scan || '-');
-    updateElement('evidDecision', evid.decision || '-');
+    updateBadge('evidState', stateVal);
+    updateElement('evidSuspicion', suspicion);
+    
+    // System Health
+    if (!document.getElementById('sysHealth')) {
+        addSystemHealthCard(system);
+    } else {
+        updateElement('sysCPUTemp', `${cpuInfo.temp_c || '--'}°C`);
+        updateElement('sysCPUUsage', `${cpuInfo.usage_percent || '--'}%`);
+        updateElement('sysMemUsage', `${memInfo.usage_percent || '--'}%`);
+    }
+}
+
+// Get current time string
+function getCurrentTime() {
+    const now = new Date();
+    return now.toLocaleTimeString('en-US', { 
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+}
+
+// Get CSS class for status
+function getStatusClass(status) {
+    const lower = (status || '').toLowerCase();
+    if (lower === 'normal') return 'normal';
+    if (lower === 'probe') return 'degraded';
+    if (lower === 'degraded') return 'degraded';
+    if (lower === 'contain') return 'contained';
+    if (lower === 'deception') return 'lockdown';
+    return 'normal';
+}
+
+// Add system health card if not exists
+function addSystemHealthCard(system) {
+    const evidCard = document.querySelector('.card-evidence');
+    if (!evidCard) return;
+    
+    const cpuInfo = system.cpu || {};
+    const memInfo = system.memory || {};
+    
+    const html = `
+        <div class="metric" id="sysHealth">
+            <span class="metric-label">CPU Temp</span>
+            <span class="metric-value" id="sysCPUTemp">${cpuInfo.temp_c || '--'}°C</span>
+        </div>
+        <div class="metric">
+            <span class="metric-label">CPU Usage</span>
+            <span class="metric-value" id="sysCPUUsage">${cpuInfo.usage_percent || '--'}%</span>
+        </div>
+        <div class="metric">
+            <span class="metric-label">Memory Usage</span>
+            <span class="metric-value" id="sysMemUsage">${memInfo.usage_percent || '--'}%</span>
+        </div>
+    `;
+    
+    // Insert after state metric
+    const stateMetric = evidCard.querySelector('.evidence-grid');
+    if (stateMetric) {
+        stateMetric.insertAdjacentHTML('beforeend', html);
+    }
 }
 
 // Helper: Update element text
