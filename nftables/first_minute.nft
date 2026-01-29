@@ -56,9 +56,9 @@ table inet azazel_fmc {
     
     # ★ 本運用向けフィルタリング
     # Phase 1: usb0 (downstream) トラフィック許可
-    # - 管理通信: SSH(22), HTTP(80), HTTPS(443), StatusAPI(8081), WebUI(8084)
+    # - 管理通信: SSH(22), HTTP(80), HTTPS(443), StatusAPI(8082), WebUI(8083), ntfy(8081), WebUI旧(8084)
     # - ネットワーク: DHCP(67/68), DNS(53)
-    iifname $DOWNSTREAM tcp dport { 22, 80, 443, 8081, 8084 } accept comment "usb0 management"
+    iifname $DOWNSTREAM tcp dport @mgmt_ports accept comment "usb0 management"
     iifname $DOWNSTREAM udp dport { 53, 67, 68 } accept comment "usb0 DHCP/DNS"
     
     # Phase 2: wlan0 (upstream) トラフィック拒否
