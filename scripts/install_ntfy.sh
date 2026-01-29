@@ -101,7 +101,7 @@ auth-default-access: deny-all
 
 # Security
 behind-proxy: false
-web-root: disable
+web-root: public
 
 # CORS (optional, for client apps)
 cors-origin: "*"
