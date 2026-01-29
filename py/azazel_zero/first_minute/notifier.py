@@ -150,8 +150,9 @@ class NtfyNotifier:
         url = f"{self.base_url}/{topic}"
         headers = {
             "Authorization": f"Bearer {self.token}",
-            "Title": title,
+            "Title": title.encode("utf-8").decode("latin-1") if isinstance(title, str) else title,
             "Priority": str(priority),
+            "Content-Type": "text/plain; charset=utf-8",
         }
         
         if tags:
