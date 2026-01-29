@@ -182,4 +182,134 @@ ip -s link show usb0
    ```
    **期待される出力：** `true`
 
+---
+
+## HTTP 接続問題の診断（2026/01/29 新規）
+
+### 症状
+- ✅ Ping 成功（ICMP エコー正常）
+- ❌ HTTP (8084) 接続タイムアウト
+- ✅ ラズパイ側 Flask 稼働（0.0.0.0:8084）
+- ✅ ラズパイ側 nftables ルール正常
+
+### 原因推定
+MacBook 側の en17 インターフェースか、Mac のファイアウォール設定に問題
+
+### MacBook での詳細確認
+
+**【最優先】** Mac ファイアウォール確認：
+```bash
+# ファイアウォール状態
+sudo pfctl -s state | head -20
+
+# ファイアウォール有効/無効確認
+networksetup -getfirewallenabled
+
+# 必要に応じて一時的に無効化（テスト用）
+sudo defaults write /Library/Preferences/com.apple.alf globalstate -int 0
+sudo killall -HUP socketfilterfw
+```
+
+**en17 インターフェースの詳細確認：**
+```bash
+# インターフェース詳細
+ifconfig en17
+
+# 期待される出力：
+#   inet 10.55.0.xxx netmask 0xffffff00 broadcast 10.55.0.255
+```
+
+**ルーティングテーブル：**
+```bash
+netstat -rn | grep "10.55"
+
+# 期待される出力：
+#   10.55.0.0/24        link#39            UCS                  en17
+```
+
+**ARP テーブル（ラズパイ MAC確認）：**
+```bash
+arp -a | grep 10.55
+
+# 期待される出力：
+#   10.55.0.10 (10.55.0.10) at ce:7c:9:24:48:cb on en17
+```
+
+---
+
+## HTTP 接続がタイムアウトする場合の対応
+
+### Step 1: Tcpdump でトラフィック確認
+
+**MacBook ターミナル1（監視）:**
+```bash
+sudo tcpdump -i en17 "host 10.55.0.10 and port 8084" -vv
+```
+
+**MacBook ターミナル2（テスト）:**
+```bash
+curl -v http://10.55.0.10:8084/health
+```
+
+**期待される出力:**
+```
+10.55.0.114.xxxxx > 10.55.0.10.8084: Flags [S], seq xxx
+10.55.0.10.8084 > 10.55.0.114.xxxxx: Flags [S.], seq yyy
+```
+
+### Step 2: ファイアウォール無効化テスト
+
+```bash
+# 一時的に無効化（セキュリティ注意）
+sudo /bin/launchctl unload /Library/LaunchDaemons/com.apple.alf.agent.plist 2>/dev/null
+
+# テスト実行
+ping -c 3 10.55.0.10
+curl http://10.55.0.10:8084/health
+
+# 再度有効化
+sudo /bin/launchctl load /Library/LaunchDaemons/com.apple.alf.agent.plist 2>/dev/null
+```
+
+### Step 3: ネットワーク設定リセット
+
+```bash
+# 古い設定を削除
+sudo networksetup -setv4off en17
+sleep 3
+
+# 再度有効化
+sudo networksetup -setv4on en17 dhcp
+sleep 5
+
+# 確認
+ifconfig en17
+netstat -rn | grep "10.55"
+```
+
+---
+
+## ラズパイ側の確認コマンド
+
+Flask と nftables の完全な状態確認：
+
+```bash
+# Flask リスニング確認
+ss -tlnp | grep 8084
+
+# 期待される出力：
+# LISTEN 0 128 0.0.0.0:8084 0.0.0.0:* users:(("python3",...))
+
+# nftables ルール確認
+sudo nft -nn list chain inet azazel_fmc input
+
+# nftables カウンター確認（パケットが到達しているか）
+sudo nft -nn list chain inet azazel_fmc input | grep counter
+
+# usb0 統計
+ip -s link show usb0
+```
+
+---
+
 実行結果をお知らせください！
