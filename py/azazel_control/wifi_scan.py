@@ -12,7 +12,13 @@ import subprocess
 import re
 import json
 import logging
+import sys
+from pathlib import Path
 from typing import List, Dict, Any, Optional
+
+# Import common scanner module
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from azazel_zero.sensors.wifi_scanner import scan_and_parse, get_security_label
 
 logger = logging.getLogger("wifi_scan")
 
@@ -121,90 +127,21 @@ def get_saved_networks_nm() -> set:
         return set()
 
 
-def parse_iw_scan(output: str) -> List[Dict[str, Any]]:
-    """Parse `iw dev <iface> scan` output"""
-    aps = []
-    current_ap = {}
-    
-    for line in output.splitlines():
-        line = line.strip()
-        
-        # New BSS entry
-        if line.startswith("BSS "):
-            if current_ap and current_ap.get("ssid"):
-                aps.append(current_ap)
-            
-            # Extract BSSID
-            match = re.match(r"BSS\s+([0-9a-f:]+)", line)
-            current_ap = {"bssid": match.group(1) if match else "unknown"}
-        
-        # SSID
-        elif line.startswith("SSID:"):
-            ssid = line.split("SSID:", 1)[1].strip()
-            if ssid:
-                current_ap["ssid"] = ssid
-        
-        # Signal strength
-        elif "signal:" in line.lower():
-            match = re.search(r"signal:\s*([-\d.]+)\s*dBm", line, re.IGNORECASE)
-            if match:
-                current_ap["signal_dbm"] = int(float(match.group(1)))
-        
-        # Channel (from DS Parameter Set or HT operation)
-        elif "DS Parameter set: channel" in line:
-            match = re.search(r"channel\s+(\d+)", line)
-            if match:
-                current_ap["channel"] = int(match.group(1))
-        
-        # Security
-        elif "RSN:" in line or "WPA:" in line:
-            if "RSN:" in line:
-                current_ap["security"] = "WPA2"
-            elif "WPA:" in line:
-                current_ap.setdefault("security", "WPA")
-        
-        # Detect OPEN (no RSN/WPA)
-        elif "capability:" in line.lower():
-            if "privacy" not in line.lower():
-                current_ap.setdefault("security", "OPEN")
-    
-    # Add last AP
-    if current_ap and current_ap.get("ssid"):
-        aps.append(current_ap)
-    
-    return aps
-
-
 def scan_with_iw(iface: str, saved_ssids: set) -> List[Dict[str, Any]]:
-    """Scan Wi-Fi using iw (low-level)"""
+    """Scan Wi-Fi using iw (low-level) - now uses common scanner"""
     try:
-        # Trigger scan
-        subprocess.run(
-            ["iw", "dev", iface, "scan"],
-            capture_output=True,
-            timeout=10
-        )
+        # Use common scanner module
+        aps = scan_and_parse(iface, deduplicate=True, keep_hidden=False)
         
-        # Get scan results
-        result = subprocess.run(
-            ["iw", "dev", iface, "scan"],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        
-        if result.returncode != 0:
-            return []
-        
-        aps = parse_iw_scan(result.stdout)
-        
-        # Mark saved networks
+        # Mark saved networks and add security label
         for ap in aps:
             ap["saved"] = ap["ssid"] in saved_ssids
-            # Default security if not detected
-            ap.setdefault("security", "UNKNOWN")
-            ap.setdefault("signal_dbm", -100)
-            ap.setdefault("channel", 0)
+            ap["security"] = get_security_label(ap)
+            # Convert float signal to int for consistency
+            if ap["signal"] is not None:
+                ap["signal_dbm"] = int(ap["signal"])
+            else:
+                ap["signal_dbm"] = -100
         
         return aps
     
@@ -273,7 +210,10 @@ def scan_with_nmcli(iface: str, saved_ssids: set) -> List[Dict[str, Any]]:
 
 
 def deduplicate_aps(aps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Deduplicate by SSID, keep strongest signal"""
+    """
+    Deduplicate by SSID, keep strongest signal.
+    Note: Common scanner already does this, but kept for nmcli path compatibility.
+    """
     ssid_map = {}
     
     for ap in aps:

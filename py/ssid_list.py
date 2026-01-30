@@ -25,25 +25,13 @@ ROOT = HERE.parent
 if str(ROOT / "py") not in sys.path:
     sys.path.insert(0, str(ROOT / "py"))
 
+# Import common Wi-Fi scanner
+from azazel_zero.sensors.wifi_scanner import scan_and_parse, get_security_label
+
 try:
     from azazel_zero.sensors.wifi_safety import evaluate_wifi_safety
 except Exception:
     evaluate_wifi_safety = None  # fallback if deps missing
-
-def run_health_check_once(iface: str) -> None:
-    if evaluate_wifi_safety is None:
-        return
-    try:
-        from azazel_zero.app.threat_judge import judge_zero
-        verdict = judge_zero("wifi_health_check", iface, "", None)
-    except Exception:
-        return
-    ssid = (verdict.get("meta", {}) or {}).get("link", {}).get("ssid", "")
-    risk = verdict.get("risk", 0)
-    tags = verdict.get("tags", []) or []
-    status = "OK" if risk <= 2 else "WARN"
-    tag_str = ",".join(tags)
-    print(f"[Wi-Fi health] {status} risk={risk} tags={tag_str} ssid={ssid}")
 
 # Positional arg or default
 IFACE = sys.argv[1] if len(sys.argv) > 1 else "wlan0"
@@ -70,122 +58,32 @@ def update_epaper():
 atexit.register(update_epaper)
 
 
-def parse_scan(text):
-    # iw dev wlan0 scan の出力をパース
-    nets = []
-    cur = None
-    rsn_block = False
-    wpa_block = False
-    for line in text.splitlines():
-        line = line.rstrip()
-
-        m_bss = re.match(r"^BSS\s+([0-9a-f:]{17})", line)
-        if m_bss:
-            if cur:
-                nets.append(cur)
-            cur = {
-                "bssid": m_bss.group(1),
-                "ssid": "",
-                "freq": None,
-                "chan": None,
-                "signal": None,
-                "rsn": False,
-                "wpa": False,
-                "wpa3": False,   # SAE があれば WPA3-Personal と推定
-            }
-            rsn_block = False
-            wpa_block = False
-            continue
-
-        if cur is None:
-            continue
-
-        if line.strip().startswith("SSID:"):
-            cur["ssid"] = line.split("SSID:", 1)[1].strip()
-            continue
-
-        if line.strip().startswith("freq:"):
-            try:
-                cur["freq"] = int(line.split("freq:", 1)[1].strip())
-            except Exception:
-                pass
-            continue
-
-        if line.strip().startswith("signal:"):
-            # e.g. "signal: -51.00 dBm"
-            try:
-                cur["signal"] = float(line.split("signal:", 1)[1].split("dBm")[0].strip())
-            except Exception:
-                pass
-            continue
-
-        # チャンネルは freq から算出（後で）
-        if line.strip().startswith("RSN:"):
-            cur["rsn"] = True
-            rsn_block = True
-            wpa_block = False
-            continue
-        if line.strip().startswith("WPA:"):
-            cur["wpa"] = True
-            wpa_block = True
-            rsn_block = False
-            continue
-
-        # ブロック内で WPA3(SAE) の有無を検出
-        if rsn_block or wpa_block:
-            if "SAE" in line:
-                cur["wpa3"] = True
-
-        # ブロック終了のゆる判定
-        if line and not line.startswith("\t") and not line.startswith(" "):
-            rsn_block = False
-            wpa_block = False
-
-    if cur:
-        nets.append(cur)
-
-    # チャンネル算出
-    for n in nets:
-        f = n.get("freq")
-        ch = None
-        if f:
-            if 2412 <= f <= 2472:
-                ch = (f - 2407) // 5
-            elif f == 2484:
-                ch = 14
-            elif 5000 <= f <= 5900:
-                ch = (f - 5000) // 5
-        n["chan"] = ch
-    return nets
-
-
-def sec_label(n):
-    # 表示用のセキュリティ簡易判定
-    if n["rsn"] or n["wpa"]:
-        if n["wpa3"]:
-            return "WPA3/WPA2"
-        return "WPA2/WPA"
-    return "OPEN"
-
-
-def dedupe_best_by_ssid(nets):
-    # SSIDごとに最良の信号強度1件だけ残す（隠しSSIDは BSSID 別扱い）
-    best = {}
-    for n in nets:
-        ssid = n["ssid"] or f"<hidden:{n['bssid']}>"
-        if ssid not in best or (n["signal"] is not None and (best[ssid]["signal"] is None or n["signal"] > best[ssid]["signal"])):
-            best[ssid] = n
-    return [best[k] for k in best]
-
-
 def _rescan_nets(iface):
-    scan = run(["/sbin/iw", "dev", iface, "scan"])
-    if scan.returncode != 0:
-        return []
-    nets = parse_scan(scan.stdout)
-    nets = dedupe_best_by_ssid(nets)
-    nets.sort(key=lambda x: x["signal"] if x["signal"] is not None else -9999, reverse=True)
+    """Rescan using common scanner module"""
+    nets = scan_and_parse(iface, deduplicate=True, keep_hidden=True)
+    
+    # Convert to legacy format for compatibility
+    for n in nets:
+        # Add security labels used by this script
+        n["sec_label"] = get_security_label(n)
+    
     return nets
+
+def run_health_check_once(iface: str) -> None:
+    if evaluate_wifi_safety is None:
+        return
+    try:
+        from azazel_zero.app.threat_judge import judge_zero
+        verdict = judge_zero("wifi_health_check", iface, "", None)
+    except Exception:
+        return
+    ssid = (verdict.get("meta", {}) or {}).get("link", {}).get("ssid", "")
+    risk = verdict.get("risk", 0)
+    tags = verdict.get("tags", []) or []
+    status = "OK" if risk <= 2 else "WARN"
+    tag_str = ",".join(tags)
+    print(f"[Wi-Fi health] {status} risk={risk} tags={tag_str} ssid={ssid}")
+
 
 # ---- Wi-Fi connection helpers (wpa_cli) ----
 
@@ -318,13 +216,13 @@ def ensure_connected(ssid, iface, is_open):
 # ---- Interactive selector (curses) ----
 
 def _sec_label_for_display(n):
-    return sec_label(n)
+    return n.get("sec_label") or get_security_label(n)
 
 
 def _display_line(n):
     ssid = n["ssid"] or f"<hidden:{n['bssid']}>"
-    sig = "" if n["signal"] is None else f"{int(n['signal']):>3}"
-    ch  = "" if n["chan"] is None else str(n["chan"]).rjust(2)
+    sig = "" if n.get("signal") is None else f"{int(n['signal']):>3}"
+    ch  = "" if n.get("chan") is None else str(n["chan"]).rjust(2)
     sec = _sec_label_for_display(n)
     bssid = n["bssid"]
     return f"{ssid[:32]:<32}  {sec:<10}  {sig:>3} dBm  ch{ch:>2}   {bssid}"
@@ -396,17 +294,12 @@ def main():
         print("Error: 'iw' not found. Install 'iw' and run again.", file=sys.stderr)
         sys.exit(1)
 
-    # スキャンは root 権限が必要なことが多い
-    scan = run(["/sbin/iw", "dev", IFACE, "scan"])
-    if scan.returncode != 0:
-        print(scan.stderr.strip() or "iw scan failed", file=sys.stderr)
+    # スキャン（共通モジュール使用）
+    nets = _rescan_nets(IFACE)
+    
+    if not nets:
+        print("No networks found or scan failed", file=sys.stderr)
         sys.exit(2)
-
-    nets = parse_scan(scan.stdout)
-    nets = dedupe_best_by_ssid(nets)
-
-    # 信号強度で降順ソート（dBmは数値が大きいほど強い。-40 > -80）
-    nets.sort(key=lambda x: x["signal"] if x["signal"] is not None else -9999, reverse=True)
 
     # Interactive selection
     choice = interactive_select(IFACE, nets)
