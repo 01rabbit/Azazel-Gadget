@@ -55,10 +55,14 @@ sudo install -m 0644 "${ROOT}/systemd/azazel-epd-portal.timer"   /etc/systemd/sy
 sudo install -d /etc/systemd/system/azazel-epd.service.d
 sudo install -m 0644 "${ROOT}/systemd/azazel-epd.service.d/10-portal-detect.conf" /etc/systemd/system/azazel-epd.service.d/
 sudo install -m 0644 "${ROOT}/systemd/azazel-first-minute.service" /etc/systemd/system/
+sudo install -m 0644 "${ROOT}/systemd/azazel-control-daemon.service" /etc/systemd/system/
+sudo install -m 0644 "${ROOT}/systemd/azazel-web.service" /etc/systemd/system/
 
 # 反映・起動
 sudo systemctl daemon-reload
 sudo systemctl enable --now suri-epaper.service
 sudo systemctl enable --now azazel-epd-portal.timer
 sudo systemctl enable --now azazel-first-minute.service
+sudo systemctl enable --now azazel-control-daemon.service
+sudo systemctl enable --now azazel-web.service
 echo "Units installed. Edit opencanary.service if needed, then: sudo systemctl enable --now opencanary.service"
