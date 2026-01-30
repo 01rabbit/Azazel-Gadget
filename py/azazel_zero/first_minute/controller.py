@@ -354,7 +354,7 @@ class FirstMinuteController:
 
         try:
             from azazel_zero.core.mock_llm_core import MockLLMCore
-            from azazel_zero.wifi_health import health_paths
+            from azazel_zero.sensors.wifi_health_monitor import health_paths
         except Exception:
             return
 
