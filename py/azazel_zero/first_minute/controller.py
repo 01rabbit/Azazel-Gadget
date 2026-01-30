@@ -221,6 +221,21 @@ class FirstMinuteController:
         }
         try:
             self.snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Preserve Wi-Fi connection state from previous snapshot
+            # This allows wifi_connect.py to update connection info without being overwritten
+            existing_connection = None
+            try:
+                if self.snapshot_path.exists():
+                    existing = json.loads(self.snapshot_path.read_text(encoding="utf-8"))
+                    existing_connection = existing.get("connection")
+            except Exception:
+                pass
+            
+            # Merge connection info if it exists
+            if existing_connection:
+                snap["connection"] = existing_connection
+            
             self.snapshot_path.write_text(json.dumps(snap, ensure_ascii=False), encoding="utf-8")
         except Exception:
             pass
