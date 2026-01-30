@@ -416,30 +416,47 @@ def update_state_json(wifi_state: str, **kwargs):
     fallback_path = Path.home() / ".azazel-zero/run/ui_snapshot.json"
     
     try:
-        # Try to read existing state
+        # Read from both paths to get the most complete state
+        data = {}
+        
+        # Try to read primary path first
         if state_path.exists():
-            path = state_path
-        elif fallback_path.exists():
-            path = fallback_path
-        else:
-            # Create minimal state
-            path = fallback_path
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text("{}")
+            try:
+                data = json.loads(state_path.read_text(encoding="utf-8"))
+            except Exception as e:
+                logger.debug(f"Failed to read {state_path}: {e}")
         
-        data = json.loads(path.read_text(encoding="utf-8"))
+        # If primary is empty, try fallback
+        if not data and fallback_path.exists():
+            try:
+                data = json.loads(fallback_path.read_text(encoding="utf-8"))
+            except Exception as e:
+                logger.debug(f"Failed to read {fallback_path}: {e}")
         
-        # Add connection section if missing
+        # Ensure connection section exists
         if "connection" not in data:
             data["connection"] = {}
         
-        # Update Wi-Fi state
+        # Update Wi-Fi connection state
         data["connection"]["wifi_state"] = wifi_state
         data["connection"].update(kwargs)
         
-        # Write back
-        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-        logger.info(f"Updated state.json: wifi_state={wifi_state}")
+        # Write to BOTH paths to ensure synchronization
+        # Primary path (if accessible)
+        try:
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            state_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            logger.info(f"Updated {state_path}: wifi_state={wifi_state}")
+        except Exception as e:
+            logger.debug(f"Could not write to {state_path}: {e}")
+        
+        # Fallback path (always attempt)
+        try:
+            fallback_path.parent.mkdir(parents=True, exist_ok=True)
+            fallback_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            logger.info(f"Updated {fallback_path}: wifi_state={wifi_state}")
+        except Exception as e:
+            logger.debug(f"Could not write to {fallback_path}: {e}")
     
     except Exception as e:
         logger.warning(f"Failed to update state.json: {e}")

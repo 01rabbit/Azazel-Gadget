@@ -105,6 +105,8 @@ class FirstMinuteController:
         self.last_console = 0.0
         self.snapshot_path = cfg.runtime_dir / "ui_snapshot.json"
         self.snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+        # Keep Wi-Fi connection state in memory to preserve across snapshots
+        self.persistent_connection_state: Dict[str, object] = {}
         self.epd_last_update = 0.0
         self.epd_last_fp: Optional[tuple] = None
         self._eve_offset = 0
@@ -173,6 +175,11 @@ class FirstMinuteController:
 
     def write_snapshot(self, summary: Dict[str, object], link_meta: Dict[str, object]) -> None:
         """Write a UI snapshot JSON for the TUI to consume."""
+        # Step 1: Update persistent connection state from any available file
+        # This ensures we capture any updates from wifi_connect.py
+        self._sync_connection_state()
+        self.logger.info("snapshot: write_snapshot() called with new persistent state logic")
+        
         link = link_meta.get("link", {}) if link_meta else {}
         
         # Gather system metrics
@@ -218,27 +225,111 @@ class FirstMinuteController:
             "cpu_percent": cpu_usage,
             "mem_percent": mem_usage,
             "temp_c": cpu_temp,
+            # Default connection section (will be overwritten with persisted state below)
+            "connection": {
+                "wifi_state": "DISCONNECTED",
+                "usb_nat": "OFF",
+                "internet_check": "UNKNOWN",
+                "captive_portal": "UNKNOWN"
+            }
         }
         try:
             self.snapshot_path.parent.mkdir(parents=True, exist_ok=True)
             
             # Preserve Wi-Fi connection state from previous snapshot
             # This allows wifi_connect.py to update connection info without being overwritten
+            # Check both primary and fallback paths to ensure we don't lose data
             existing_connection = None
+            fallback_snapshot_path = Path.home() / ".azazel-zero/run/ui_snapshot.json"
+            
             try:
                 if self.snapshot_path.exists():
                     existing = json.loads(self.snapshot_path.read_text(encoding="utf-8"))
                     existing_connection = existing.get("connection")
-            except Exception:
-                pass
+                    if existing_connection:
+                        self.logger.debug(f"snapshot: preserving connection state from primary path: {existing_connection}")
+            except Exception as e:
+                self.logger.debug(f"snapshot: failed to read primary path: {e}")
             
-            # Merge connection info if it exists
-            if existing_connection:
-                snap["connection"] = existing_connection
+            # If primary has no connection, try fallback path
+            if not existing_connection:
+                try:
+                    if fallback_snapshot_path.exists():
+                        existing = json.loads(fallback_snapshot_path.read_text(encoding="utf-8"))
+                        existing_connection = existing.get("connection")
+                        if existing_connection:
+                            self.logger.debug(f"snapshot: preserving connection state from fallback path: {existing_connection}")
+                except Exception as e:
+                    self.logger.debug(f"snapshot: failed to read fallback path: {e}")
             
-            self.snapshot_path.write_text(json.dumps(snap, ensure_ascii=False), encoding="utf-8")
-        except Exception:
-            pass
+            # Merge persistent connection state (from memory or file)
+            # This ensures Wi-Fi connection data is never lost across snapshot writes
+            if self.persistent_connection_state:
+                snap["connection"] = self.persistent_connection_state.copy()
+                self.logger.debug(f"snapshot: using persistent connection state (from memory): {self.persistent_connection_state}")
+            elif existing_connection:
+                snap["connection"] = existing_connection.copy()
+                # Also update memory for next iteration
+                self.persistent_connection_state = existing_connection.copy()
+                self.logger.debug(f"snapshot: loaded connection state from file: {existing_connection}")
+            else:
+                self.logger.debug("snapshot: no connection state available")
+            
+            # Write snapshot to BOTH paths to ensure synchronization
+            # Primary path: /run/azazel-zero/ui_snapshot.json
+            try:
+                self.snapshot_path.write_text(json.dumps(snap, ensure_ascii=False), encoding="utf-8")
+            except Exception as e:
+                self.logger.debug(f"snapshot: failed to write primary path: {e}")
+            
+            # Fallback path: ~/.azazel-zero/run/ui_snapshot.json
+            fallback_snapshot_path = Path.home() / ".azazel-zero/run/ui_snapshot.json"
+            try:
+                fallback_snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+                fallback_snapshot_path.write_text(json.dumps(snap, ensure_ascii=False), encoding="utf-8")
+            except Exception as e:
+                self.logger.debug(f"snapshot: failed to write fallback path: {e}")
+        except Exception as e:
+            self.logger.warning(f"snapshot: failed overall: {e}")
+
+    def _sync_connection_state(self) -> None:
+        """Sync persistent connection state from files.
+        
+        This reads from both the primary and fallback snapshot paths to detect
+        when wifi_connect.py has written new connection data. This is essential
+        because write_snapshot() executes every 2 seconds and would otherwise
+        overwrite the connection section that wifi_connect.py just wrote.
+        """
+        # Check primary and fallback paths for any updates
+        state_path = Path("/run/azazel-zero/ui_snapshot.json")
+        fallback_path = Path.home() / ".azazel-zero/run/ui_snapshot.json"
+        
+        self.logger.debug(f"sync: checking for connection state updates (current: {self.persistent_connection_state})")
+        
+        # Check BOTH paths - either one might have the latest connection data
+        for path in [state_path, fallback_path]:
+            try:
+                if path.exists():
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                    conn = data.get("connection")
+                    self.logger.debug(f"sync: read from {path}: {conn}")
+                    
+                    # If we find new/different connection data, use it
+                    if conn:
+                        # Convert to tuple for comparison (dicts are unhashable)
+                        current_tuple = tuple(sorted(self.persistent_connection_state.items())) if self.persistent_connection_state else ()
+                        incoming_tuple = tuple(sorted(conn.items()))
+                        
+                        if current_tuple != incoming_tuple:
+                            self.persistent_connection_state = conn.copy()
+                            self.logger.info(f"sync: UPDATED persistent state from {path}: {conn}")
+                            return  # Found and updated, exit
+                        else:
+                            self.logger.debug(f"sync: connection unchanged from {path}")
+                    else:
+                        self.logger.debug(f"sync: no connection section in {path}")
+            except Exception as e:
+                self.logger.debug(f"sync: failed to read {path}: {e}")
 
     def _get_interface_ip(self, iface: str) -> str:
         if not iface:
