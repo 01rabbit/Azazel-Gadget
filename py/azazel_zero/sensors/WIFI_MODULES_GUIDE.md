@@ -11,11 +11,9 @@ py/
 │       ├── wifi_channel_scanner.py  ✅ [センサー] チャンネル混雑度分析
 │       └── wifi_health_monitor.py   ✅ [NEW] ヘルスチェック統合モジュール
 │
-├── azazel_control/           # 制御モジュール（Web UI バックエンド）
-│   ├── wifi_scan.py                 ✅ [制御] AP一覧取得（環境自動検出）
-│   └── wifi_connect.py              ✅ [制御] AP接続+NAT設定
-│
-└── wifi_risk_check.py        ⚠️ [DEPRECATED] → wifi_health_monitor.py に統合
+└── azazel_control/           # 制御モジュール（Web UI バックエンド）
+    ├── wifi_scan.py                 ✅ [制御] AP一覧取得（環境自動検出）
+    └── wifi_connect.py              ✅ [制御] AP接続+NAT設定
 
 ```
 
@@ -108,59 +106,56 @@ py/
 
 ---
 
-## ⚠️ 非推奨・統合対象
+## ✅ 統合完了（削除済みモジュール）
 
-### ❌ wifi_risk_check.py（py/直下）
+以下のモジュールは `wifi_health_monitor.py` に統合され、削除されました：
+
+### 🗑️ wifi_risk_check.py（削除済み）
 **統合先**: `sensors/wifi_health_monitor.py`  
-**理由**:
+**削除理由**:
 - wifi_health.py と機能が重複（どちらも judge_zero 呼び出し）
 - CLI ツールとしての役割は wifi_health_monitor.py に統合
 - 配置場所が不適切（py/直下 → sensors/が適切）
 
-**移行方法**:
+**移行済みコマンド**:
 ```bash
-# 従来
-python3 py/wifi_risk_check.py --iface wlan0 --interval 10
-
 # 新規（同等機能）
 python3 py/azazel_zero/sensors/wifi_health_monitor.py --iface wlan0 --interval 10 --write
 ```
 
----
-
-### ❌ wifi_health.py（azazel_zero/直下）
+### 🗑️ wifi_health.py（削除済み）
 **統合先**: `sensors/wifi_health_monitor.py`  
-**理由**:
-- センサー機能なのに azazel_zero/ 直下にある（sensors/が適切）
+**削除理由**:
+- センサー機能なのに azazel_zero/ 直下にあった（sensors/が適切）
 - wifi_health_monitor.py が同等機能を提供
 
-**移行方法**:
+**移行済みインポート**:
 ```python
-# 従来
-from azazel_zero.wifi_health import health_snapshot, write_snapshot
-
 # 新規（同等機能）
 from azazel_zero.sensors.wifi_health_monitor import evaluate_wifi_health, write_health_snapshot
 ```
 
+**移行完了日**: 2026年1月30日  
+**移行ステータス**: すべての依存関係を更新済み、旧モジュール削除完了
+
 ---
 
-## 🔄 推奨移行ステップ
+## 🔄 移行完了ステップ
 
-### Phase 1: 新モジュールのテスト（即時）
+### Phase 1: 新モジュールのテスト ✅
 1. ✅ wifi_health_monitor.py を作成（完了）
-2. ⬜ 既存の wifi_risk_check.py の代わりに実行してテスト
-3. ⬜ 既存の wifi_health.py のインポート元を切り替えてテスト
+2. ✅ 既存の wifi_risk_check.py の代わりに実行してテスト
+3. ✅ 既存の wifi_health.py のインポート元を切り替えてテスト
 
-### Phase 2: 段階的統合（1-2週間）
-1. ⬜ systemd サービス・スクリプトを更新
-2. ⬜ ドキュメント更新
-3. ⬜ 旧モジュールに deprecation 警告追加
+### Phase 2: 段階的統合 ✅
+1. ✅ controller.py のインポート更新
+2. ✅ ドキュメント更新
+3. ✅ 旧モジュールに deprecation 警告追加（削除前）
 
-### Phase 3: クリーンアップ（1ヶ月後）
-1. ⬜ wifi_risk_check.py 削除
-2. ⬜ wifi_health.py 削除
-3. ⬜ すべての import 文を新モジュールに統一
+### Phase 3: クリーンアップ ✅
+1. ✅ wifi_risk_check.py 削除
+2. ✅ wifi_health.py 削除
+3. ✅ すべての import 文を新モジュールに統一
 
 ---
 
@@ -214,10 +209,6 @@ from azazel_zero.sensors.wifi_health_monitor import evaluate_wifi_health
 # ✅ GOOD: 制御層の利用（Web UI バックエンド）
 from azazel_control.wifi_scan import scan_wifi
 from azazel_control.wifi_connect import connect_wifi
-
-# ❌ BAD: 非推奨モジュール
-from azazel_zero.wifi_health import health_snapshot  # → wifi_health_monitor へ
-import wifi_risk_check  # → wifi_health_monitor CLI へ
 ```
 
 ---
@@ -228,4 +219,4 @@ import wifi_risk_check  # → wifi_health_monitor CLI へ
 **制御層（azazel_control/）** = Web UI バックエンド・システム制御  
 
 各モジュールは**単一責任の原則**に従って整理され、明確な依存関係を持ちます。  
-新しい wifi_health_monitor.py により、重複していた2つのヘルスチェック機能が統合され、開発者体験が向上しました。
+旧モジュール（wifi_risk_check.py、wifi_health.py）は wifi_health_monitor.py に統合され、コードベースから削除されました。
