@@ -1,11 +1,28 @@
 #!/usr/bin/env python3
+"""
+DEPRECATED: This module is deprecated and will be removed in a future version.
+
+Please use: py/azazel_zero/sensors/wifi_health_monitor.py instead.
+
+Migration:
+    Old: python3 py/wifi_risk_check.py --iface wlan0 --interval 10
+    New: python3 py/azazel_zero/sensors/wifi_health_monitor.py --iface wlan0 --interval 10 --write
+"""
 from __future__ import annotations
 import argparse
 import json
 import sys
 import time
+import warnings
 from pathlib import Path
 from typing import Optional
+
+# Show deprecation warning
+warnings.warn(
+    "wifi_risk_check.py is deprecated. Use azazel_zero.sensors.wifi_health_monitor instead.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 # Ensure local package import works when run from repo root
 HERE = Path(__file__).resolve().parent

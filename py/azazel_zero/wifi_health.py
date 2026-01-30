@@ -1,10 +1,29 @@
+"""
+DEPRECATED: This module is deprecated and will be removed in a future version.
+
+Please use: azazel_zero.sensors.wifi_health_monitor instead.
+
+Migration:
+    Old:
+        from azazel_zero.wifi_health import health_snapshot, write_snapshot
+    New:
+        from azazel_zero.sensors.wifi_health_monitor import evaluate_wifi_health, write_health_snapshot
+"""
 from __future__ import annotations
 
 import json
 import os
 import time
+import warnings
 from pathlib import Path
 from typing import Dict, Tuple, Optional
+
+# Show deprecation warning
+warnings.warn(
+    "azazel_zero.wifi_health is deprecated. Use azazel_zero.sensors.wifi_health_monitor instead.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 
 def _fallback_dir() -> Path:
