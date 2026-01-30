@@ -1,0 +1,357 @@
+#!/usr/bin/env python3
+"""
+Wi-Fi Scan Module for Azazel-Zero Control Daemon
+
+Auto-detects environment and performs Wi-Fi AP scan:
+- Prefers wpa_supplicant/wpa_cli if managing wlan iface
+- Falls back to NetworkManager/nmcli if available
+- Returns deduplicated AP list (strongest per SSID)
+"""
+
+import subprocess
+import re
+import json
+import logging
+from typing import List, Dict, Any, Optional
+
+logger = logging.getLogger("wifi_scan")
+
+
+def get_wireless_interface() -> Optional[str]:
+    """Detect wireless interface (prefer wlan0, else auto-detect)"""
+    try:
+        # Try wlan0 first
+        result = subprocess.run(
+            ["iw", "dev", "wlan0", "info"],
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
+        if result.returncode == 0:
+            return "wlan0"
+        
+        # Auto-detect via iw dev
+        result = subprocess.run(
+            ["iw", "dev"],
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
+        
+        # Parse: Interface <name>
+        match = re.search(r"Interface\s+(\S+)", result.stdout)
+        if match:
+            return match.group(1)
+        
+        return None
+    except Exception as e:
+        logger.warning(f"Failed to detect wireless interface: {e}")
+        return None
+
+
+def check_wpa_supplicant(iface: str) -> bool:
+    """Check if wpa_supplicant manages this interface"""
+    try:
+        result = subprocess.run(
+            ["wpa_cli", "-i", iface, "status"],
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
+        return result.returncode == 0
+    except:
+        return False
+
+
+def check_networkmanager(iface: str) -> bool:
+    """Check if NetworkManager manages this interface"""
+    try:
+        result = subprocess.run(
+            ["nmcli", "-t", "-f", "DEVICE", "dev"],
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
+        return iface in result.stdout
+    except:
+        return False
+
+
+def get_saved_networks_wpa(iface: str) -> set:
+    """Get saved network SSIDs from wpa_supplicant"""
+    try:
+        result = subprocess.run(
+            ["wpa_cli", "-i", iface, "list_networks"],
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
+        
+        saved = set()
+        for line in result.stdout.splitlines()[1:]:  # Skip header
+            parts = line.split("\t")
+            if len(parts) >= 2:
+                ssid = parts[1].strip()
+                if ssid:
+                    saved.add(ssid)
+        return saved
+    except Exception as e:
+        logger.warning(f"Failed to get saved networks from wpa_cli: {e}")
+        return set()
+
+
+def get_saved_networks_nm() -> set:
+    """Get saved network SSIDs from NetworkManager"""
+    try:
+        result = subprocess.run(
+            ["nmcli", "-t", "-f", "NAME,TYPE", "con", "show"],
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
+        
+        saved = set()
+        for line in result.stdout.splitlines():
+            parts = line.split(":")
+            if len(parts) >= 2 and parts[1] == "802-11-wireless":
+                saved.add(parts[0])
+        return saved
+    except Exception as e:
+        logger.warning(f"Failed to get saved networks from nmcli: {e}")
+        return set()
+
+
+def parse_iw_scan(output: str) -> List[Dict[str, Any]]:
+    """Parse `iw dev <iface> scan` output"""
+    aps = []
+    current_ap = {}
+    
+    for line in output.splitlines():
+        line = line.strip()
+        
+        # New BSS entry
+        if line.startswith("BSS "):
+            if current_ap and current_ap.get("ssid"):
+                aps.append(current_ap)
+            
+            # Extract BSSID
+            match = re.match(r"BSS\s+([0-9a-f:]+)", line)
+            current_ap = {"bssid": match.group(1) if match else "unknown"}
+        
+        # SSID
+        elif line.startswith("SSID:"):
+            ssid = line.split("SSID:", 1)[1].strip()
+            if ssid:
+                current_ap["ssid"] = ssid
+        
+        # Signal strength
+        elif "signal:" in line.lower():
+            match = re.search(r"signal:\s*([-\d.]+)\s*dBm", line, re.IGNORECASE)
+            if match:
+                current_ap["signal_dbm"] = int(float(match.group(1)))
+        
+        # Channel (from DS Parameter Set or HT operation)
+        elif "DS Parameter set: channel" in line:
+            match = re.search(r"channel\s+(\d+)", line)
+            if match:
+                current_ap["channel"] = int(match.group(1))
+        
+        # Security
+        elif "RSN:" in line or "WPA:" in line:
+            if "RSN:" in line:
+                current_ap["security"] = "WPA2"
+            elif "WPA:" in line:
+                current_ap.setdefault("security", "WPA")
+        
+        # Detect OPEN (no RSN/WPA)
+        elif "capability:" in line.lower():
+            if "privacy" not in line.lower():
+                current_ap.setdefault("security", "OPEN")
+    
+    # Add last AP
+    if current_ap and current_ap.get("ssid"):
+        aps.append(current_ap)
+    
+    return aps
+
+
+def scan_with_iw(iface: str, saved_ssids: set) -> List[Dict[str, Any]]:
+    """Scan Wi-Fi using iw (low-level)"""
+    try:
+        # Trigger scan
+        subprocess.run(
+            ["iw", "dev", iface, "scan"],
+            capture_output=True,
+            timeout=10
+        )
+        
+        # Get scan results
+        result = subprocess.run(
+            ["iw", "dev", iface, "scan"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        if result.returncode != 0:
+            return []
+        
+        aps = parse_iw_scan(result.stdout)
+        
+        # Mark saved networks
+        for ap in aps:
+            ap["saved"] = ap["ssid"] in saved_ssids
+            # Default security if not detected
+            ap.setdefault("security", "UNKNOWN")
+            ap.setdefault("signal_dbm", -100)
+            ap.setdefault("channel", 0)
+        
+        return aps
+    
+    except Exception as e:
+        logger.error(f"iw scan failed: {e}")
+        return []
+
+
+def scan_with_nmcli(iface: str, saved_ssids: set) -> List[Dict[str, Any]]:
+    """Scan Wi-Fi using nmcli (NetworkManager)"""
+    try:
+        # Trigger rescan
+        subprocess.run(
+            ["nmcli", "dev", "wifi", "rescan", "ifname", iface],
+            capture_output=True,
+            timeout=10
+        )
+        
+        # Get scan results
+        result = subprocess.run(
+            ["nmcli", "-t", "-f", "SSID,BSSID,CHAN,SIGNAL,SECURITY", "dev", "wifi", "list", "ifname", iface],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        
+        if result.returncode != 0:
+            return []
+        
+        aps = []
+        for line in result.stdout.splitlines():
+            parts = line.split(":")
+            if len(parts) < 5:
+                continue
+            
+            ssid, bssid, chan, signal, security = parts[:5]
+            
+            if not ssid:
+                continue
+            
+            # Map nmcli security to standard labels
+            sec_label = "UNKNOWN"
+            if "WPA3" in security:
+                sec_label = "WPA3"
+            elif "WPA2" in security:
+                sec_label = "WPA2"
+            elif "WPA" in security:
+                sec_label = "WPA"
+            elif not security or security == "--":
+                sec_label = "OPEN"
+            
+            aps.append({
+                "ssid": ssid,
+                "bssid": bssid if bssid != "--" else "unknown",
+                "channel": int(chan) if chan.isdigit() else 0,
+                "signal_dbm": int(signal) - 100 if signal.isdigit() else -100,  # nmcli gives 0-100, convert to dBm approx
+                "security": sec_label,
+                "saved": ssid in saved_ssids
+            })
+        
+        return aps
+    
+    except Exception as e:
+        logger.error(f"nmcli scan failed: {e}")
+        return []
+
+
+def deduplicate_aps(aps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Deduplicate by SSID, keep strongest signal"""
+    ssid_map = {}
+    
+    for ap in aps:
+        ssid = ap["ssid"]
+        if ssid not in ssid_map or ap["signal_dbm"] > ssid_map[ssid]["signal_dbm"]:
+            ssid_map[ssid] = ap
+    
+    # Sort: strongest signal first, then alpha by SSID
+    result = sorted(ssid_map.values(), key=lambda x: (-x["signal_dbm"], x["ssid"]))
+    return result
+
+
+def scan_wifi() -> Dict[str, Any]:
+    """
+    Main entry point: Auto-detect environment and scan Wi-Fi
+    
+    Returns:
+        {
+            "ok": bool,
+            "aps": [{"ssid", "bssid", "signal_dbm", "channel", "security", "saved"}],
+            "ts": str,
+            "error": str (if failed)
+        }
+    """
+    import time
+    
+    # Detect wireless interface
+    iface = get_wireless_interface()
+    if not iface:
+        return {
+            "ok": False,
+            "error": "No wireless interface found",
+            "ts": time.time()
+        }
+    
+    logger.info(f"Using wireless interface: {iface}")
+    
+    # Detect Wi-Fi manager
+    use_wpa = check_wpa_supplicant(iface)
+    use_nm = check_networkmanager(iface)
+    
+    if not use_wpa and not use_nm:
+        return {
+            "ok": False,
+            "error": "No supported Wi-Fi manager found (need wpa_supplicant or NetworkManager)",
+            "ts": time.time()
+        }
+    
+    # Get saved networks
+    saved_ssids = set()
+    if use_wpa:
+        logger.info("Using wpa_supplicant for scan")
+        saved_ssids = get_saved_networks_wpa(iface)
+        aps = scan_with_iw(iface, saved_ssids)
+    else:
+        logger.info("Using NetworkManager for scan")
+        saved_ssids = get_saved_networks_nm()
+        aps = scan_with_nmcli(iface, saved_ssids)
+    
+    if not aps:
+        return {
+            "ok": False,
+            "error": "Scan returned no results",
+            "ts": time.time()
+        }
+    
+    # Deduplicate
+    aps = deduplicate_aps(aps)
+    
+    return {
+        "ok": True,
+        "aps": aps,
+        "ts": time.time()
+    }
+
+
+if __name__ == "__main__":
+    # Test mode
+    logging.basicConfig(level=logging.INFO)
+    result = scan_wifi()
+    print(json.dumps(result, indent=2))

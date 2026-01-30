@@ -72,6 +72,21 @@ function updateUI(state) {
     updateElement('connChannel', state.channel || '-');
     updateElement('connSignal', `${state.signal_dbm || '-'} dBm`);
     
+    // Wi-Fi Connection State
+    const connection = state.connection || {};
+    updateBadge('wifiState', connection.wifi_state || 'DISCONNECTED');
+    updateBadge('usbNat', connection.usb_nat || 'OFF');
+    updateBadge('internetCheck', connection.internet_check || 'UNKNOWN');
+    
+    // Captive Portal Warning
+    const captivePortal = connection.captive_portal || 'NO';
+    const captiveWarning = document.getElementById('captivePortalWarning');
+    if (captivePortal === 'SUSPECTED' || captivePortal === 'YES') {
+        captiveWarning.style.display = 'block';
+    } else {
+        captiveWarning.style.display = 'none';
+    }
+    
     // Control & Safety
     const degrade = state.degrade || {};
     updateBadge('ctrlDegrade', degrade.on ? 'ON' : 'OFF');
@@ -220,3 +235,182 @@ document.addEventListener('click', (e) => {
         hideMoreMenu();
     }
 });
+
+// ========== Wi-Fi Control Functions ==========
+
+let selectedSSID = '';
+let selectedSecurity = 'UNKNOWN';
+
+// Scan Wi-Fi networks
+async function scanWiFi() {
+    try {
+        showToast('🔍 Scanning Wi-Fi networks...', 'info');
+        
+        const res = await fetch('/api/wifi/scan', {
+            method: 'GET'
+        });
+        
+        const data = await res.json();
+        
+        if (data.ok && data.aps) {
+            displayWiFiResults(data.aps);
+            showToast(`✅ Found ${data.aps.length} networks`, 'success');
+        } else {
+            showToast(`❌ Scan failed: ${data.error || 'Unknown error'}`, 'error');
+        }
+    } catch (e) {
+        console.error('Wi-Fi scan failed:', e);
+        showToast(`❌ Scan failed: ${e.message}`, 'error');
+    }
+}
+
+// Display Wi-Fi scan results
+function displayWiFiResults(aps) {
+    const resultsDiv = document.getElementById('wifiScanResults');
+    const apList = document.getElementById('wifiAPList');
+    
+    // Clear existing results
+    apList.innerHTML = '';
+    
+    // Populate AP list
+    aps.forEach(ap => {
+        const row = document.createElement('tr');
+        row.style.borderBottom = '1px solid #333';
+        row.style.cursor = 'pointer';
+        
+        const ssidCell = document.createElement('td');
+        ssidCell.textContent = ap.ssid;
+        if (ap.saved) {
+            ssidCell.textContent += ' ★';
+            ssidCell.style.color = '#4CAF50';
+        }
+        
+        const signalCell = document.createElement('td');
+        signalCell.textContent = `${ap.signal_dbm} dBm`;
+        signalCell.style.textAlign = 'center';
+        
+        // Color code signal strength
+        if (ap.signal_dbm >= -50) {
+            signalCell.style.color = '#4CAF50';
+        } else if (ap.signal_dbm >= -70) {
+            signalCell.style.color = '#FFC107';
+        } else {
+            signalCell.style.color = '#F44336';
+        }
+        
+        const securityCell = document.createElement('td');
+        securityCell.textContent = ap.security;
+        securityCell.style.textAlign = 'center';
+        
+        if (ap.security === 'OPEN') {
+            securityCell.style.color = '#ff6b35';
+        }
+        
+        const actionCell = document.createElement('td');
+        actionCell.style.textAlign = 'center';
+        
+        const selectBtn = document.createElement('button');
+        selectBtn.textContent = 'Select';
+        selectBtn.className = 'btn-small';
+        selectBtn.onclick = () => selectAP(ap.ssid, ap.security);
+        
+        actionCell.appendChild(selectBtn);
+        
+        row.appendChild(ssidCell);
+        row.appendChild(signalCell);
+        row.appendChild(securityCell);
+        row.appendChild(actionCell);
+        
+        apList.appendChild(row);
+    });
+    
+    // Show results section
+    resultsDiv.style.display = 'block';
+}
+
+// Select AP from list
+function selectAP(ssid, security) {
+    selectedSSID = ssid;
+    selectedSecurity = security;
+    
+    // Populate manual SSID field
+    document.getElementById('manualSSID').value = ssid;
+    
+    // Show/hide passphrase section based on security
+    const passphraseSection = document.getElementById('passphraseSection');
+    if (security === 'OPEN') {
+        passphraseSection.style.display = 'none';
+        document.getElementById('wifiPassphrase').value = '';
+    } else {
+        passphraseSection.style.display = 'block';
+    }
+    
+    showToast(`✅ Selected: ${ssid} (${security})`, 'info');
+}
+
+// Connect to Wi-Fi
+async function connectWiFi() {
+    const manualSSID = document.getElementById('manualSSID').value.trim();
+    const passphrase = document.getElementById('wifiPassphrase').value;
+    
+    // Use manual SSID if provided, else selected SSID
+    const ssid = manualSSID || selectedSSID;
+    
+    if (!ssid) {
+        showToast('❌ Please select or enter an SSID', 'error');
+        return;
+    }
+    
+    // Determine security if manually entered
+    let security = selectedSecurity;
+    if (manualSSID && manualSSID !== selectedSSID) {
+        security = passphrase ? 'WPA2' : 'OPEN';
+    }
+    
+    // Validate passphrase for protected networks
+    if (security !== 'OPEN' && !passphrase) {
+        showToast('❌ Passphrase required for protected network', 'error');
+        return;
+    }
+    
+    try {
+        showToast(`🔗 Connecting to ${ssid}...`, 'info');
+        
+        const body = {
+            ssid: ssid,
+            security: security,
+            persist: true
+        };
+        
+        // Add passphrase only for protected networks
+        if (security !== 'OPEN' && passphrase) {
+            body.passphrase = passphrase;
+        }
+        
+        const res = await fetch('/api/wifi/connect', {
+            method: 'POST',
+            headers: {
+                'X-AZAZEL-TOKEN': AUTH_TOKEN,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(body)
+        });
+        
+        const data = await res.json();
+        
+        if (data.ok) {
+            showToast(`✅ Connected to ${ssid}!`, 'success');
+            
+            // Clear passphrase field
+            document.getElementById('wifiPassphrase').value = '';
+            
+            // Refresh state immediately
+            setTimeout(fetchState, 1000);
+        } else {
+            showToast(`❌ Connection failed: ${data.error || 'Unknown error'}`, 'error');
+        }
+    } catch (e) {
+        console.error('Wi-Fi connect failed:', e);
+        showToast(`❌ Connection failed: ${e.message}`, 'error');
+    }
+}

@@ -29,7 +29,8 @@ BIND_PORT = int(os.environ.get("AZAZEL_WEB_PORT", "8084"))
 
 # Allowed actions
 ALLOWED_ACTIONS = {
-    "refresh", "reprobe", "contain", "details", "stage_open", "disconnect"
+    "refresh", "reprobe", "contain", "details", "stage_open", "disconnect",
+    "wifi_scan", "wifi_connect"  # Wi-Fi control actions
 }
 
 def load_token() -> Optional[str]:
@@ -140,6 +141,71 @@ def send_control_command(action: str) -> Dict[str, Any]:
         }
 
 
+def send_control_command_with_params(action: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    """Send command with parameters to Control Daemon via Unix socket"""
+    if action not in ALLOWED_ACTIONS:
+        return {
+            "ok": False,
+            "action": action,
+            "error": "Unknown action",
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%S")
+        }
+    
+    if not CONTROL_SOCKET.exists():
+        return {
+            "ok": False,
+            "action": action,
+            "error": "Control daemon not running",
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%S")
+        }
+    
+    try:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(30.0)  # Longer timeout for Wi-Fi operations
+        sock.connect(str(CONTROL_SOCKET))
+        
+        # Send JSON command with params
+        command = json.dumps({"action": action, "params": params, "ts": time.time()})
+        sock.sendall(command.encode("utf-8") + b"\n")
+        
+        # Receive response
+        response = b""
+        while True:
+            chunk = sock.recv(4096)
+            if not chunk:
+                break
+            response += chunk
+            if b"\n" in chunk:
+                break
+        
+        sock.close()
+        
+        if response:
+            return json.loads(response.decode("utf-8"))
+        else:
+            return {
+                "ok": False,
+                "action": action,
+                "error": "Empty response from daemon",
+                "ts": time.strftime("%Y-%m-%dT%H:%M:%S")
+            }
+    
+    except socket.timeout:
+        return {
+            "ok": False,
+            "action": action,
+            "error": "Daemon timeout",
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%S")
+        }
+    except Exception as e:
+        return {
+            "ok": False,
+            "action": action,
+            "error": str(e),
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%S")
+        }
+
+
 # Web UI Routes
 
 @app.route("/")
@@ -202,6 +268,65 @@ def api_action(action: str):
     
     # Forward to Control Daemon
     result = send_control_command(action)
+    
+    if result.get("ok"):
+        return jsonify(result), 200
+    else:
+        return jsonify(result), 500
+
+
+@app.route("/api/wifi/scan", methods=["GET"])
+def api_wifi_scan():
+    """GET /api/wifi/scan - Scan for Wi-Fi access points"""
+    # No token required (read-only operation)
+    
+    result = send_control_command_with_params("wifi_scan", {})
+    
+    if result.get("ok"):
+        return jsonify(result), 200
+    else:
+        return jsonify(result), 500
+
+
+@app.route("/api/wifi/connect", methods=["POST"])
+def api_wifi_connect():
+    """POST /api/wifi/connect - Connect to Wi-Fi AP"""
+    if not verify_token():
+        return jsonify({"ok": False, "error": "Unauthorized"}), 401
+    
+    data = request.json
+    if not data:
+        return jsonify({"ok": False, "error": "Missing request body"}), 400
+    
+    # Extract parameters
+    ssid = data.get("ssid")
+    security = data.get("security", "UNKNOWN")
+    passphrase = data.get("passphrase")
+    persist = data.get("persist", False)
+    
+    # Validation
+    if not ssid:
+        return jsonify({"ok": False, "error": "Missing SSID"}), 400
+    
+    # For OPEN networks, discard passphrase if present
+    if security == "OPEN":
+        passphrase = None
+    elif not passphrase:
+        # Non-OPEN network requires passphrase
+        return jsonify({"ok": False, "error": "Passphrase required for protected network"}), 400
+    
+    # NEVER log request body for this endpoint
+    app.logger.info(f"Wi-Fi connect request: SSID={ssid}, Security={security} (passphrase sanitized)")
+    
+    # Forward to Control Daemon
+    params = {
+        "ssid": ssid,
+        "security": security,
+        "passphrase": passphrase,
+        "persist": persist
+    }
+    
+    result = send_control_command_with_params("wifi_connect", params)
     
     if result.get("ok"):
         return jsonify(result), 200

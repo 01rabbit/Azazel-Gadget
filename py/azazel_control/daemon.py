@@ -14,6 +14,11 @@ import subprocess
 import threading
 from pathlib import Path
 
+# Import Wi-Fi modules
+sys.path.insert(0, str(Path(__file__).parent))
+from wifi_scan import scan_wifi
+from wifi_connect import connect_wifi
+
 # Logging setup
 logging.basicConfig(
     level=logging.INFO,
@@ -31,6 +36,13 @@ ACTION_SCRIPTS = {
     'details': '/home/azazel/Azazel-Zero/py/azazel_control/scripts/details.sh',
 }
 
+# Rate limiting
+last_action_time = {}
+RATE_LIMITS = {
+    'wifi_scan': 1.0,      # 1 second
+    'wifi_connect': 3.0,   # 3 seconds
+}
+
 def ensure_socket_dir():
     """Create /run/azazel if needed"""
     SOCKET_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -41,8 +53,55 @@ def ensure_socket_dir():
     # Set directory permissions so any user can access
     os.chmod(str(SOCKET_PATH.parent), 0o777)
 
+def check_rate_limit(action: str) -> bool:
+    """Check if action is rate-limited"""
+    if action not in RATE_LIMITS:
+        return True
+    
+    limit = RATE_LIMITS[action]
+    now = time.time()
+    last_time = last_action_time.get(action, 0)
+    
+    if now - last_time < limit:
+        return False
+    
+    last_action_time[action] = now
+    return True
+
+def execute_wifi_action(action_name: str, params: dict) -> dict:
+    """Execute Wi-Fi-specific actions (Python modules)"""
+    if action_name == "wifi_scan":
+        if not check_rate_limit("wifi_scan"):
+            return {"ok": False, "error": "Rate limit exceeded (1 req/sec)", "ts": time.time()}
+        return scan_wifi()
+    
+    elif action_name == "wifi_connect":
+        if not check_rate_limit("wifi_connect"):
+            return {"ok": False, "error": "Rate limit exceeded (1 req/3sec)", "ts": time.time()}
+        
+        # Extract parameters
+        ssid = params.get("ssid")
+        security = params.get("security", "UNKNOWN")
+        passphrase = params.get("passphrase")
+        persist = params.get("persist", False)
+        
+        if not ssid:
+            return {"ok": False, "error": "Missing SSID parameter", "ts": time.time()}
+        
+        # NEVER log passphrase
+        logger.info(f"Wi-Fi connect request: SSID={ssid}, Security={security}, Persist={persist}")
+        
+        return connect_wifi(ssid, security, passphrase, persist)
+    
+    return {"ok": False, "error": f"Unknown Wi-Fi action: {action_name}"}
+
 def execute_action(action_name, params=None):
     """Execute action script and return result"""
+    # Handle Wi-Fi actions via Python modules
+    if action_name in ["wifi_scan", "wifi_connect"]:
+        return execute_wifi_action(action_name, params or {})
+    
+    # Handle shell script actions
     script_path = ACTION_SCRIPTS.get(action_name)
     
     if not script_path:
@@ -73,12 +132,17 @@ def execute_action(action_name, params=None):
 def handle_client(conn, addr):
     """Handle incoming client connection"""
     try:
-        data = conn.recv(1024).decode('utf-8')
+        data = conn.recv(4096).decode('utf-8')  # Increased buffer for wifi_connect with passphrase
         request = json.loads(data)
         action = request.get('action')
         params = request.get('params', {})
         
-        logger.info(f"Received action: {action}")
+        # Special handling: NEVER log wifi_connect params (contains passphrase)
+        if action == 'wifi_connect':
+            logger.info(f"Received action: wifi_connect (params sanitized)")
+        else:
+            logger.info(f"Received action: {action}")
+        
         result = execute_action(action, params)
         
         response = json.dumps(result)

@@ -79,6 +79,66 @@
                         <span class="metric-label">AP Count</span>
                         <span class="metric-value" id="connAPCount">-</span>
                     </div>
+                    
+                    <!-- Wi-Fi Control Section -->
+                    <div class="wifi-control-section">
+                        <h3>Wi-Fi Control</h3>
+                        
+                        <div class="metric">
+                            <span class="metric-label">Wi-Fi State</span>
+                            <span class="badge" id="wifiState">DISCONNECTED</span>
+                        </div>
+                        
+                        <div class="metric">
+                            <span class="metric-label">USB NAT</span>
+                            <span class="badge" id="usbNat">OFF</span>
+                        </div>
+                        
+                        <div class="metric">
+                            <span class="metric-label">Internet Check</span>
+                            <span class="badge" id="internetCheck">UNKNOWN</span>
+                        </div>
+                        
+                        <div class="metric" id="captivePortalWarning" style="display: none;">
+                            <span class="metric-label">⚠️ Captive Portal</span>
+                            <span class="metric-value text-wrap" style="color: #ff6b35;">
+                                Captive portal suspected. Open a browser on your laptop/phone, complete the portal login, then press Re-Probe.
+                            </span>
+                        </div>
+                        
+                        <button class="btn btn-primary" onclick="scanWiFi()" style="margin-top: 10px; width: 100%;">
+                            📡 Scan Wi-Fi
+                        </button>
+                        
+                        <div id="wifiScanResults" style="display: none; margin-top: 10px;">
+                            <div style="max-height: 200px; overflow-y: auto; border: 1px solid #333; border-radius: 4px; padding: 5px;">
+                                <table style="width: 100%; font-size: 0.85em;">
+                                    <thead>
+                                        <tr style="border-bottom: 1px solid #444;">
+                                            <th style="text-align: left;">SSID</th>
+                                            <th style="text-align: center;">Signal</th>
+                                            <th style="text-align: center;">Security</th>
+                                            <th style="text-align: center;">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="wifiAPList">
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <div style="margin-top: 10px;">
+                                <input type="text" id="manualSSID" placeholder="Manual SSID" style="width: 100%; padding: 5px; border: 1px solid #333; border-radius: 4px; background: #1a1a1a; color: #fff;">
+                            </div>
+                            
+                            <div id="passphraseSection" style="margin-top: 10px; display: none;">
+                                <input type="password" id="wifiPassphrase" placeholder="Passphrase" style="width: 100%; padding: 5px; border: 1px solid #333; border-radius: 4px; background: #1a1a1a; color: #fff;">
+                            </div>
+                            
+                            <button class="btn btn-success" onclick="connectWiFi()" style="margin-top: 10px; width: 100%;">
+                                🔗 Connect
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 

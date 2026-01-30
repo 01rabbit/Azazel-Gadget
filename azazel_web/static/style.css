@@ -418,3 +418,41 @@ body {
     padding-top: 0;
     border-top: none;
 }
+
+/* Wi-Fi Control Section */
+.wifi-control-section {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 2px solid rgba(0, 212, 255, 0.3);
+}
+
+.wifi-control-section h3 {
+    color: var(--accent);
+    font-size: 1.1em;
+    margin-bottom: 10px;
+}
+
+.btn-small {
+    padding: 4px 8px;
+    font-size: 0.75em;
+    background: var(--accent);
+    color: #000;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-small:hover {
+    background: #00b8e6;
+    transform: scale(1.05);
+}
+
+.btn-success {
+    background: var(--color-safe);
+    color: #000;
+}
+
+.btn-success:hover {
+    background: #27ae60;
+}
