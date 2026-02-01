@@ -420,7 +420,13 @@ class FirstMinuteController:
         if not epd_script.exists():
             return
 
-        ssid = str(link.get("ssid") or "No SSID")
+        # SSIDを取得：persistent_connection_stateに完全版があればそれを使用
+        # （link_metaのSSIDは切り詰められている可能性があるため）
+        if self.persistent_connection_state.get("ssid"):
+            ssid = str(self.persistent_connection_state["ssid"])
+        else:
+            ssid = str(link.get("ssid") or "No SSID")
+        
         signal_dbm = self._parse_signal_dbm(link.get("signal"))
         signal_bucket = self._epd_signal_bucket(signal_dbm)
         
@@ -440,7 +446,9 @@ class FirstMinuteController:
         if stage in (Stage.INIT, Stage.PROBE, Stage.NORMAL):
             mode = "normal"
             fp = self._epd_fingerprint(mode, ssid, epd_ip, signal_bucket, "")
-            if fp == self.epd_last_fp:
+            self.logger.debug(f"EPD: fingerprint check - current={fp}, last={self.epd_last_fp}, match={fp == self.epd_last_fp}")
+            if not force and fp == self.epd_last_fp:
+                self.logger.debug(f"EPD: Skipping update - fingerprint unchanged")
                 return
             cmd = ["python3", str(epd_script), "--state", mode, "--ssid", ssid, "--ip", epd_ip]
             if signal_dbm is not None:
@@ -448,7 +456,9 @@ class FirstMinuteController:
         elif stage == Stage.DEGRADED:
             mode = "warning"
             fp = self._epd_fingerprint(mode, "", "", "", msg)
-            if fp == self.epd_last_fp:
+            self.logger.debug(f"EPD: fingerprint check - current={fp}, last={self.epd_last_fp}, match={fp == self.epd_last_fp}")
+            if not force and fp == self.epd_last_fp:
+                self.logger.debug(f"EPD: Skipping update - fingerprint unchanged")
                 return
             cmd = ["python3", str(epd_script), "--state", mode, "--msg", msg]
         elif stage == Stage.CONTAIN:
@@ -456,7 +466,9 @@ class FirstMinuteController:
             # ★ Phase 2: CONTAIN状態で統一メッセージを表示
             contain_msg = "ATTACK DETECTED"
             fp = self._epd_fingerprint(mode, "", "", "", contain_msg)
+            self.logger.debug(f"EPD: fingerprint check - current={fp}, last={self.epd_last_fp}, match={fp == self.epd_last_fp}")
             if not force and fp == self.epd_last_fp:
+                self.logger.debug(f"EPD: Skipping update - fingerprint unchanged")
                 return
             cmd = ["python3", str(epd_script), "--state", mode, "--msg", contain_msg]
         else:
@@ -473,33 +485,6 @@ class FirstMinuteController:
         except Exception as e:
             self.logger.warning(f"EPD: Update failed: {e}")
             return
-
-        # DEPRECATED CODE BELOW - removing duplicate logic
-        if False:  # Keep original code structure but disable
-            fp = self._epd_fingerprint(mode, "", "", "", contain_msg)
-            if fp == self.epd_last_fp:
-                return
-            cmd = ["python3", str(epd_script), "--state", mode, "--msg", contain_msg]
-        elif stage == Stage.DECEPTION:
-            mode = "stale"
-            fp = self._epd_fingerprint(mode, "", "", "", msg)
-            if fp == self.epd_last_fp:
-                return
-            cmd = ["python3", str(epd_script), "--state", mode, "--msg", msg]
-        else:
-            mode = "warning"
-            msg = "UNKNOWN STATE"
-            fp = self._epd_fingerprint(mode, "", "", "", msg)
-            if fp == self.epd_last_fp:
-                return
-            cmd = ["python3", str(epd_script), "--state", mode, "--msg", msg]
-
-        try:
-            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-            self.epd_last_fp = fp
-            self.epd_last_update = now
-        except Exception:
-            pass
 
     def _maybe_write_wifi_health(self, link_meta: Dict[str, object]) -> None:
         now = time.time()
