@@ -44,6 +44,33 @@ class StatusHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps(self.ctx, default=str).encode("utf-8"))
 
+    def do_POST(self):
+        """Handle POST requests for action endpoints.
+        
+        Supported endpoints:
+        - /action/reprobe: Force re-run safety probes
+        - /action/refresh: Force refresh EPD display and state
+        """
+        if self.path == "/action/reprobe":
+            # Signal controller to re-run probes
+            self.ctx["force_reprobe"] = True
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "ok", "action": "reprobe"}).encode("utf-8"))
+        elif self.path == "/action/refresh":
+            # Signal controller to force EPD update
+            self.ctx["force_epd_update"] = True
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "ok", "action": "refresh"}).encode("utf-8"))
+        else:
+            self.send_response(404)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": "unknown endpoint"}).encode("utf-8"))
+
     def log_message(self, fmt, *args):  # pragma: no cover - avoid noisy logs
         return
 
@@ -378,11 +405,11 @@ class FirstMinuteController:
             return (mode, ssid, up_ip, signal_bucket)
         return (mode, msg)
 
-    def _maybe_update_epd(self, stage: Stage, summary: Dict[str, object], link_meta: Dict[str, object]) -> None:
+    def _maybe_update_epd(self, stage: Stage, summary: Dict[str, object], link_meta: Dict[str, object], force: bool = False) -> None:
         if self.dry_run or not self.epd_enabled:
             return
         now = time.time()
-        if (now - self.epd_last_update) < self.epd_min_interval:
+        if not force and (now - self.epd_last_update) < self.epd_min_interval:
             return
 
         link = link_meta.get("link", {}) if link_meta else {}
@@ -428,6 +455,27 @@ class FirstMinuteController:
             mode = "danger"
             # ★ Phase 2: CONTAIN状態で統一メッセージを表示
             contain_msg = "ATTACK DETECTED"
+            fp = self._epd_fingerprint(mode, "", "", "", contain_msg)
+            if not force and fp == self.epd_last_fp:
+                return
+            cmd = ["python3", str(epd_script), "--state", mode, "--msg", contain_msg]
+        else:
+            self.logger.debug(f"EPD: Unknown stage {stage}, skipping update")
+            return
+
+        # Execute EPD update command
+        self.logger.info(f"EPD: Updating display - mode={mode}, stage={stage.value}, forced={force}")
+        try:
+            subprocess.run(cmd, timeout=30, check=False)
+            self.epd_last_update = now
+            self.epd_last_fp = fp
+            self.logger.info(f"EPD: Update successful")
+        except Exception as e:
+            self.logger.warning(f"EPD: Update failed: {e}")
+            return
+
+        # DEPRECATED CODE BELOW - removing duplicate logic
+        if False:  # Keep original code structure but disable
             fp = self._epd_fingerprint(mode, "", "", "", contain_msg)
             if fp == self.epd_last_fp:
                 return
@@ -749,6 +797,14 @@ class FirstMinuteController:
         self.handle_signals()
         probe_done = False
         while not self.stop_event.is_set():
+            # Check for force flags from Status API
+            force_reprobe = self.status_ctx.pop("force_reprobe", False)
+            force_epd_update = self.status_ctx.pop("force_epd_update", False)
+            
+            if force_reprobe:
+                self.logger.info("ACTION: Force re-probe requested via API")
+                probe_done = False  # Force probe re-run
+            
             link_state, link_meta, new_link = self.poll_wifi()
             signals: Dict[str, object] = {"link_up": link_state}
             if link_meta.get("bssid"):
@@ -906,7 +962,7 @@ class FirstMinuteController:
                 }
             )
             self.write_snapshot(summary, link_meta)
-            self._maybe_update_epd(state, summary, link_meta)
+            self._maybe_update_epd(state, summary, link_meta, force=force_epd_update)
             self._maybe_write_wifi_health(link_meta)
             if self.pretty_console:
                 self.render_console(state, summary, link_meta)
