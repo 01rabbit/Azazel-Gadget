@@ -217,6 +217,44 @@ class FirstMinuteController:
         cpu_usage = self._get_cpu_usage()
         mem_usage = self._get_memory_usage()
         
+        # Gather Wi-Fi channel scan data
+        channel_congestion = "unknown"
+        channel_ap_count = 0
+        try:
+            from azazel_zero.sensors.wifi_channel_scanner import scan_wifi_channels
+            scan_result = scan_wifi_channels(self.cfg.interfaces.get("upstream", "wlan0"))
+            if scan_result.get("scan_success"):
+                channel_congestion = scan_result.get("congestion_level", "unknown")
+                channel_ap_count = scan_result.get("ap_count", 0)
+        except Exception as e:
+            self.logger.debug(f"snapshot: Wi-Fi channel scan failed: {e}")
+        
+        # Gather Suricata alerts from eve.json (if available)
+        suricata_critical = 0
+        suricata_warning = 0
+        try:
+            eve_log = Path("/var/log/suricata/eve.json")
+            if eve_log.exists():
+                # Read the last 50 lines from eve.json and count alert events by severity
+                with open(eve_log, "r") as f:
+                    # Seek to end and read backwards
+                    lines = f.readlines()[-50:]
+                
+                for line in lines:
+                    try:
+                        event = json.loads(line)
+                        if event.get("event_type") == "alert":
+                            # Alert severity: 1=critical, 2=warning, 3=notice
+                            severity = event.get("alert", {}).get("severity", 3)
+                            if severity == 1:
+                                suricata_critical += 1
+                            elif severity == 2:
+                                suricata_warning += 1
+                    except (json.JSONDecodeError, KeyError):
+                        continue
+        except Exception as e:
+            self.logger.debug(f"snapshot: Suricata alerts gathering failed: {e}")
+        
         snap = {
             "now_time": time.strftime("%H:%M:%S"),
             "snapshot_epoch": time.time(),
@@ -229,9 +267,9 @@ class FirstMinuteController:
             "down_ip": self.cfg.interfaces.get("mgmt_ip", "-"),
             "up_if": self.cfg.interfaces.get("upstream", "wlan0"),
             "user_state": self._user_state_from_stage(self.current_stage),
-            "recommendation": summary.get("reason", "確認中"),
+            "recommendation": summary.get("reason", "Checking"),
             "reasons": [summary.get("reason", "")] if summary.get("reason") else [],
-            "next_action_hint": "再評価を待機",
+            "next_action_hint": "Waiting for re-evaluation",
             "quic": "blocked" if self.current_stage in (Stage.PROBE, Stage.DEGRADED, Stage.CONTAIN) else "allowed",
             "doh": "blocked",
             "dns_mode": "forced via Azazel DNS",
@@ -255,6 +293,12 @@ class FirstMinuteController:
             "cpu_percent": cpu_usage,
             "mem_percent": mem_usage,
             "temp_c": cpu_temp,
+            # Channel metrics (from Wi-Fi scan)
+            "channel_congestion": channel_congestion,
+            "channel_ap_count": channel_ap_count,
+            # Suricata IDS alerts
+            "suricata_critical": suricata_critical,
+            "suricata_warning": suricata_warning,
             # Default connection section (will be overwritten with persisted state below)
             "connection": {
                 "wifi_state": "DISCONNECTED",

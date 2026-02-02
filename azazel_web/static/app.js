@@ -34,10 +34,7 @@ function updateUI(state) {
     // Map ui_snapshot.json fields to UI elements
     
     // Header
-    updateElement('headerSSID', state.ssid || '-');
     updateElement('headerClock', state.now_time || '--:--:--');
-    updateElement('headerTemp', `${state.temp_c || '--'}°C`);
-    updateElement('headerCPU', `${state.cpu_percent || '--'}%`);
     
     // Risk Assessment (based on internal state)
     const internal = state.internal || {};
@@ -97,9 +94,40 @@ function updateUI(state) {
     const upMbps = degrade.rate_mbps || 0;
     updateElement('ctrlSpeed', `${downMbps} / ${upMbps}`);
     
+    // Security - Probe results
+    const probe = state.probe || {};
+    const probeStatus = probe.tls_total > 0 
+        ? `${probe.tls_ok}/${probe.tls_total} ✓` + (probe.blocked > 0 ? ` (${probe.blocked} blocked)` : '')
+        : '-';
+    updateElement('ctrlProbe', probeStatus);
+    
+    // Security - IDS (Suricata alerts)
+    const suricataCritical = state.suricata_critical || 0;
+    const suricataWarning = state.suricata_warning || 0;
+    let idsStatus = '-';
+    if (suricataCritical > 0 || suricataWarning > 0) {
+        const parts = [];
+        if (suricataCritical > 0) parts.push(`${suricataCritical} critical`);
+        if (suricataWarning > 0) parts.push(`${suricataWarning} warning`);
+        idsStatus = parts.join(', ');
+    }
+    updateElement('ctrlIDS', idsStatus);
+    
     // Evidence
     updateBadge('evidState', mapState(stateVal));
     updateElement('evidSuspicion', suspicion);
+    
+    // Scan Results - Channel congestion and AP count
+    const channelCongestion = state.channel_congestion || 'unknown';
+    const apCount = state.channel_ap_count || 0;
+    const scanStatus = apCount > 0 
+        ? `${apCount} APs (${channelCongestion})` 
+        : '-';
+    updateElement('evidScan', scanStatus);
+    
+    // Decision - State + Suspicion
+    const decisionText = `State: ${mapState(stateVal)}, Suspicion: ${suspicion}`;
+    updateElement('evidDecision', decisionText);
     
     // System Health Card
     updateElement('sysCPUTemp', `${state.temp_c || '--'}°C`);

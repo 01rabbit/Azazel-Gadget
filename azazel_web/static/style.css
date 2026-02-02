@@ -43,20 +43,25 @@ body {
 }
 
 .header-ssid {
-    color: var(--text-secondary);
-    margin-left: 10px;
-    font-size: 0.95em;
+    display: none;
+}
+
+#headerSSID,
+#headerTemp,
+#headerCPU {
+    display: none !important;
 }
 
 .header-right {
     display: flex;
     gap: 12px;
     font-family: monospace;
-    font-size: 1em;
+    font-size: 1.2em;
 }
 
 .header-clock {
     color: var(--accent);
+    font-size: 1.35em;
 }
 
 /* Container */
