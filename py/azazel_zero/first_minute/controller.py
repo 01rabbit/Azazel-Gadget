@@ -136,13 +136,16 @@ class FirstMinuteController:
         self.persistent_connection_state: Dict[str, object] = {}
         self.epd_last_update = 0.0
         self.epd_last_fp: Optional[tuple] = None
+        # Track signal strength separately to skip updates when only signal changes
+        self.epd_last_signal_bucket: Optional[str] = None
         self._eve_offset = 0
         self._eve_inode: Optional[int] = None
         self._eve_partial = ""
         self._eve_initialized = False
         self._eve_parse_errors = {"json_decode_fail": 0, "skipped_lines": 0}
         try:
-            self.epd_min_interval = float(os.environ.get("AZAZEL_EPD_MIN_INTERVAL", "8"))
+            # デフォルト30秒：電子ペーパーの刷新頻度を抑制、不要な更新を削減
+            self.epd_min_interval = float(os.environ.get("AZAZEL_EPD_MIN_INTERVAL", "30"))
         except ValueError:
             self.epd_min_interval = 8.0
         self.epd_enabled = os.environ.get("AZAZEL_EPD", "1").strip().lower() not in ("0", "false", "no", "off")
@@ -401,8 +404,10 @@ class FirstMinuteController:
         signal_bucket: str,
         msg: str,
     ) -> tuple:
+        # For NORMAL state: only SSID and IP matter; signal strength changes don't warrant refresh
         if mode == "normal":
-            return (mode, ssid, up_ip, signal_bucket)
+            return (mode, ssid, up_ip)
+        # For other states: include message
         return (mode, msg)
 
     def _maybe_update_epd(self, stage: Stage, summary: Dict[str, object], link_meta: Dict[str, object], force: bool = False) -> None:
@@ -420,12 +425,9 @@ class FirstMinuteController:
         if not epd_script.exists():
             return
 
-        # SSIDを取得：persistent_connection_stateに完全版があればそれを使用
-        # （link_metaのSSIDは切り詰められている可能性があるため）
-        if self.persistent_connection_state.get("ssid"):
-            ssid = str(self.persistent_connection_state["ssid"])
-        else:
-            ssid = str(link.get("ssid") or "No SSID")
+        # SSIDを取得：実際に接続されているSSIDを優先
+        # link_meta は実際のシステム接続状態を反映している
+        ssid = str(link.get("ssid") or "No SSID")
         
         signal_dbm = self._parse_signal_dbm(link.get("signal"))
         signal_bucket = self._epd_signal_bucket(signal_dbm)
@@ -445,11 +447,23 @@ class FirstMinuteController:
         epd_ip = up_ip if up_ip and up_ip != "-" else "No IP"
         if stage in (Stage.INIT, Stage.PROBE, Stage.NORMAL):
             mode = "normal"
-            fp = self._epd_fingerprint(mode, ssid, epd_ip, signal_bucket, "")
+            # フィンガープリント：信号強度を除外（信号のみの変化で更新をスキップ）
+            fp = self._epd_fingerprint(mode, ssid, epd_ip, "", "")
+            
             self.logger.debug(f"EPD: fingerprint check - current={fp}, last={self.epd_last_fp}, match={fp == self.epd_last_fp}")
+            self.logger.debug(f"EPD: signal_bucket - current={signal_bucket}, last={self.epd_last_signal_bucket}")
+            
+            # 主要な状態が変わったかチェック
             if not force and fp == self.epd_last_fp:
-                self.logger.debug(f"EPD: Skipping update - fingerprint unchanged")
-                return
+                # 主要な状態（SSID/IP/stage）は変わっていない
+                if signal_bucket == self.epd_last_signal_bucket:
+                    # 信号強度のアイコンも変わっていない → 更新スキップ
+                    self.logger.debug(f"EPD: Skipping update - no meaningful changes")
+                    return
+                else:
+                    # 信号強度のアイコンが変わった（例：strong→medium）
+                    self.logger.info(f"EPD: Updating display - signal icon changed ({self.epd_last_signal_bucket}→{signal_bucket})")
+                    # ここで更新処理に進む（下記のcmd実行へ）
             cmd = ["python3", str(epd_script), "--state", mode, "--ssid", ssid, "--ip", epd_ip]
             if signal_dbm is not None:
                 cmd += ["--signal", str(signal_dbm)]
@@ -481,6 +495,9 @@ class FirstMinuteController:
             subprocess.run(cmd, timeout=30, check=False)
             self.epd_last_update = now
             self.epd_last_fp = fp
+            # 信号強度も更新 (NORMAL状態時)
+            if stage in (Stage.INIT, Stage.PROBE, Stage.NORMAL):
+                self.epd_last_signal_bucket = signal_bucket
             self.logger.info(f"EPD: Update successful")
         except Exception as e:
             self.logger.warning(f"EPD: Update failed: {e}")

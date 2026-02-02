@@ -44,9 +44,18 @@ function updateUI(state) {
     const suspicion = internal.suspicion || 0;
     const stateVal = (internal.state_name || 'NORMAL').toUpperCase();
     
-    updateElement('riskScore', suspicion);
-    updateElement('riskStatusValue', mapState(stateVal));
-    updateElement('riskReason', (state.reasons || [])[0] || state.recommendation || '-');
+    // Update score circle
+    const scoreCircle = document.getElementById('scoreCircle');
+    scoreCircle.textContent = suspicion;
+    
+    const statusEl = document.getElementById('riskStatus');
+    const cardEl = document.getElementById('cardRisk');
+    const statusClass = getStatusClass(stateVal);
+    
+    scoreCircle.className = `score-circle ${statusClass}`;
+    statusEl.className = `risk-status ${statusClass}`;
+    statusEl.textContent = mapState(stateVal);
+    cardEl.className = `card card-risk ${statusClass}`;
     
     // Threat level based on suspicion
     let threatLevel = 'LOW';
@@ -55,21 +64,13 @@ function updateUI(state) {
     else if (suspicion >= 15) threatLevel = 'MEDIUM';
     updateElement('riskThreatLevel', threatLevel);
     
-    // Update risk score color
-    const scoreEl = document.getElementById('riskScore');
-    const statusEl = document.getElementById('riskStatus');
-    const cardEl = document.getElementById('cardRisk');
-    const statusClass = getStatusClass(stateVal);
-    
-    scoreEl.className = `score-value ${statusClass}`;
-    statusEl.className = `risk-status ${statusClass}`;
-    statusEl.textContent = mapState(stateVal);
-    cardEl.className = `card card-risk ${statusClass}`;
+    updateElement('riskRecommendation', state.recommendation || '-');
+    updateElement('riskReason', (state.reasons || [])[0] || '-');
     
     // Connection Info
-    updateElement('connBSSID', state.ssid || '-');
+    updateElement('connSSID', state.ssid || '-');
+    updateElement('connBSSID', state.bssid || '-');
     updateElement('connGateway', state.gateway_ip || '-');
-    updateElement('connChannel', state.channel || '-');
     updateElement('connSignal', `${state.signal_dbm || '-'} dBm`);
     
     // Wi-Fi Connection State
@@ -92,8 +93,9 @@ function updateUI(state) {
     updateBadge('ctrlDegrade', degrade.on ? 'ON' : 'OFF');
     updateBadge('ctrlQUIC', state.quic || 'ALLOWED');
     updateBadge('ctrlDoH', state.doh || 'BLOCKED');
-    updateElement('ctrlDownMbps', `${degrade.rate_mbps || 0} Mbps`);
-    updateElement('ctrlUpMbps', `-`);
+    const downMbps = degrade.rate_mbps || 0;
+    const upMbps = degrade.rate_mbps || 0;
+    updateElement('ctrlSpeed', `${downMbps} / ${upMbps}`);
     
     // Evidence
     updateBadge('evidState', mapState(stateVal));
@@ -170,8 +172,12 @@ function updateBadge(id, value) {
 
 // Display error state when API unavailable
 function displayErrorState() {
-    updateElement('riskScore', '?');
-    updateElement('riskStatusValue', 'ERROR');
+    const scoreCircle = document.getElementById('scoreCircle');
+    if (scoreCircle) scoreCircle.textContent = '?';
+    
+    const statusEl = document.getElementById('riskStatus');
+    if (statusEl) statusEl.textContent = 'ERROR';
+    
     updateElement('headerClock', '--:--:--');
 }
 
