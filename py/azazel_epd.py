@@ -11,7 +11,7 @@ Dependencies:
 
 Usage:
   # NORMAL state
-  python3 py/azazel_epd.py --state normal --ssid "AzazelNet" --ip "172.16.0.1" --signal -44
+  python3 py/azazel_epd.py --state normal --ssid "AzazelNet" --signal -44 --risk-status "SAFE" --risk-level "LOW"
   
   # WARNING state
   python3 py/azazel_epd.py --state warning --msg "CHECK WEB"
@@ -181,19 +181,20 @@ def normalize_signal_dbm(signal: Optional[int]) -> Optional[int]:
     return val
 
 
-def render_normal(ssid: str, ip: str, icon_dir: Path, signal: Optional[int] = None) -> Tuple[Image.Image, Image.Image]:
+def render_normal(ssid: str, icon_dir: Path, signal: Optional[int] = None, risk_status: str = "SAFE", suspicion: int = 0) -> Tuple[Image.Image, Image.Image]:
     """
     Render NORMAL state:
     - White background
     - Wi-Fi icon (top-left, black) - changes based on signal strength
-    - IP address (center, large, black)
-    - SSID (bottom, small, black)
+    - ESSID (center, large, black) - moved from bottom
+    - Risk assessment (bottom, 2 lines, small, black) - State and Suspicion score
     
     Args:
         ssid: Wi-Fi SSID ("Not Connected" if unavailable)
-        ip: IP address ("0.0.0.0" if unavailable)
         icon_dir: Path to icon directory
         signal: Signal strength in dBm (e.g., -44) or 0-100% (converted) or None for disconnected
+        risk_status: Risk status (e.g., "SAFE", "CHECKING", "LIMITED", "CONTAINED")
+        suspicion: Suspicion score (0-100)
     """
     # Create 1-bit images: 0=black, 255=white for display; 0=no red, 255=red for red layer
     black_img = Image.new('1', (EPD_WIDTH, EPD_HEIGHT), 255)  # White background
@@ -201,9 +202,9 @@ def render_normal(ssid: str, ip: str, icon_dir: Path, signal: Optional[int] = No
     
     draw_black = ImageDraw.Draw(black_img)
     
-    # Load fonts - StardosStencilBold for NORMAL state
-    font_ip = load_font(23, "stardos")  # IP address - 23pt
-    font_ssid = load_font(20, "stardos")  # SSID - 20pt
+    # Load fonts
+    font_ssid = load_font(23, "stardos")  # ESSID - 23pt (StardosStencilBold, center)
+    font_evidence = load_font(20, "icbm")  # Evidence (State/Suspicion) - 20pt (icbmss20, bottom)
     
     # Select Wi-Fi icon based on signal strength (dBm)
     # dBm scale: closer to 0 = stronger, closer to -100 = weaker
@@ -226,22 +227,32 @@ def render_normal(ssid: str, ip: str, icon_dir: Path, signal: Optional[int] = No
     icon_y = 8
     black_img.paste(wifi_icon_1bit, (icon_x, icon_y))
     
-    # Draw IP address next to icon (20pt, black)
-    ip_x = icon_x + 55  # Icon width + small gap
-    ip_y = 20
-    draw_black.text((ip_x, ip_y), ip, fill=0, font=font_ip)  # 0=black
+    # Draw ESSID next to icon (23pt, black) - moved from bottom to center
+    ssid_x = icon_x + 55  # Icon width + small gap
+    ssid_y = 20
+    draw_black.text((ssid_x, ssid_y), ssid, fill=0, font=font_ssid)  # 0=black
     
     # Draw horizontal line
     line_y = 65
     line_margin = 10
     draw_black.line([(line_margin, line_y), (EPD_WIDTH - line_margin, line_y)], fill=0, width=2)
     
-    # Draw SSID (bottom center, 30pt)
-    ssid_bbox = draw_black.textbbox((0, 0), ssid, font=font_ssid)
-    ssid_width = ssid_bbox[2] - ssid_bbox[0]
-    ssid_x = (EPD_WIDTH - ssid_width) // 2
-    ssid_y = 80
-    draw_black.text((ssid_x, ssid_y), ssid, fill=0, font=font_ssid)  # 0=black
+    # Draw evidence (bottom, 2 lines) - State: STATUS, Suspicion: SCORE
+    state_text = f"State: {risk_status}"
+    suspicion_text = f"Suspicion: {suspicion}"
+    
+    # Calculate positions for centered 2-line text
+    state_bbox = draw_black.textbbox((0, 0), state_text, font=font_evidence)
+    state_width = state_bbox[2] - state_bbox[0]
+    state_x = (EPD_WIDTH - state_width) // 2
+    state_y = 70
+    draw_black.text((state_x, state_y), state_text, fill=0, font=font_evidence)  # 0=black
+    
+    suspicion_bbox = draw_black.textbbox((0, 0), suspicion_text, font=font_evidence)
+    suspicion_width = suspicion_bbox[2] - suspicion_bbox[0]
+    suspicion_x = (EPD_WIDTH - suspicion_width) // 2
+    suspicion_y = 100
+    draw_black.text((suspicion_x, suspicion_y), suspicion_text, fill=0, font=font_evidence)  # 0=black
     
     return black_img, red_img
 
@@ -513,7 +524,8 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s --state normal --ssid "AzazelNet" --ip "172.16.0.1"
+  %(prog)s --state normal --ssid "AzazelNet" --risk-status "SAFE" --suspicion 0
+  %(prog)s --state normal --ssid "MyWiFi" --signal -55 --risk-status "LIMITED" --suspicion 25
   %(prog)s --state warning --msg "CHECK WEB"
   %(prog)s --state danger --msg "REMOVE DEVICE"
   %(prog)s --state stale --msg "NO UPDATE"
@@ -525,8 +537,9 @@ Examples:
                        choices=['normal', 'warning', 'danger', 'stale'],
                        help='Display state')
     parser.add_argument('--ssid', help='Wi-Fi SSID (for normal state)')
-    parser.add_argument('--ip', help='IP address (for normal state)')
     parser.add_argument('--signal', type=int, help='Wi-Fi signal strength in dBm (negative, e.g., -55) or 0-100%')
+    parser.add_argument('--risk-status', default='SAFE', help='Risk status (for normal state): SAFE, CHECKING, LIMITED, CONTAINED')
+    parser.add_argument('--suspicion', type=int, default=0, help='Suspicion score (for normal state, 0-100)')
     parser.add_argument('--msg', help='Message (for warning/danger/stale states)')
     parser.add_argument('--dry-run', action='store_true',
                        help='Generate preview only, do not update EPD')
@@ -542,8 +555,11 @@ Examples:
     
     # Validate arguments
     if args.state == 'normal':
-        if not args.ssid or not args.ip:
-            parser.error("--ssid and --ip are required for normal state")
+        if not args.ssid:
+            parser.error("--ssid is required for normal state")
+        # Ensure suspicion is in valid range
+        if args.suspicion < 0 or args.suspicion > 100:
+            parser.error("--suspicion must be between 0 and 100")
     else:
         if not args.msg:
             parser.error(f"--msg is required for {args.state} state")
@@ -552,7 +568,7 @@ Examples:
     print(f"Rendering {args.state.upper()} state...")
     
     if args.state == 'normal':
-        black_img, red_img = render_normal(args.ssid, args.ip, icon_dir, args.signal)
+        black_img, red_img = render_normal(args.ssid, icon_dir, args.signal, args.risk_status, args.suspicion)
     elif args.state == 'warning':
         black_img, red_img = render_warning(args.msg, icon_dir)
     elif args.state == 'danger':

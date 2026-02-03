@@ -454,6 +454,30 @@ class FirstMinuteController:
         # For other states: include message
         return (mode, msg)
 
+    def _get_risk_status(self, stage: Stage) -> str:
+        """Map stage to risk status string for EPD display."""
+        status_map = {
+            Stage.NORMAL: "SAFE",
+            Stage.INIT: "CHECKING",
+            Stage.PROBE: "CHECKING",
+            Stage.DEGRADED: "LIMITED",
+            Stage.CONTAIN: "CONTAINED",
+            Stage.DECEPTION: "DECEPTION"
+        }
+        return status_map.get(stage, "UNKNOWN")
+    
+    def _get_risk_status(self, stage: Stage) -> str:
+        """Map stage to risk status string for EPD display."""
+        status_map = {
+            Stage.NORMAL: "SAFE",
+            Stage.INIT: "CHECKING",
+            Stage.PROBE: "CHECKING",
+            Stage.DEGRADED: "LIMITED",
+            Stage.CONTAIN: "CONTAINED",
+            Stage.DECEPTION: "DECEPTION"
+        }
+        return status_map.get(stage, "UNKNOWN")
+
     def _maybe_update_epd(self, stage: Stage, summary: Dict[str, object], link_meta: Dict[str, object], force: bool = False) -> None:
         if self.dry_run or not self.epd_enabled:
             return
@@ -489,17 +513,22 @@ class FirstMinuteController:
             msg = (reason or stage.value)[:12]  # その他のステートも12文字制限
 
         epd_ip = up_ip if up_ip and up_ip != "-" else "No IP"
+        
+        # Get risk assessment (from suspicion score and stage)
+        suspicion = int(summary.get("suspicion", 0))
+        risk_status = self._get_risk_status(stage)
+        
         if stage in (Stage.INIT, Stage.PROBE, Stage.NORMAL):
             mode = "normal"
-            # フィンガープリント：信号強度を除外（信号のみの変化で更新をスキップ）
-            fp = self._epd_fingerprint(mode, ssid, epd_ip, "", "")
+            # フィンガープリント：信号強度を除外、risk_statusとsuspicionを含む
+            fp = self._epd_fingerprint(mode, ssid, epd_ip, risk_status, str(suspicion))
             
             self.logger.debug(f"EPD: fingerprint check - current={fp}, last={self.epd_last_fp}, match={fp == self.epd_last_fp}")
             self.logger.debug(f"EPD: signal_bucket - current={signal_bucket}, last={self.epd_last_signal_bucket}")
             
             # 主要な状態が変わったかチェック
             if not force and fp == self.epd_last_fp:
-                # 主要な状態（SSID/IP/stage）は変わっていない
+                # 主要な状態（SSID/IP/stage/risk）は変わっていない
                 if signal_bucket == self.epd_last_signal_bucket:
                     # 信号強度のアイコンも変わっていない → 更新スキップ
                     self.logger.debug(f"EPD: Skipping update - no meaningful changes")
@@ -508,7 +537,7 @@ class FirstMinuteController:
                     # 信号強度のアイコンが変わった（例：strong→medium）
                     self.logger.info(f"EPD: Updating display - signal icon changed ({self.epd_last_signal_bucket}→{signal_bucket})")
                     # ここで更新処理に進む（下記のcmd実行へ）
-            cmd = ["python3", str(epd_script), "--state", mode, "--ssid", ssid, "--ip", epd_ip]
+            cmd = ["python3", str(epd_script), "--state", mode, "--ssid", ssid, "--risk-status", risk_status, "--suspicion", str(suspicion)]
             if signal_dbm is not None:
                 cmd += ["--signal", str(signal_dbm)]
         elif stage == Stage.DEGRADED:
