@@ -22,7 +22,13 @@ logger = logging.getLogger("wifi_connect")
 # Import wifi_scan helpers
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
-from wifi_scan import get_wireless_interface, check_wpa_supplicant, check_networkmanager
+from wifi_scan import (
+    get_wireless_interface,
+    check_wpa_supplicant,
+    check_networkmanager,
+    get_saved_networks_wpa,
+    get_saved_networks_nm,
+)
 
 
 def get_usb_interface() -> Optional[str]:
@@ -58,7 +64,7 @@ def get_usb_interface() -> Optional[str]:
         return None
 
 
-def validate_input(ssid: str, security: str, passphrase: Optional[str]) -> Optional[str]:
+def validate_input(ssid: str, security: str, passphrase: Optional[str], is_saved: bool = False) -> Optional[str]:
     """Validate Wi-Fi connection parameters"""
     # SSID length
     if not ssid or len(ssid) > 32:
@@ -66,24 +72,89 @@ def validate_input(ssid: str, security: str, passphrase: Optional[str]) -> Optio
     
     # Passphrase requirement
     if security and security.upper() != "OPEN":
-        if not passphrase:
+        if not passphrase and not is_saved:
             return "Passphrase required for protected network"
-        if len(passphrase) < 8 or len(passphrase) > 63:
+        if passphrase and (len(passphrase) < 8 or len(passphrase) > 63):
             return "Invalid passphrase length (8-63 chars typical)"
     
     return None
 
 
+def parse_security(security: str) -> Dict[str, bool]:
+    """Normalize security label into flags."""
+    sec = (security or "").upper().strip()
+    return {
+        "open": sec == "OPEN",
+        "wpa3": "WPA3" in sec,
+        "wpa2": "WPA2" in sec,
+        "wpa": ("WPA" in sec) and ("WPA2" not in sec) and ("WPA3" not in sec),
+    }
+
+
+def is_nm_managed(iface: str) -> bool:
+    """Check if NetworkManager is actively managing the interface."""
+    try:
+        result = subprocess.run(
+            ["nmcli", "-t", "-f", "DEVICE,STATE", "dev"],
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
+        if result.returncode != 0:
+            return False
+        for line in result.stdout.splitlines():
+            if ":" not in line:
+                continue
+            dev, state = line.split(":", 1)
+            if dev != iface:
+                continue
+            state = state.strip().lower()
+            return state not in {"unmanaged", "unavailable"}
+        return False
+    except Exception:
+        return False
+
+
+def run_wpa_cli(iface: str, *args: str, timeout: int = 5) -> subprocess.CompletedProcess:
+    """Run wpa_cli and return the CompletedProcess."""
+    return subprocess.run(
+        ["wpa_cli", "-i", iface, *args],
+        capture_output=True,
+        text=True,
+        timeout=timeout
+    )
+
+
+def wpa_cli_ok(result: subprocess.CompletedProcess) -> bool:
+    """Check if wpa_cli command succeeded based on return code and stdout."""
+    if result.returncode != 0:
+        return False
+    stdout = (result.stdout or "").strip()
+    return stdout != "FAIL"
+
+
+def parse_wpa_status(text: str) -> Dict[str, str]:
+    """Parse wpa_cli status output into a dict."""
+    status = {}
+    for line in (text or "").splitlines():
+        if "=" in line:
+            key, val = line.split("=", 1)
+            status[key.strip()] = val.strip()
+    return status
+
+
 def connect_wpa(iface: str, ssid: str, security: str, passphrase: Optional[str], persist: bool) -> Dict[str, Any]:
     """Connect using wpa_supplicant/wpa_cli"""
     try:
+        sec_flags = parse_security(security)
+
         # Check if network already exists
-        result = subprocess.run(
-            ["wpa_cli", "-i", iface, "list_networks"],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
+        result = run_wpa_cli(iface, "list_networks")
+        if not wpa_cli_ok(result):
+            return {
+                "ok": False,
+                "error": (result.stderr.strip() or result.stdout.strip() or "wpa_cli list_networks failed")
+            }
         
         network_id = None
         for line in result.stdout.splitlines()[1:]:
@@ -93,79 +164,111 @@ def connect_wpa(iface: str, ssid: str, security: str, passphrase: Optional[str],
                 break
         
         # Create new network if needed
+        created = False
         if network_id is None:
-            result = subprocess.run(
-                ["wpa_cli", "-i", iface, "add_network"],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
+            result = run_wpa_cli(iface, "add_network")
+            if not wpa_cli_ok(result):
+                return {
+                    "ok": False,
+                    "error": (result.stderr.strip() or result.stdout.strip() or "wpa_cli add_network failed")
+                }
             network_id = result.stdout.strip()
-            
+            if not network_id.isdigit():
+                return {"ok": False, "error": f"wpa_cli add_network returned invalid id: {network_id}"}
+            created = True
+
+        # Configure network if newly created or credentials provided
+        if created or passphrase or sec_flags["open"]:
             # Set SSID
-            subprocess.run(
-                ["wpa_cli", "-i", iface, "set_network", network_id, "ssid", f'"{ssid}"'],
-                capture_output=True,
-                timeout=5
-            )
-            
-            # Set security
-            if security.upper() == "OPEN":
-                subprocess.run(
-                    ["wpa_cli", "-i", iface, "set_network", network_id, "key_mgmt", "NONE"],
-                    capture_output=True,
-                    timeout=5
-                )
+            result = run_wpa_cli(iface, "set_network", network_id, "ssid", f'"{ssid}"')
+            if not wpa_cli_ok(result):
+                return {
+                    "ok": False,
+                    "error": (result.stderr.strip() or result.stdout.strip() or "wpa_cli set_network ssid failed")
+                }
+
+            if sec_flags["open"]:
+                result = run_wpa_cli(iface, "set_network", network_id, "key_mgmt", "NONE")
+                if not wpa_cli_ok(result):
+                    return {
+                        "ok": False,
+                        "error": (result.stderr.strip() or result.stdout.strip() or "wpa_cli set_network key_mgmt failed")
+                    }
             else:
-                # WPA/WPA2/WPA3 - use psk
-                subprocess.run(
-                    ["wpa_cli", "-i", iface, "set_network", network_id, "psk", f'"{passphrase}"'],
-                    capture_output=True,
-                    timeout=5
-                )
-            
-            # Enable network
-            subprocess.run(
-                ["wpa_cli", "-i", iface, "enable_network", network_id],
-                capture_output=True,
-                timeout=5
-            )
+                # WPA/WPA2/WPA3 handling
+                if sec_flags["wpa3"]:
+                    key_mgmt = "SAE WPA-PSK" if sec_flags["wpa2"] else "SAE"
+                    result = run_wpa_cli(iface, "set_network", network_id, "key_mgmt", key_mgmt)
+                    if not wpa_cli_ok(result):
+                        return {
+                            "ok": False,
+                            "error": (result.stderr.strip() or result.stdout.strip() or "wpa_cli set_network key_mgmt failed")
+                        }
+                    if passphrase:
+                        result = run_wpa_cli(iface, "set_network", network_id, "sae_password", f'"{passphrase}"')
+                        if not wpa_cli_ok(result):
+                            return {
+                                "ok": False,
+                                "error": (result.stderr.strip() or result.stdout.strip() or "wpa_cli set_network sae_password failed")
+                            }
+                        if sec_flags["wpa2"]:
+                            result = run_wpa_cli(iface, "set_network", network_id, "psk", f'"{passphrase}"')
+                            if not wpa_cli_ok(result):
+                                return {
+                                    "ok": False,
+                                    "error": (result.stderr.strip() or result.stdout.strip() or "wpa_cli set_network psk failed")
+                                }
+                else:
+                    result = run_wpa_cli(iface, "set_network", network_id, "key_mgmt", "WPA-PSK")
+                    if not wpa_cli_ok(result):
+                        return {
+                            "ok": False,
+                            "error": (result.stderr.strip() or result.stdout.strip() or "wpa_cli set_network key_mgmt failed")
+                        }
+                    if passphrase:
+                        result = run_wpa_cli(iface, "set_network", network_id, "psk", f'"{passphrase}"')
+                        if not wpa_cli_ok(result):
+                            return {
+                                "ok": False,
+                                "error": (result.stderr.strip() or result.stdout.strip() or "wpa_cli set_network psk failed")
+                            }
+
+        # Enable network
+        result = run_wpa_cli(iface, "enable_network", network_id)
+        if not wpa_cli_ok(result):
+            return {
+                "ok": False,
+                "error": (result.stderr.strip() or result.stdout.strip() or "wpa_cli enable_network failed")
+            }
         
         # Select network
-        result = subprocess.run(
-            ["wpa_cli", "-i", iface, "select_network", network_id],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        
-        if "OK" not in result.stdout:
-            return {"ok": False, "error": "Failed to select network"}
+        result = run_wpa_cli(iface, "select_network", network_id)
+        if not wpa_cli_ok(result) or "OK" not in (result.stdout or ""):
+            return {
+                "ok": False,
+                "error": (result.stderr.strip() or result.stdout.strip() or "Failed to select network")
+            }
         
         # Persist if requested
         if persist:
-            subprocess.run(
-                ["wpa_cli", "-i", iface, "save_config"],
-                capture_output=True,
-                timeout=5
-            )
+            run_wpa_cli(iface, "save_config")
         
         # Wait for connection (up to 15 seconds)
+        last_status = {}
         for _ in range(15):
-            result = subprocess.run(
-                ["wpa_cli", "-i", iface, "status"],
-                capture_output=True,
-                text=True,
-                timeout=2
-            )
-            
-            if "wpa_state=COMPLETED" in result.stdout:
+            result = run_wpa_cli(iface, "status", timeout=2)
+            if result.returncode == 0:
+                last_status = parse_wpa_status(result.stdout)
+            if "wpa_state=COMPLETED" in (result.stdout or ""):
                 logger.info("Wi-Fi connected via wpa_cli")
                 return {"ok": True}
             
             time.sleep(1)
-        
-        return {"ok": False, "error": "Connection timeout"}
+
+        wpa_state = last_status.get("wpa_state", "UNKNOWN")
+        reason = last_status.get("reason", "")
+        detail = f"wpa_state={wpa_state}" + (f", reason={reason}" if reason else "")
+        return {"ok": False, "error": f"Connection timeout ({detail})"}
     
     except Exception as e:
         logger.error(f"wpa_cli connection failed: {e}")
@@ -175,6 +278,8 @@ def connect_wpa(iface: str, ssid: str, security: str, passphrase: Optional[str],
 def connect_nm(iface: str, ssid: str, security: str, passphrase: Optional[str], persist: bool) -> Dict[str, Any]:
     """Connect using NetworkManager/nmcli"""
     try:
+        sec_flags = parse_security(security)
+
         # Check if connection exists
         result = subprocess.run(
             ["nmcli", "-t", "-f", "NAME,TYPE", "con", "show"],
@@ -191,6 +296,31 @@ def connect_nm(iface: str, ssid: str, security: str, passphrase: Optional[str], 
                 break
         
         if con_exists:
+            # Update credentials if provided (or clear for OPEN)
+            if sec_flags["open"]:
+                subprocess.run(
+                    ["nmcli", "con", "mod", ssid, "wifi-sec.key-mgmt", "none"],
+                    capture_output=True,
+                    timeout=5
+                )
+                subprocess.run(
+                    ["nmcli", "con", "mod", ssid, "-u", "wifi-sec.psk"],
+                    capture_output=True,
+                    timeout=5
+                )
+            elif passphrase:
+                key_mgmt = "sae" if sec_flags["wpa3"] else "wpa-psk"
+                subprocess.run(
+                    ["nmcli", "con", "mod", ssid, "wifi-sec.key-mgmt", key_mgmt],
+                    capture_output=True,
+                    timeout=5
+                )
+                subprocess.run(
+                    ["nmcli", "con", "mod", ssid, "wifi-sec.psk", passphrase],
+                    capture_output=True,
+                    timeout=5
+                )
+
             # Connect to existing connection
             result = subprocess.run(
                 ["nmcli", "con", "up", ssid],
@@ -202,7 +332,7 @@ def connect_nm(iface: str, ssid: str, security: str, passphrase: Optional[str], 
             # Create new connection
             cmd = ["nmcli", "dev", "wifi", "connect", ssid, "ifname", iface]
             
-            if security.upper() != "OPEN" and passphrase:
+            if not sec_flags["open"] and passphrase:
                 cmd.extend(["password", passphrase])
             
             result = subprocess.run(
@@ -222,6 +352,17 @@ def connect_nm(iface: str, ssid: str, security: str, passphrase: Optional[str], 
         
         if result.returncode != 0:
             return {"ok": False, "error": result.stderr.strip() or "Connection failed"}
+
+        # Disable auto-connect to ensure Wi-Fi only connects on explicit user action
+        if con_exists or persist:
+            try:
+                subprocess.run(
+                    ["nmcli", "con", "mod", ssid, "connection.autoconnect", "no"],
+                    capture_output=True,
+                    timeout=5
+                )
+            except Exception as e:
+                logger.debug(f"Failed to disable autoconnect for {ssid}: {e}")
         
         logger.info("Wi-Fi connected via nmcli")
         return {"ok": True}
@@ -485,12 +626,6 @@ def connect_wifi(ssid: str, security: str = "UNKNOWN", passphrase: Optional[str]
             "error": str (if failed)
         }
     """
-    # Step 1: Validate input
-    error = validate_input(ssid, security, passphrase)
-    if error:
-        update_state_json("FAILED", wifi_error=error)
-        return {"ok": False, "error": error, "ts": time.time()}
-    
     # Sanitize passphrase from logs (never log it)
     logger.info(f"Connecting to SSID: {ssid}, Security: {security}, Persist: {persist}")
     
@@ -508,9 +643,16 @@ def connect_wifi(ssid: str, security: str = "UNKNOWN", passphrase: Optional[str]
     if not usb_iface:
         logger.warning("No USB interface detected (NAT will not be applied)")
     
-    # Step 4: Connect Wi-Fi
+    # Step 4: Detect saved networks (for password-less reconnect)
     use_wpa = check_wpa_supplicant(wlan_iface)
     use_nm = check_networkmanager(wlan_iface)
+    prefer_nm = use_nm and is_nm_managed(wlan_iface)
+    if prefer_nm:
+        logger.info("Wi-Fi manager: NetworkManager")
+    elif use_wpa:
+        logger.info("Wi-Fi manager: wpa_supplicant")
+    elif use_nm:
+        logger.info("Wi-Fi manager: NetworkManager (fallback)")
     
     if not use_wpa and not use_nm:
         update_state_json("FAILED", wifi_error="No supported Wi-Fi manager")
@@ -520,7 +662,24 @@ def connect_wifi(ssid: str, security: str = "UNKNOWN", passphrase: Optional[str]
             "ts": time.time()
         }
     
+    saved_ssids = set()
     if use_wpa:
+        saved_ssids = get_saved_networks_wpa(wlan_iface)
+    elif use_nm:
+        saved_ssids = get_saved_networks_nm()
+
+    is_saved = ssid in saved_ssids
+
+    # Step 5: Validate input (allow saved networks without passphrase)
+    error = validate_input(ssid, security, passphrase, is_saved=is_saved)
+    if error:
+        update_state_json("FAILED", wifi_error=error)
+        return {"ok": False, "error": error, "ts": time.time()}
+
+    # Step 6: Connect Wi-Fi
+    if prefer_nm:
+        result = connect_nm(wlan_iface, ssid, security, passphrase, persist)
+    elif use_wpa:
         result = connect_wpa(wlan_iface, ssid, security, passphrase, persist)
     else:
         result = connect_nm(wlan_iface, ssid, security, passphrase, persist)
@@ -529,17 +688,17 @@ def connect_wifi(ssid: str, security: str = "UNKNOWN", passphrase: Optional[str]
         update_state_json("FAILED", wifi_error=result.get("error", "Connection failed"))
         return {"ok": False, "error": result.get("error"), "ts": time.time()}
     
-    # Step 5: Get IP info
+    # Step 7: Get IP info
     ip_wlan = get_interface_ip(wlan_iface)
     ip_usb = get_interface_ip(usb_iface) if usb_iface else None
     gateway_ip = get_gateway_ip(wlan_iface)
     
-    # Step 6: Connectivity checks
+    # Step 8: Connectivity checks
     checks = check_connectivity()
     captive_portal = detect_captive_portal(checks)
     internet_check = "OK" if checks["http_check"] == "OK" else "FAIL"
     
-    # Step 7: Apply NAT
+    # Step 9: Apply NAT
     usb_nat = "OFF"
     if usb_iface:
         nat_result = apply_nat(wlan_iface, usb_iface)
@@ -548,7 +707,7 @@ def connect_wifi(ssid: str, security: str = "UNKNOWN", passphrase: Optional[str]
         else:
             logger.warning(f"NAT not applied: {nat_result.get('error')}")
     
-    # Step 8: Finalize state
+    # Step 10: Finalize state
     update_state_json(
         "CONNECTED",
         wifi_error=None,

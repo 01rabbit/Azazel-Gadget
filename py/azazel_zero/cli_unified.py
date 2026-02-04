@@ -139,7 +139,7 @@ def build_snapshot(data: Dict[str, object], source: str = "SNAPSHOT") -> Snapsho
         up_if=data.get("up_if", "-"),
         up_ip=data.get("up_ip", "-"),
         user_state=data.get("user_state", "CHECKING"),
-        recommendation=data.get("recommendation", "確認中"),
+        recommendation=data.get("recommendation", "Checking"),
         reasons=data.get("reasons", [])[:3],
         next_action_hint=data.get("next_action_hint", ""),
         quic=data.get("quic", "unknown"),
@@ -357,9 +357,9 @@ def load_snapshot_from_log() -> Optional[Snapshot]:
                 "down_ip": "-",
                 "up_if": "-",
                 "user_state": _user_state_from_stage_name(stage),
-                "recommendation": payload.get("reason", "確認中"),
-                "reasons": [payload.get("reason", "確認中")],
-                "next_action_hint": "ログから再構成",
+                "recommendation": payload.get("reason", "Checking"),
+                "reasons": [payload.get("reason", "Checking")],
+                "next_action_hint": "Rebuilt from log",
                 "quic": "blocked" if stage in ("PROBE", "DEGRADED", "CONTAIN") else "allowed",
                 "doh": "blocked",
                 "dns_mode": "forced via Azazel DNS",
@@ -669,7 +669,7 @@ def load_snapshot() -> Snapshot:
     # 推奨アクション生成（優先度：低）
     auto_recommendation = generate_recommendation(snap)
     # 既存のrecommendationが空またはデフォルトの場合、自動推奨で上書き
-    if not snap.recommendation or snap.recommendation == "確認中":
+    if not snap.recommendation or snap.recommendation == "Checking":
         snap.recommendation = auto_recommendation
     
     # wlan (upstream) の IP アドレスを取得
@@ -695,9 +695,9 @@ def default_snapshot() -> Dict[str, object]:
         "up_if": "wlan0",
         "up_ip": "-",
         "user_state": "CHECKING",
-        "recommendation": "確認中",
-        "reasons": ["情報収集中"],
-        "next_action_hint": "再評価を待機",
+        "recommendation": "Checking",
+        "reasons": ["Collecting info"],
+        "next_action_hint": "Waiting for re-evaluation",
         "quic": "blocked",
         "doh": "blocked",
         "dns_mode": "forced via Azazel DNS",
@@ -972,13 +972,13 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
     
     # 状態ラベル（「安全」は常に緑の太字で強調）
     state_labels = {
-        "CHECKING": "確認中",
+        "CHECKING": "CHECKING",
         "SAFE": "安全",
         "LIMITED": "制限中",
         "CONTAINED": "隔離",
         "DECEPTION": "観測誘導",
     }
-    state_label = state_labels.get(snap.user_state.upper(), "確認中")
+    state_label = state_labels.get(snap.user_state.upper(), "CHECKING")
     badge = f" {state_icon} {state_label} "  # 括弧除去、前後にスペース
     
     # 脅威レベルインジケーター (0-5)

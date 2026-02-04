@@ -13,7 +13,11 @@ document.addEventListener('DOMContentLoaded', () => {
 // Fetch state from API
 async function fetchState() {
     try {
-        const res = await fetch('/api/state');
+        const res = await fetch('/api/state', {
+            headers: {
+                'X-Auth-Token': AUTH_TOKEN
+            }
+        });
         const data = await res.json();
         
         if (!data.ok) {
@@ -53,6 +57,19 @@ function updateUI(state) {
     statusEl.className = `risk-status ${statusClass}`;
     statusEl.textContent = mapState(stateVal);
     cardEl.className = `card card-risk ${statusClass}`;
+
+    // Toggle Contain/Release buttons based on state
+    const containBtn = document.getElementById('containBtn');
+    const releaseBtn = document.getElementById('releaseBtn');
+    if (containBtn && releaseBtn) {
+        if (stateVal === 'CONTAIN') {
+            containBtn.style.display = 'none';
+            releaseBtn.style.display = 'inline-flex';
+        } else {
+            containBtn.style.display = 'inline-flex';
+            releaseBtn.style.display = 'none';
+        }
+    }
     
     // Threat level based on suspicion
     let threatLevel = 'LOW';
@@ -63,6 +80,11 @@ function updateUI(state) {
     
     updateElement('riskRecommendation', state.recommendation || '-');
     updateElement('riskReason', (state.reasons || [])[0] || '-');
+
+    // Monitoring status
+    const monitoring = state.monitoring || {};
+    updateBadge('riskSuricata', monitoring.suricata || 'UNKNOWN');
+    updateBadge('riskOpenCanary', monitoring.opencanary || 'UNKNOWN');
     
     // Connection Info
     updateElement('connSSID', state.ssid || '-');
@@ -211,18 +233,20 @@ function displayErrorState() {
 
 // Execute action via API
 async function executeAction(action) {
+    if (action === 'release') {
+        await executeReleaseAction();
+        return;
+    }
+
     try {
-        const res = await fetch(`/api/action/${action}`, {
-            method: 'POST',
-            headers: {
-                'X-AZAZEL-TOKEN': AUTH_TOKEN,
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        const data = await res.json();
+        const data = await postAction(action);
         
         if (data.ok) {
+            // Special handling for details action
+            if (action === 'details') {
+                showDetailsModal(data);
+                return;
+            }
             showToast(`✅ ${action} executed successfully`, 'success');
             // Immediately refresh state
             setTimeout(fetchState, 500);
@@ -232,6 +256,46 @@ async function executeAction(action) {
     } catch (e) {
         console.error(`Action ${action} failed:`, e);
         showToast(`❌ ${action} failed: ${e.message}`, 'error');
+    }
+}
+
+// POST /api/action/<action>
+async function postAction(action) {
+    const res = await fetch(`/api/action/${action}`, {
+        method: 'POST',
+        headers: {
+            'X-Auth-Token': AUTH_TOKEN,
+            'Content-Type': 'application/json'
+        }
+    });
+    
+    return res.json();
+}
+
+// Release action needs confirmation; send a second request automatically
+async function executeReleaseAction() {
+    try {
+        showToast('⏳ Releasing...', 'info');
+        
+        const first = await postAction('release');
+        if (!first.ok) {
+            showToast(`❌ release failed: ${first.error}`, 'error');
+            return;
+        }
+        
+        // Wait for controller to register confirmation window
+        await new Promise(resolve => setTimeout(resolve, 800));
+        
+        const second = await postAction('release');
+        if (second.ok) {
+            showToast('✅ release executed successfully', 'success');
+            setTimeout(fetchState, 500);
+        } else {
+            showToast(`❌ release failed: ${second.error}`, 'error');
+        }
+    } catch (e) {
+        console.error('Action release failed:', e);
+        showToast(`❌ release failed: ${e.message}`, 'error');
     }
 }
 
@@ -270,10 +334,71 @@ document.addEventListener('click', (e) => {
     }
 });
 
+// Show Details Modal
+function showDetailsModal(data) {
+    const modal = document.getElementById('detailsModal');
+    const body = document.getElementById('detailsBody');
+    
+    let html = '<div class="details-section">';
+    
+    // Current State
+    html += '<h4>Current State</h4>';
+    html += `<p><strong>Stage:</strong> ${data.state || 'UNKNOWN'}</p>`;
+    html += `<p><strong>Suspicion Score:</strong> ${data.suspicion || 0}</p>`;
+    html += `<p><strong>Reason:</strong> ${data.reason || '-'}</p>`;
+    
+    // Probe Details
+    if (data.details) {
+        html += '<h4>Probe Results</h4>';
+        
+        // TLS checks
+        if (data.details.tls && Array.isArray(data.details.tls)) {
+            html += '<p><strong>TLS Verification:</strong></p><ul>';
+            data.details.tls.forEach(item => {
+                const status = item.ok ? '✅' : '❌';
+                html += `<li>${status} ${item.site || 'Unknown'}</li>`;
+            });
+            html += '</ul>';
+        }
+        
+        // DNS checks
+        if (data.details.dns !== undefined) {
+            const dnsStatus = data.details.dns ? '❌ Mismatch detected' : '✅ OK';
+            html += `<p><strong>DNS:</strong> ${dnsStatus}</p>`;
+        }
+        
+        // Captive Portal
+        if (data.details.captive_portal !== undefined) {
+            const cpStatus = data.details.captive_portal ? '⚠️ Detected' : '✅ None';
+            html += `<p><strong>Captive Portal:</strong> ${cpStatus}</p>`;
+        }
+        
+        // Route Anomaly
+        if (data.details.route_anomaly !== undefined) {
+            const routeStatus = data.details.route_anomaly ? '⚠️ Anomaly detected' : '✅ OK';
+            html += `<p><strong>Route:</strong> ${routeStatus}</p>`;
+        }
+    } else {
+        html += '<p>No probe details available</p>';
+    }
+    
+    html += '</div>';
+    
+    body.innerHTML = html;
+    modal.style.display = 'flex';
+}
+
+// Close Details Modal
+function closeDetailsModal() {
+    const modal = document.getElementById('detailsModal');
+    modal.style.display = 'none';
+}
+
 // ========== Wi-Fi Control Functions ==========
 
 let selectedSSID = '';
 let selectedSecurity = 'UNKNOWN';
+let selectedSaved = false;
 
 // Scan Wi-Fi networks
 async function scanWiFi() {
@@ -346,7 +471,7 @@ function displayWiFiResults(aps) {
         const selectBtn = document.createElement('button');
         selectBtn.textContent = 'Select';
         selectBtn.className = 'btn-small';
-        selectBtn.onclick = () => selectAP(ap.ssid, ap.security);
+        selectBtn.onclick = () => selectAP(ap.ssid, ap.security, ap.saved);
         
         actionCell.appendChild(selectBtn);
         
@@ -363,23 +488,25 @@ function displayWiFiResults(aps) {
 }
 
 // Select AP from list
-function selectAP(ssid, security) {
+function selectAP(ssid, security, saved) {
     selectedSSID = ssid;
     selectedSecurity = security;
+    selectedSaved = !!saved;
     
     // Populate manual SSID field
     document.getElementById('manualSSID').value = ssid;
     
     // Show/hide passphrase section based on security
     const passphraseSection = document.getElementById('passphraseSection');
-    if (security === 'OPEN') {
+    if (security === 'OPEN' || selectedSaved) {
         passphraseSection.style.display = 'none';
         document.getElementById('wifiPassphrase').value = '';
     } else {
         passphraseSection.style.display = 'block';
     }
     
-    showToast(`✅ Selected: ${ssid} (${security})`, 'info');
+    const savedLabel = selectedSaved ? ' (saved)' : '';
+    showToast(`✅ Selected: ${ssid} (${security})${savedLabel}`, 'info');
 }
 
 // Connect to Wi-Fi
@@ -400,9 +527,11 @@ async function connectWiFi() {
     if (manualSSID && manualSSID !== selectedSSID) {
         security = passphrase ? 'WPA2' : 'OPEN';
     }
+
+    const isSavedSelection = !!(selectedSaved && ssid === selectedSSID);
     
     // Validate passphrase for protected networks
-    if (security !== 'OPEN' && !passphrase) {
+    if (security !== 'OPEN' && !passphrase && !isSavedSelection) {
         showToast('❌ Passphrase required for protected network', 'error');
         return;
     }
@@ -413,7 +542,8 @@ async function connectWiFi() {
         const body = {
             ssid: ssid,
             security: security,
-            persist: true
+            persist: true,
+            saved: isSavedSelection
         };
         
         // Add passphrase only for protected networks
@@ -424,7 +554,7 @@ async function connectWiFi() {
         const res = await fetch('/api/wifi/connect', {
             method: 'POST',
             headers: {
-                'X-AZAZEL-TOKEN': AUTH_TOKEN,
+                'X-Auth-Token': AUTH_TOKEN,
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify(body)

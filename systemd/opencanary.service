@@ -4,13 +4,14 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=simple
-User=azazel
+Type=forking
+User=root
 EnvironmentFile=/etc/default/azazel-zero
-Environment=VIRTUAL_ENV=%E{AZAZEL_CANARY_VENV}
-Environment=PATH=%E{AZAZEL_CANARY_VENV}/bin:/usr/bin:/bin
-ExecStart=%E{AZAZEL_CANARY_VENV}/bin/opencanaryd --start
-ExecStop=%E{AZAZEL_CANARY_VENV}/bin/opencanaryd --stop
+Environment=VIRTUAL_ENV=/home/azazel/canary-venv
+Environment=PATH=/home/azazel/canary-venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/usr/local/bin/opencanary-start
+ExecStop=/home/azazel/canary-venv/bin/opencanaryd --stop
+PIDFile=/home/azazel/canary-venv/bin/opencanaryd.pid
 Restart=always
 RestartSec=3
 TimeoutStopSec=15

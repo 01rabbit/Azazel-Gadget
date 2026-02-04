@@ -13,6 +13,7 @@ import json
 import os
 import socket
 import time
+import subprocess
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional
@@ -29,7 +30,7 @@ BIND_PORT = int(os.environ.get("AZAZEL_WEB_PORT", "8084"))
 
 # Allowed actions
 ALLOWED_ACTIONS = {
-    "refresh", "reprobe", "contain", "details", "stage_open", "disconnect",
+    "refresh", "reprobe", "contain", "release", "details", "stage_open", "disconnect",
     "wifi_scan", "wifi_connect"  # Wi-Fi control actions
 }
 
@@ -45,8 +46,57 @@ def verify_token() -> bool:
     if not token:
         return True  # トークン未設定の場合はスルー
     
-    req_token = request.headers.get('X-Auth-Token') or request.args.get('token')
+    req_token = (
+        request.headers.get('X-AZAZEL-TOKEN')
+        or request.headers.get('X-Auth-Token')
+        or request.args.get('token')
+    )
     return req_token == token
+
+
+def _pid_running(pid_path: Path) -> bool:
+    """Check whether the pid in pid_path is running."""
+    try:
+        pid_text = pid_path.read_text().strip()
+        if not pid_text:
+            return False
+        pid = int(pid_text)
+    except Exception:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _service_active(service: str) -> bool:
+    """Check systemd service status without requiring root."""
+    try:
+        result = subprocess.run(
+            ["/bin/systemctl", "is-active", service],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        return result.returncode == 0 and result.stdout.strip() == "active"
+    except Exception:
+        return False
+
+
+def get_monitoring_state() -> Dict[str, str]:
+    """Return ON/OFF status for local monitoring daemons."""
+    # Prefer systemd state to avoid pidfile permission issues
+    opencanary_ok = _service_active("opencanary.service")
+    suricata_ok = _service_active("suricata.service")
+    opencanary_pid = Path("/home/azazel/canary-venv/bin/opencanaryd.pid")
+    suricata_pid = Path("/run/suricata.pid")
+    return {
+        "opencanary": "ON" if (opencanary_ok or _pid_running(opencanary_pid)) else "OFF",
+        "suricata": "ON" if (suricata_ok or _pid_running(suricata_pid)) else "OFF",
+    }
 
 
 def read_state() -> Dict[str, Any]:
@@ -76,6 +126,144 @@ def read_state() -> Dict[str, Any]:
         }
 
 
+def execute_contain_action() -> Dict[str, Any]:
+    """Execute contain action: activate CONTAIN stage via Status API"""
+    try:
+        # Try to reach Status API on first-minute service
+        # Try both 127.0.0.1:8082 and 10.55.0.10:8082
+        for host in ["10.55.0.10", "127.0.0.1"]:
+            try:
+                result = subprocess.run(
+                    ["curl", "-s", "-X", "POST", f"http://{host}:8082/action/contain"],
+                    capture_output=True,
+                    timeout=2
+                )
+                if result.returncode == 0:
+                    response_text = result.stdout.decode("utf-8").strip()
+                    if response_text:
+                        payload = json.loads(response_text)
+                        if payload.get("status") == "ok" and "ok" not in payload:
+                            payload["ok"] = True
+                        return payload
+                    return {"ok": True, "action": "contain", "message": "Containment activated"}
+            except Exception:
+                continue
+        return {"ok": False, "action": "contain", "error": "Failed to reach Status API on any host"}
+    except Exception as e:
+        return {"ok": False, "action": "contain", "error": str(e)}
+
+def execute_disconnect_action() -> Dict[str, Any]:
+    """Execute disconnect action: disconnect downstream USB clients"""
+    try:
+        # Try to send to Status API first
+        for host in ["10.55.0.10", "127.0.0.1"]:
+            try:
+                result = subprocess.run(
+                    ["curl", "-s", "-X", "POST", f"http://{host}:8082/action/disconnect"],
+                    capture_output=True,
+                    timeout=2
+                )
+                if result.returncode == 0:
+                    response_text = result.stdout.decode("utf-8").strip()
+                    if response_text:
+                        payload = json.loads(response_text)
+                        if payload.get("status") == "ok" and "ok" not in payload:
+                            payload["ok"] = True
+                        return payload
+            except Exception:
+                continue
+        
+        # Fallback: attempt to bring down upstream Wi-Fi interface
+        iface = os.environ.get("AZAZEL_UP_IF", "wlan0")
+        down_result = subprocess.run(
+            ["ip", "link", "set", iface, "down"],
+            capture_output=True,
+            timeout=5
+        )
+        if down_result.returncode != 0:
+            stderr = down_result.stderr.decode("utf-8").strip() if down_result.stderr else "unknown error"
+            return {
+                "ok": False,
+                "action": "disconnect",
+                "error": f"Fallback disconnect failed: {iface} down failed: {stderr}"
+            }
+        
+        return {"ok": True, "action": "disconnect", "message": f"Wi-Fi disconnected ({iface} down)"}
+    except Exception as e:
+        return {"ok": False, "action": "disconnect", "error": str(e)}
+
+def execute_release_action() -> Dict[str, Any]:
+    """Execute release action: clear manual CONTAIN override via Status API"""
+    try:
+        for host in ["10.55.0.10", "127.0.0.1"]:
+            try:
+                result = subprocess.run(
+                    ["curl", "-s", "-X", "POST", f"http://{host}:8082/action/release"],
+                    capture_output=True,
+                    timeout=2,
+                )
+                if result.returncode == 0:
+                    response_text = result.stdout.decode("utf-8").strip()
+                    if response_text:
+                        payload = json.loads(response_text)
+                        if payload.get("status") == "ok" and "ok" not in payload:
+                            payload["ok"] = True
+                        return payload
+                    return {"ok": True, "action": "release", "message": "Containment released"}
+            except Exception:
+                continue
+        return {"ok": False, "action": "release", "error": "Failed to reach Status API on any host"}
+    except Exception as e:
+        return {"ok": False, "action": "release", "error": str(e)}
+
+def execute_details_action() -> Dict[str, Any]:
+    """Execute details action: get detailed threat analysis from Status API"""
+    try:
+        for host in ["10.55.0.10", "127.0.0.1"]:
+            try:
+                result = subprocess.run(
+                    ["curl", "-s", f"http://{host}:8082/details"],
+                    capture_output=True,
+                    timeout=2,
+                )
+                if result.returncode == 0:
+                    response_text = result.stdout.decode("utf-8").strip()
+                    if response_text:
+                        payload = json.loads(response_text)
+                        if payload.get("status") == "ok" and "ok" not in payload:
+                            payload["ok"] = True
+                        return payload
+                    return {"ok": True, "action": "details", "message": "No details available"}
+            except Exception:
+                continue
+        return {"ok": False, "action": "details", "error": "Failed to reach Status API on any host"}
+    except Exception as e:
+        return {"ok": False, "action": "details", "error": str(e)}
+
+def execute_stage_open_action() -> Dict[str, Any]:
+    """Execute stage_open action: return to NORMAL stage via Status API"""
+    try:
+        for host in ["10.55.0.10", "127.0.0.1"]:
+            try:
+                result = subprocess.run(
+                    ["curl", "-s", "-X", "POST", f"http://{host}:8082/action/stage_open"],
+                    capture_output=True,
+                    timeout=2,
+                )
+                if result.returncode == 0:
+                    response_text = result.stdout.decode("utf-8").strip()
+                    if response_text:
+                        payload = json.loads(response_text)
+                        if payload.get("status") == "ok" and "ok" not in payload:
+                            payload["ok"] = True
+                        return payload
+                    return {"ok": True, "action": "stage_open", "message": "Stage opened"}
+            except Exception:
+                continue
+        return {"ok": False, "action": "stage_open", "error": "Failed to reach Status API on any host"}
+    except Exception as e:
+        return {"ok": False, "action": "stage_open", "error": str(e)}
+
 def send_control_command(action: str) -> Dict[str, Any]:
     """Send command to Control Daemon via Unix socket"""
     if action not in ALLOWED_ACTIONS:
@@ -85,6 +273,18 @@ def send_control_command(action: str) -> Dict[str, Any]:
             "error": "Unknown action",
             "ts": time.strftime("%Y-%m-%dT%H:%M:%S")
         }
+    
+    # Handle contain and disconnect directly
+    if action == "contain":
+        return execute_contain_action()
+    if action == "release":
+        return execute_release_action()
+    if action == "disconnect":
+        return execute_disconnect_action()
+    if action == "details":
+        return execute_details_action()
+    if action == "stage_open":
+        return execute_stage_open_action()
     
     if not CONTROL_SOCKET.exists():
         return {
@@ -221,6 +421,8 @@ def api_state():
         return jsonify({"error": "Unauthorized"}), 403
     
     state = read_state()
+    # Add local monitoring status
+    state["monitoring"] = get_monitoring_state()
     return jsonify(state)
 
 
@@ -302,6 +504,7 @@ def api_wifi_connect():
     ssid = data.get("ssid")
     security = data.get("security", "UNKNOWN")
     passphrase = data.get("passphrase")
+    saved = bool(data.get("saved", False))
     persist = data.get("persist", False)
     
     # Validation
@@ -311,8 +514,8 @@ def api_wifi_connect():
     # For OPEN networks, discard passphrase if present
     if security == "OPEN":
         passphrase = None
-    elif not passphrase:
-        # Non-OPEN network requires passphrase
+    elif not passphrase and not saved:
+        # Non-OPEN network requires passphrase unless already saved
         return jsonify({"ok": False, "error": "Passphrase required for protected network"}), 400
     
     # NEVER log request body for this endpoint
@@ -323,7 +526,8 @@ def api_wifi_connect():
         "ssid": ssid,
         "security": security,
         "passphrase": passphrase,
-        "persist": persist
+        "persist": persist,
+        "saved": saved
     }
     
     result = send_control_command_with_params("wifi_connect", params)

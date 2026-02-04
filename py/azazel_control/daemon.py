@@ -16,8 +16,8 @@ from pathlib import Path
 
 # Import Wi-Fi modules
 sys.path.insert(0, str(Path(__file__).parent))
-from wifi_scan import scan_wifi
-from wifi_connect import connect_wifi
+from wifi_scan import scan_wifi, get_wireless_interface, check_wpa_supplicant, check_networkmanager
+from wifi_connect import connect_wifi, update_state_json
 
 # Logging setup
 logging.basicConfig(
@@ -52,6 +52,62 @@ def ensure_socket_dir():
     
     # Set directory permissions so any user can access
     os.chmod(str(SOCKET_PATH.parent), 0o777)
+
+def suppress_auto_wifi():
+    """Disable Wi-Fi auto-connect and disconnect existing session on startup."""
+    try:
+        iface = get_wireless_interface()
+        if not iface:
+            return
+
+        # wpa_supplicant: disable all networks to prevent auto-connect
+        if check_wpa_supplicant(iface):
+            try:
+                subprocess.run(
+                    ["wpa_cli", "-i", iface, "disable_network", "all"],
+                    capture_output=True,
+                    timeout=5
+                )
+                logger.info("Disabled wpa_supplicant auto-connect")
+            except Exception as e:
+                logger.debug(f"Failed to disable wpa_supplicant auto-connect: {e}")
+
+        # NetworkManager: disable autoconnect for all Wi-Fi connections and disconnect
+        if check_networkmanager(iface):
+            try:
+                result = subprocess.run(
+                    ["nmcli", "-t", "-f", "NAME,TYPE", "con", "show"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                for line in result.stdout.splitlines():
+                    parts = line.split(":", 1)
+                    if len(parts) == 2 and parts[1] == "802-11-wireless":
+                        subprocess.run(
+                            ["nmcli", "con", "mod", parts[0], "connection.autoconnect", "no"],
+                            capture_output=True,
+                            timeout=5
+                        )
+                subprocess.run(
+                    ["nmcli", "dev", "disconnect", iface],
+                    capture_output=True,
+                    timeout=5
+                )
+                logger.info("Disabled NetworkManager auto-connect and disconnected Wi-Fi")
+            except Exception as e:
+                logger.debug(f"Failed to disable NetworkManager auto-connect: {e}")
+
+        # Update UI snapshot to reflect disconnected state
+        update_state_json(
+            "DISCONNECTED",
+            wifi_error=None,
+            usb_nat="OFF",
+            internet_check="UNKNOWN",
+            captive_portal="UNKNOWN"
+        )
+    except Exception as e:
+        logger.debug(f"suppress_auto_wifi failed: {e}")
 
 def check_rate_limit(action: str) -> bool:
     """Check if action is rate-limited"""
@@ -157,6 +213,7 @@ def handle_client(conn, addr):
 
 def main():
     ensure_socket_dir()
+    suppress_auto_wifi()
     logger.info("Azazel-Zero Control Daemon started")
     
     # Create Unix socket

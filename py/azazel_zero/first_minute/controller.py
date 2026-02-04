@@ -33,16 +33,32 @@ from .tc import TcManager
 from .web_api import add_history_event
 
 
+# Global lock for status_ctx to ensure thread-safe access
+_status_ctx_lock = threading.Lock()
+
+
 class StatusHandler(BaseHTTPRequestHandler):
-    def __init__(self, ctx: Dict[str, object], *args, **kwargs):
+    def __init__(self, ctx: Dict[str, object], ctx_lock: threading.Lock, *args, **kwargs):
         self.ctx = ctx
+        self.ctx_lock = ctx_lock
         super().__init__(*args, **kwargs)
 
     def do_GET(self):
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
-        self.wfile.write(json.dumps(self.ctx, default=str).encode("utf-8"))
+        with self.ctx_lock:
+            if self.path == "/details":
+                payload = {
+                    "status": "ok",
+                    "details": self.ctx.get("last_probe"),
+                    "state": self.ctx.get("stage") or self.ctx.get("state"),
+                    "suspicion": self.ctx.get("suspicion", 0),
+                    "reason": self.ctx.get("reason", ""),
+                }
+                self.wfile.write(json.dumps(payload, default=str).encode("utf-8"))
+                return
+            self.wfile.write(json.dumps(self.ctx, default=str).encode("utf-8"))
 
     def do_POST(self):
         """Handle POST requests for action endpoints.
@@ -50,21 +66,59 @@ class StatusHandler(BaseHTTPRequestHandler):
         Supported endpoints:
         - /action/reprobe: Force re-run safety probes
         - /action/refresh: Force refresh EPD display and state
+        - /action/contain: Activate CONTAIN stage
+        - /action/release: Release manual CONTAIN override
+        - /action/stage_open: Return to NORMAL (open stage)
+        - /action/disconnect: Disconnect downstream clients
         """
         if self.path == "/action/reprobe":
             # Signal controller to re-run probes
-            self.ctx["force_reprobe"] = True
+            with self.ctx_lock:
+                self.ctx["force_reprobe"] = True
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(json.dumps({"status": "ok", "action": "reprobe"}).encode("utf-8"))
         elif self.path == "/action/refresh":
             # Signal controller to force EPD update
-            self.ctx["force_epd_update"] = True
+            with self.ctx_lock:
+                self.ctx["force_epd_update"] = True
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(json.dumps({"status": "ok", "action": "refresh"}).encode("utf-8"))
+        elif self.path == "/action/contain":
+            # Signal controller to force CONTAIN stage
+            with self.ctx_lock:
+                self.ctx["force_contain"] = True
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "ok", "action": "contain"}).encode("utf-8"))
+        elif self.path == "/action/release":
+            # Signal controller to release manual CONTAIN override
+            with self.ctx_lock:
+                self.ctx["force_release"] = True
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "ok", "action": "release"}).encode("utf-8"))
+        elif self.path == "/action/stage_open":
+            # Signal controller to force NORMAL stage
+            with self.ctx_lock:
+                self.ctx["force_stage_open"] = True
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "ok", "action": "stage_open"}).encode("utf-8"))
+        elif self.path == "/action/disconnect":
+            # Signal controller to disconnect downstream clients
+            with self.ctx_lock:
+                self.ctx["force_disconnect"] = True
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "ok", "action": "disconnect"}).encode("utf-8"))
         else:
             self.send_response(404)
             self.send_header("Content-Type", "application/json")
@@ -75,9 +129,9 @@ class StatusHandler(BaseHTTPRequestHandler):
         return
 
 
-def make_status_server(host: str, port: int, ctx: Dict[str, object]) -> ThreadingHTTPServer:
+def make_status_server(host: str, port: int, ctx: Dict[str, object], ctx_lock: threading.Lock) -> ThreadingHTTPServer:
     def handler(*args, **kwargs):
-        return StatusHandler(ctx, *args, **kwargs)
+        return StatusHandler(ctx, ctx_lock, *args, **kwargs)
 
     return ThreadingHTTPServer((host, port), handler)
 
@@ -118,6 +172,8 @@ class FirstMinuteController:
         # Web UI 用：起動時刻を記録
         self._start_time = time.time()
         
+        # Status context with thread lock for safe concurrent access
+        self.status_ctx_lock = threading.Lock()
         self.status_ctx: Dict[str, object] = {
             "state": "INIT",
             "suspicion": 0,
@@ -126,6 +182,12 @@ class FirstMinuteController:
             "last_decision_id": self.last_decision_id,
             "start_time": self._start_time,
         }
+        # Manual action flags to force and maintain state
+        self.forced_contain_until: float = 0.0  # Timestamp until which to maintain temporary CONTAIN
+        self.manual_contain_active: bool = False
+        self.manual_contain_min_until: float = 0.0
+        self.release_confirm_pending: bool = False
+        self.release_confirm_until: float = 0.0
         self.status_server: Optional[ThreadingHTTPServer] = None
         self.web_server: Optional[object] = None
         self.processes: Dict[str, subprocess.Popen] = {}
@@ -198,16 +260,17 @@ class FirstMinuteController:
         host = self.cfg.status_api.get("host", "127.0.0.1")
         port = int(self.cfg.status_api.get("port", 8082))
         # ステータス API（JSON）
-        self.status_server = make_status_server(host, port, self.status_ctx)
+        self.status_server = make_status_server(host, port, self.status_ctx, self.status_ctx_lock)
         thread = threading.Thread(target=self.status_server.serve_forever, daemon=True)
         thread.start()
         self.logger.info(f"Status API started on {host}:{port}")
 
-    def write_snapshot(self, summary: Dict[str, object], link_meta: Dict[str, object]) -> None:
+    def write_snapshot(self, summary: Dict[str, object], link_meta: Dict[str, object], skip_sync: bool = False) -> None:
         """Write a UI snapshot JSON for the TUI to consume."""
         # Step 1: Update persistent connection state from any available file
         # This ensures we capture any updates from wifi_connect.py
-        self._sync_connection_state()
+        if not skip_sync:
+            self._sync_connection_state()
         self.logger.info("snapshot: write_snapshot() called with new persistent state logic")
         
         link = link_meta.get("link", {}) if link_meta else {}
@@ -872,13 +935,272 @@ class FirstMinuteController:
         self.handle_signals()
         probe_done = False
         while not self.stop_event.is_set():
-            # Check for force flags from Status API
-            force_reprobe = self.status_ctx.pop("force_reprobe", False)
-            force_epd_update = self.status_ctx.pop("force_epd_update", False)
+            # Check for force flags from Status API (with lock)
+            with self.status_ctx_lock:
+                force_reprobe = self.status_ctx.pop("force_reprobe", False)
+                force_epd_update = self.status_ctx.pop("force_epd_update", False)
+                force_contain = self.status_ctx.pop("force_contain", False)
+                force_release = self.status_ctx.pop("force_release", False)
+                force_stage_open = self.status_ctx.pop("force_stage_open", False)
+                force_disconnect = self.status_ctx.pop("force_disconnect", False)
+            
+            # Track manual actions to force snapshot update
+            manual_action_triggered = False
             
             if force_reprobe:
                 self.logger.info("ACTION: Force re-probe requested via API")
                 probe_done = False  # Force probe re-run
+            
+            if force_contain:
+                self.logger.info("ACTION: Force CONTAIN stage requested via API")
+                # Manual CONTAIN: enforce minimum 30 minutes before release
+                now = time.time()
+                self.manual_contain_active = True
+                self.manual_contain_min_until = now + 1800.0
+                self.release_confirm_pending = False
+                self.release_confirm_until = 0.0
+                self.forced_contain_until = 0.0
+                # Directly transition to CONTAIN stage
+                prev_stage = self.current_stage
+                self.current_stage = Stage.CONTAIN
+                # CRITICAL: Also update state_machine internal state so write_snapshot() reflects CONTAIN
+                self.state_machine.ctx.state = Stage.CONTAIN
+                self.apply_stage(Stage.CONTAIN)
+                # Log the manual transition
+                add_history_event(
+                    from_stage=prev_stage.value,
+                    to_stage=Stage.CONTAIN.value,
+                    suspicion=75,  # High suspicion for manual contain
+                    reason="Manual containment activated via WebUI"
+                )
+                # Immediately write updated snapshot
+                link_meta = {}  # Minimal metadata for snapshot
+                contain_summary = {
+                    "changed": True,
+                    "suspicion": 75,
+                    "reason": "Manual containment activated via WebUI",
+                    "constraints": [],
+                }
+                self.write_snapshot(contain_summary, link_meta)
+                self._maybe_update_epd(Stage.CONTAIN, contain_summary, link_meta, force=True)
+                # Also update status_ctx immediately
+                with self.status_ctx_lock:
+                    self.status_ctx.update({
+                        "stage": Stage.CONTAIN.value,
+                        "suspicion": 75,
+                        "reason": "Manual containment activated via WebUI",
+                    })
+                self.logger.info("CONTAIN stage activated via API (min 30 minutes, manual release required)")
+                # Skip state machine this loop to preserve CONTAIN
+                time.sleep(0.1)  # Brief delay before next iteration
+                continue  # Skip the rest of the loop
+
+            if force_release:
+                self.logger.info("ACTION: Release CONTAIN requested via API")
+                now = time.time()
+                if not self.manual_contain_active:
+                    self.logger.info("Release ignored: manual CONTAIN not active")
+                    time.sleep(0.1)
+                    continue
+                if now < self.manual_contain_min_until:
+                    remaining = int(self.manual_contain_min_until - now)
+                    self.logger.info(f"Release blocked: minimum duration not reached ({remaining}s)")
+                    with self.status_ctx_lock:
+                        self.status_ctx.update(
+                            {
+                                "reason": f"Contain minimum duration not reached ({remaining}s)",
+                            }
+                        )
+                    time.sleep(0.1)
+                    continue
+                if not self.release_confirm_pending or now > self.release_confirm_until:
+                    self.release_confirm_pending = True
+                    self.release_confirm_until = now + 10.0
+                    self.logger.info("Release confirmation required (press again within 10s)")
+                    link_meta = {}
+                    confirm_summary = {
+                        "changed": False,
+                        "suspicion": 75,
+                        "reason": "Release confirmation required (press again within 10s)",
+                        "constraints": [],
+                    }
+                    self.write_snapshot(confirm_summary, link_meta)
+                    with self.status_ctx_lock:
+                        self.status_ctx.update(
+                            {
+                                "reason": "Release confirmation required (press again within 10s)",
+                            }
+                        )
+                    time.sleep(0.1)
+                    continue
+                # Confirmed release
+                self.release_confirm_pending = False
+                self.release_confirm_until = 0.0
+                self.manual_contain_active = False
+                # Clear forced CONTAIN override
+                self.forced_contain_until = 0.0
+                prev_stage = self.current_stage
+                self.current_stage = Stage.NORMAL
+                # Sync state machine to NORMAL and reset suspicion
+                self.state_machine.ctx.state = Stage.NORMAL
+                self.state_machine.ctx.suspicion = 0.0
+                self.state_machine.ctx.last_reason = "manual_release"
+                self.apply_stage(Stage.NORMAL)
+                add_history_event(
+                    from_stage=prev_stage.value,
+                    to_stage=Stage.NORMAL.value,
+                    suspicion=0,
+                    reason="Manual containment released via WebUI",
+                )
+                link_meta = {}
+                release_summary = {
+                    "changed": True,
+                    "suspicion": 0,
+                    "reason": "Manual containment released via WebUI",
+                    "constraints": [],
+                }
+                self.write_snapshot(release_summary, link_meta)
+                self._maybe_update_epd(Stage.NORMAL, release_summary, link_meta, force=True)
+                with self.status_ctx_lock:
+                    self.status_ctx.update(
+                        {
+                            "stage": Stage.NORMAL.value,
+                            "suspicion": 0,
+                            "reason": "Manual containment released via WebUI",
+                        }
+                    )
+                probe_done = False
+                time.sleep(0.1)
+                continue
+
+            if force_stage_open:
+                self.logger.info("ACTION: Stage Open requested via API")
+                now = time.time()
+                if self.manual_contain_active and now < self.manual_contain_min_until:
+                    remaining = int(self.manual_contain_min_until - now)
+                    self.logger.info(f"Stage Open blocked: manual CONTAIN minimum duration not reached ({remaining}s)")
+                    # Reflect the blocked action in the UI snapshot
+                    blocked_summary = {
+                        "changed": False,
+                        "suspicion": 75,
+                        "reason": f"Contain minimum duration not reached ({remaining}s)",
+                        "constraints": [],
+                    }
+                    self.write_snapshot(blocked_summary, {})
+                    with self.status_ctx_lock:
+                        self.status_ctx.update(
+                            {
+                                "reason": f"Contain minimum duration not reached ({remaining}s)",
+                            }
+                        )
+                    time.sleep(0.1)
+                    continue
+                # Clear manual flags and open stage
+                self.manual_contain_active = False
+                self.release_confirm_pending = False
+                self.release_confirm_until = 0.0
+                self.forced_contain_until = 0.0
+                prev_stage = self.current_stage
+                self.current_stage = Stage.NORMAL
+                self.state_machine.ctx.state = Stage.NORMAL
+                self.state_machine.ctx.suspicion = 0.0
+                self.state_machine.ctx.last_reason = "stage_open"
+                self.apply_stage(Stage.NORMAL)
+                add_history_event(
+                    from_stage=prev_stage.value,
+                    to_stage=Stage.NORMAL.value,
+                    suspicion=0,
+                    reason="Stage Open via WebUI",
+                )
+                link_meta = {}
+                open_summary = {
+                    "changed": True,
+                    "suspicion": 0,
+                    "reason": "Stage Open via WebUI",
+                    "constraints": [],
+                }
+                self.write_snapshot(open_summary, link_meta)
+                self._maybe_update_epd(Stage.NORMAL, open_summary, link_meta, force=True)
+                with self.status_ctx_lock:
+                    self.status_ctx.update(
+                        {
+                            "stage": Stage.NORMAL.value,
+                            "suspicion": 0,
+                            "reason": "Stage Open via WebUI",
+                        }
+                    )
+                probe_done = False
+                time.sleep(0.1)
+                continue
+            
+            if force_disconnect:
+                self.logger.info("ACTION: Disconnect requested via API")
+                iface = self.cfg.interfaces.get("upstream", "wlan0")
+                disconnect_ok = False
+                reason = f"Wi-Fi disconnected ({iface})"
+                errors = []
+
+                try:
+                    def attempt(cmd, label):
+                        result = subprocess.run(cmd, capture_output=True, timeout=5)
+                        if result.returncode == 0:
+                            return True
+                        stderr = result.stderr.decode("utf-8").strip() if result.stderr else "unknown error"
+                        errors.append(f"{label}: {stderr}")
+                        return False
+
+                    if shutil.which("wpa_cli"):
+                        disconnect_ok = attempt(["wpa_cli", "-i", iface, "disconnect"], "wpa_cli disconnect")
+                    if not disconnect_ok and shutil.which("nmcli"):
+                        disconnect_ok = attempt(["nmcli", "dev", "disconnect", iface], "nmcli disconnect")
+                    if not disconnect_ok and shutil.which("iw"):
+                        disconnect_ok = attempt(["iw", "dev", iface, "disconnect"], "iw disconnect")
+                    if not disconnect_ok:
+                        if attempt(["ip", "link", "set", iface, "down"], "ip link down"):
+                            disconnect_ok = True
+                            reason = f"Wi-Fi disconnected ({iface} down)"
+                except Exception as e:
+                    errors.append(str(e))
+
+                if disconnect_ok:
+                    self.state_machine.ctx.last_reason = "disconnect"
+                    self.persistent_connection_state = {
+                        "wifi_state": "DISCONNECTED",
+                        "usb_nat": "OFF",
+                        "internet_check": "UNKNOWN",
+                        "captive_portal": "UNKNOWN",
+                    }
+                else:
+                    reason = "Disconnect failed: " + ("; ".join(errors) if errors else "unknown error")
+                with self.status_ctx_lock:
+                    self.status_ctx.update({"reason": reason})
+
+                disconnect_summary = {
+                    "changed": disconnect_ok,
+                    "suspicion": self.state_machine.ctx.suspicion,
+                    "reason": reason,
+                    "constraints": [],
+                }
+                self.write_snapshot(disconnect_summary, {}, skip_sync=True)
+                self._maybe_update_epd(self.current_stage, disconnect_summary, {}, force=True)
+                # Skip state machine this loop
+                time.sleep(0.1)
+                continue  # Skip the rest of the loop
+            
+            # Manual CONTAIN: keep stage until explicit release
+            if self.manual_contain_active:
+                if self.current_stage != Stage.CONTAIN:
+                    self.current_stage = Stage.CONTAIN
+                    self.state_machine.ctx.state = Stage.CONTAIN
+                time.sleep(0.1)
+                continue
+
+            # Check if temporary forced CONTAIN is still active
+            if time.time() < self.forced_contain_until:
+                self.logger.debug(f"Maintaining forced CONTAIN (until {self.forced_contain_until - time.time():.1f}s)")
+                # Skip state machine, keep current stage
+                time.sleep(0.1)
+                continue  # Skip the rest of the loop
             
             link_state, link_meta, new_link = self.poll_wifi()
             signals: Dict[str, object] = {"link_up": link_state}

@@ -39,6 +39,14 @@
                     <span class="metric-label">Reason</span>
                     <span class="metric-value text-wrap" id="riskReason">-</span>
                 </div>
+                <div class="metric">
+                    <span class="metric-label">Suricata</span>
+                    <span class="badge" id="riskSuricata">UNKNOWN</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">OpenCanary</span>
+                    <span class="badge" id="riskOpenCanary">UNKNOWN</span>
+                </div>
             </div>
 
             <!-- Control / Safety Card -->
@@ -111,7 +119,7 @@
                         </span>
                     </div>
                 
-                    <button class="btn btn-primary" onclick="scanWiFi()" style="margin-top: 8px; width: 100%; font-size: 0.8em; padding: 8px;">
+                    <button class="btn btn-primary" onclick="scanWiFi()" style="margin-top: 8px; width: 100%; font-size: 0.9em; padding: 8px;">
                         📡 Scan Wi-Fi
                     </button>
                 
@@ -190,8 +198,11 @@
         <button class="btn btn-secondary" onclick="executeAction('reprobe')">
             🔍 Re-Probe
         </button>
-        <button class="btn btn-warning" onclick="executeAction('contain')">
+        <button class="btn btn-warning" id="containBtn" onclick="executeAction('contain')">
             🛡️ Contain
+        </button>
+        <button class="btn btn-success" id="releaseBtn" onclick="executeAction('release')" style="display: none;">
+            ✅ Release
         </button>
         <button class="btn btn-danger" onclick="executeAction('disconnect')">
             ⛔ Disconnect
@@ -212,6 +223,17 @@
         <button class="btn btn-secondary" onclick="hideMoreMenu()">
             ❌ Close
         </button>
+    </div>
+
+    <!-- Details Modal -->
+    <div class="modal" id="detailsModal" onclick="closeDetailsModal()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3>Probe Details</h3>
+                <button class="modal-close" onclick="closeDetailsModal()" aria-label="Close">×</button>
+            </div>
+            <div class="modal-body" id="detailsBody"></div>
+        </div>
     </div>
 
     <!-- Status Toast -->

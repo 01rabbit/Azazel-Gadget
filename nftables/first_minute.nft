@@ -38,6 +38,12 @@ table inet azazel_fmc {
     elements = { 22, 80, 443, 8081, 8082, 8084 }
   }
 
+  # Decoy services exposed to upstream (wlan0)
+  set decoy_ports {
+    type inet_service
+    elements = { 22, 80 }
+  }
+
   chain stage_switch {
     type filter hook prerouting priority -300; policy accept;
     ct mark set $STAGE_PROBE
@@ -61,8 +67,8 @@ table inet azazel_fmc {
     iifname $DOWNSTREAM tcp dport @mgmt_ports accept comment "usb0 management"
     iifname $DOWNSTREAM udp dport { 53, 67, 68 } accept comment "usb0 DHCP/DNS"
     
-    # Phase 2: wlan0 (upstream) トラフィック拒否
-    # 本運用では wlan0 からのアクセスは一切受け付けない
+    # Phase 2: wlan0 (upstream) はデコイのみ許可
+    iifname $UPSTREAM tcp dport @decoy_ports accept comment "wlan0 decoy only"
     iifname $UPSTREAM drop comment "wlan0 blocked (production mode)"
     
     # Phase 3: その他の入力トラフィック（管理目的で保持）
