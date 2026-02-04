@@ -7,7 +7,7 @@
 このガイドでは、Raspberry Pi Zero 2 W に Raspberry Pi OS Lite（Trixie 64bit）をインストールし、
 
 - **方式B**: `dwc2 + g_ether` で USB ガジェット（OTG）を有効化
-- `usb0` を **10.55.0.1/24** で固定
+- `usb0` を **10.55.0.10/24** で固定
 - `wlan0` を上流 Wi-Fi としてインターネット接続
 - `usb0 → wlan0` のルーティング / NAT（iptables）を有効化
 
@@ -91,7 +91,7 @@ dtoverlay=dwc2
 ```bash
 cat > /Volumes/bootfs/user-data <<'EOF'
 #cloud-config
-hostname: raspberrypi
+hostname: azazel-gadget
 manage_etc_hosts: true
 enable_ssh: true
 
@@ -108,7 +108,7 @@ write_files:
       done
       ip link set usb0 up || true
       ip addr flush dev usb0 || true
-      ip addr add 10.55.0.1/24 dev usb0 || true
+      ip addr add 10.55.0.10/24 dev usb0 || true
 
   - path: /etc/systemd/system/usb0-static.service
     permissions: '0644'
@@ -132,7 +132,7 @@ runcmd:
 EOF
 ```
 
-これにより、Pi 起動時に `usb0-static.service` が実行され、**毎回 `usb0=10.55.0.1/24` が設定されます**。NetworkManager などによる自動設定の影響を受けません。
+これにより、Pi 起動時に `usb0-static.service` が実行され、**毎回 `usb0=10.55.0.10/24` が設定されます**。NetworkManager などによる自動設定の影響を受けません。
 
 ### 2-5. （任意）g_ether 互換性設定
 
@@ -179,64 +179,33 @@ diskutil eject /Volumes/bootfs 2>/dev/null || diskutil eject /Volumes/boot
 3. Pi への疎通・ログインを確認します。
 
    ```bash
-   ping -c 2 10.55.0.1
-   ssh pi@10.55.0.1   # パスワード: raspberry
+   ping -c 2 10.55.0.10
+   ssh pi@10.55.0.10   # パスワード: raspberry
    ```
 
 ここまでで、
 
-- Pi 側: `usb0 = 10.55.0.1/24`
+- Pi 側: `usb0 = 10.55.0.10/24`
 - ラップトップ: `USB NIC = 10.55.0.2/24`
 
 となり、USB 経由で SSH ログインできる状態になります。
 
 ---
 
-## 4. ラズパイ側での Wi-Fi 有効化と接続
+## 4. Wi-Fi 接続（Azazel ツールで実施）
 
-以降は、Pi に SSH ログインした状態（`pi@10.55.0.1`）で作業します。
+以降は、Pi に SSH ログインした状態（`pi@10.55.0.10`）で作業します。
 
-### 4-1. rfkill の確認と解除
+Wi-Fi の接続・保存は **Azazel のツール（Web UI / Control Daemon）から行う前提**です。  
+インストーラは SSID/PSK を固定化しません。
 
-```bash
-rfkill list
-sudo rfkill unblock wifi
-sudo rfkill unblock all
-rfkill list
-```
+最短手順:
 
-`Wireless LAN` の `Soft blocked` / `Hard blocked` が `no` になっていることを確認します。
+1. `tools/bootstrap_zero.sh` を完走させる（Web UI が有効化される）
+2. ブラウザで `http://10.55.0.10:8084` にアクセス
+3. Wi‑Fi スキャン → 接続（必要なら保存）
 
-### 4-2. Wi-Fi ラジオ ON とインターフェース UP
-
-Trixie では NetworkManager が標準で有効なため、`nmcli` を使用します。
-
-```bash
-sudo nmcli r wifi on
-nmcli dev status
-
-sudo ip link set wlan0 up
-ip -br link | grep wlan0
-```
-
-`wlan0` が `UP` になっていれば OK です。
-
-### 4-3. 周囲の AP をスキャン
-
-```bash
-sudo iw dev wlan0 scan | egrep 'SSID|freq|signal' | head -n 20
-nmcli dev wifi list
-```
-
-ここで接続したい **2.4GHz 帯 SSID**（例: `SSID_NAME`）が見えていることを確認します。
-
-### 4-4. Wi-Fi への接続とプロファイル永続化
-
-```bash
-sudo nmcli dev wifi connect "SSID_NAME" password "ここにパスワード" ifname wlan0
-```
-
-成功後、状態を確認します。
+CLI での `nmcli` 手動接続は **原則不要** です（トラブル時の最終手段としてのみ使用）。
 
 ```bash
 ip -4 a show wlan0
@@ -351,12 +320,12 @@ sudo iptables -L FORWARD -n -v
 ラップトップ側の USB NIC に対して、以下のような設定を行うと、
 
 - IP アドレス: `10.55.0.2/24`
-- デフォルトゲートウェイ: `10.55.0.1`
+- デフォルトゲートウェイ: `10.55.0.10`
 - DNS: 自宅ルータの IP または `8.8.8.8` など
 
 すべてのトラフィックが
 
-> ラップトップ → usb0 (10.55.0.1) → wlan0 → 上流インターネット
+> ラップトップ → usb0 (10.55.0.10) → wlan0 → 上流インターネット
 
 という流れになります。
 
@@ -365,7 +334,7 @@ sudo iptables -L FORWARD -n -v
 1. ラップトップから Pi への疎通
 
    ```bash
-   ping 10.55.0.1
+   ping 10.55.0.10
    ```
 
 2. ラップトップからインターネットへの疎通

@@ -15,9 +15,14 @@ install_if_exists() {
 }
 
 # スクリプトを /usr/local/bin へ
-install_if_exists "${ROOT}/bin/update_epaper_tmux.sh" /usr/local/bin/ 0755
 install -m 0755 "${ROOT}/bin/suri_epaper.sh"        /usr/local/bin/
 install -m 0755 "${ROOT}/bin/portal_detect.sh"      /usr/local/bin/
+install -m 0755 "${ROOT}/scripts/opencanary-start.sh" /usr/local/bin/opencanary-start
+
+# sbin scripts
+install -d /usr/local/sbin
+install -m 0755 "${ROOT}/scripts/usb0-static.sh" /usr/local/sbin/usb0-static.sh
+install -m 0755 "${ROOT}/scripts/azazel-nat.sh"  /usr/local/sbin/azazel-nat.sh
 
 # 環境ファイル
 sudo install -d /etc/default
@@ -46,6 +51,18 @@ sudo install -m 0644 "${ROOT}/configs/dnsmasq-first_minute.conf" /etc/azazel-zer
 sudo install -m 0644 "${ROOT}/configs/known_wifi.json" /etc/azazel-zero/known_wifi.json
 sudo install -m 0644 "${ROOT}/nftables/first_minute.nft" /etc/azazel-zero/nftables/first_minute.nft
 
+# iptables-persistent rules (USB NAT)
+sudo install -d /etc/iptables
+sudo install -m 0644 "${ROOT}/configs/iptables-rules.v4" /etc/iptables/rules.v4
+
+# OpenCanary config
+sudo install -d /etc/opencanaryd
+sudo install -m 0644 "${ROOT}/configs/opencanary.conf" /etc/opencanaryd/opencanary.conf
+
+# NetworkManager dispatcher (restart opencanary on wlan0 IP change)
+sudo install -d /etc/NetworkManager/dispatcher.d
+sudo install -m 0755 "${ROOT}/scripts/opencanary-nm-dispatcher.sh" /etc/NetworkManager/dispatcher.d/50-opencanary-wlan0
+
 # systemd unit を配置
 sudo install -m 0644 "${ROOT}/systemd/azazel-epd.service"     /etc/systemd/system/
 sudo install -m 0644 "${ROOT}/systemd/suri-epaper.service"    /etc/systemd/system/
@@ -57,6 +74,8 @@ sudo install -m 0644 "${ROOT}/systemd/azazel-epd.service.d/10-portal-detect.conf
 sudo install -m 0644 "${ROOT}/systemd/azazel-first-minute.service" /etc/systemd/system/
 sudo install -m 0644 "${ROOT}/systemd/azazel-control-daemon.service" /etc/systemd/system/
 sudo install -m 0644 "${ROOT}/systemd/azazel-web.service" /etc/systemd/system/
+sudo install -m 0644 "${ROOT}/systemd/usb0-static.service" /etc/systemd/system/
+sudo install -m 0644 "${ROOT}/systemd/azazel-nat.service" /etc/systemd/system/
 
 # 反映・起動
 sudo systemctl daemon-reload
@@ -65,4 +84,6 @@ sudo systemctl enable --now azazel-epd-portal.timer
 sudo systemctl enable --now azazel-first-minute.service
 sudo systemctl enable --now azazel-control-daemon.service
 sudo systemctl enable --now azazel-web.service
+sudo systemctl enable --now usb0-static.service
+sudo systemctl enable --now azazel-nat.service
 echo "Units installed. Edit opencanary.service if needed, then: sudo systemctl enable --now opencanary.service"

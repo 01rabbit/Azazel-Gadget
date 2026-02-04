@@ -6,6 +6,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/home/azazel/Azazel-Zero
+Environment="AZAZEL_DEBUG=1"
 ExecStart=/usr/bin/python3 /home/azazel/Azazel-Zero/py/azazel-first-minute.py start --config /etc/azazel-zero/first_minute.yaml --foreground
 ExecStop=/usr/bin/python3 /home/azazel/Azazel-Zero/py/azazel-first-minute.py stop --config /etc/azazel-zero/first_minute.yaml
 ExecStartPre=/usr/sbin/sysctl -w net.ipv4.ip_forward=1

@@ -1,6 +1,6 @@
 [Unit]
 Description=Azazel-Zero Control Daemon (Unix socket action executor)
-After=network-online.target azazel-state-generator.service
+After=network-online.target
 Wants=network-online.target
 ConditionPathExists=/home/azazel/Azazel-Zero/py/azazel_control/daemon.py
 

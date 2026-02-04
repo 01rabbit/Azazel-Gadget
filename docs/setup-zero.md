@@ -7,7 +7,7 @@ English | [日本語](/docs/setup-zero_ja.md)
 This guide explains how to install Raspberry Pi OS Lite (Trixie 64-bit) on a Raspberry Pi Zero 2 W and:
 
 - Enable USB gadget (OTG) using **Mode B**: `dwc2 + g_ether`
-- Fix `usb0` to **10.55.0.1/24**
+- Fix `usb0` to **10.55.0.10/24**
 - Use `wlan0` as the upstream Wi-Fi interface for Internet access
 - Enable routing / NAT (iptables) from `usb0 → wlan0`
 
@@ -91,7 +91,7 @@ If it does not exist, create it with the content below.
 ```bash
 cat > /Volumes/bootfs/user-data <<'EOF'
 #cloud-config
-hostname: raspberrypi
+hostname: azazel-gadget
 manage_etc_hosts: true
 enable_ssh: true
 
@@ -108,7 +108,7 @@ write_files:
       done
       ip link set usb0 up || true
       ip addr flush dev usb0 || true
-      ip addr add 10.55.0.1/24 dev usb0 || true
+      ip addr add 10.55.0.10/24 dev usb0 || true
 
   - path: /etc/systemd/system/usb0-static.service
     permissions: '0644'
@@ -132,7 +132,7 @@ runcmd:
 EOF
 ```
 
-With this in place, `usb0-static.service` runs at boot and **sets `usb0=10.55.0.1/24` every time**.  
+With this in place, `usb0-static.service` runs at boot and **sets `usb0=10.55.0.10/24` every time**.  
 It ensures that NetworkManager or other automatic mechanisms do not override the address.
 
 ### 2-5. (Optional) g_ether compatibility settings
@@ -180,64 +180,33 @@ Example (macOS host):
 3. Verify connectivity and log in to the Pi:
 
    ```bash
-   ping -c 2 10.55.0.1
-   ssh pi@10.55.0.1   # Password: raspberry
+   ping -c 2 10.55.0.10
+   ssh pi@10.55.0.10   # Password: raspberry
    ```
 
 At this point:
 
-- Pi side: `usb0 = 10.55.0.1/24`  
+- Pi side: `usb0 = 10.55.0.10/24`  
 - Laptop: `USB NIC = 10.55.0.2/24`  
 
 and you should be able to log in to the Pi over USB via SSH.
 
 ---
 
-## 4. Enabling and connecting Wi-Fi on the Raspberry Pi
+## 4. Wi‑Fi connection (via Azazel tools)
 
-From here on, work on the Pi over SSH (`pi@10.55.0.1`).
+From here on, work on the Pi over SSH (`pi@10.55.0.10`).
 
-### 4-1. Check and unblock rfkill
+Wi‑Fi connect/save is done via **Azazel tools (Web UI / Control Daemon)**.  
+The installer does **not** hardcode SSID/PSK.
 
-```bash
-rfkill list
-sudo rfkill unblock wifi
-sudo rfkill unblock all
-rfkill list
-```
+Shortest path:
 
-Confirm that `Soft blocked` / `Hard blocked` for `Wireless LAN` are both `no`.
+1. Run `tools/bootstrap_zero.sh` to completion (enables Web UI)
+2. Open `http://10.55.0.10:8084`
+3. Scan Wi‑Fi → connect (save if needed)
 
-### 4-2. Turn Wi-Fi radio ON and bring the interface UP
-
-On Trixie, NetworkManager is enabled by default, so use `nmcli`:
-
-```bash
-sudo nmcli r wifi on
-nmcli dev status
-
-sudo ip link set wlan0 up
-ip -br link | grep wlan0
-```
-
-If `wlan0` is shown as `UP`, you are ready.
-
-### 4-3. Scan for nearby access points
-
-```bash
-sudo iw dev wlan0 scan | egrep 'SSID|freq|signal' | head -n 20
-nmcli dev wifi list
-```
-
-Verify that the desired **2.4 GHz SSID** (for example, `JCOM_NYRY`) is visible.
-
-### 4-4. Connect to Wi-Fi and persist the profile
-
-```bash
-sudo nmcli dev wifi connect "JCOM_NYRY" password "YOUR_WIFI_PASSWORD" ifname wlan0
-```
-
-Then check the state:
+Manual `nmcli` usage should be considered **last resort**.
 
 ```bash
 ip -4 a show wlan0
@@ -352,19 +321,19 @@ If you see a `MASQUERADE` rule in `POSTROUTING` and `usb0` ↔ `wlan0` rules in 
 If you configure the USB NIC on your laptop as follows:
 
 - IP address: `10.55.0.2/24`  
-- Default gateway: `10.55.0.1`  
+- Default gateway: `10.55.0.10`  
 - DNS: your home router’s IP or `8.8.8.8`, etc.
 
 then all traffic will flow as:
 
-> Laptop → usb0 (10.55.0.1) → wlan0 → Upstream Internet
+> Laptop → usb0 (10.55.0.10) → wlan0 → Upstream Internet
 
 Example connectivity checks:
 
 1. From laptop to the Pi:
 
    ```bash
-   ping 10.55.0.1
+   ping 10.55.0.10
    ```
 
 2. From laptop to the Internet:

@@ -42,11 +42,11 @@ log "Updating apt and installing base packages…"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y \
-  iproute2 iptables iptables-persistent dnsmasq \
+  iproute2 iptables iptables-persistent nftables dnsmasq \
   jq tmux git curl ca-certificates \
-  python3 python3-venv python3-pip \
+  python3 python3-venv python3-pip python3-yaml python3-requests \
   suricata suricata-update \
-  util-linux wireless-tools iw
+  util-linux wireless-tools iw wpa_supplicant network-manager
 
 # Persist iptables on reboot (no prompt)
 if ! systemctl is-enabled netfilter-persistent >/dev/null 2>&1; then

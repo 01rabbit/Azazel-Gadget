@@ -264,7 +264,14 @@ sudo tools/bootstrap_zero.sh
 - `--no-epd` : E-Paper 関連の依存をスキップ  
 - `--no-enable` : systemd サービスの有効化を行わない  
 - `--no-suricata` : Suricata の軽量ルール設定をスキップ  
+- `--no-webui` : Web UI（監視/操作）をスキップ  
+- `--no-ntfy` : ntfy（通知基盤）をスキップ  
+- `--no-canary` : OpenCanary をスキップ  
+- `--no-gadget` : USB ガジェット設定（dwc2/g_ether）をスキップ  
 - `--dry-run` : 実行内容のみを表示
+
+注意:
+- Wi-Fi 接続/保存は **Azazel のツール（Web UI/Control Daemon）から行う前提**です。インストーラは SSID/PSK を固定化しません。
 
 1. **Raspberry Pi OS Lite (64bit)** をインストール  
 2. **USB ガジェットモード** を設定  

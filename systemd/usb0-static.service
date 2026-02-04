@@ -1,0 +1,12 @@
+[Unit]
+Description=Force static IPv4 on usb0 (USB Gadget)
+After=local-fs.target
+Before=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/usb0-static.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

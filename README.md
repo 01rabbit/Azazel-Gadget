@@ -264,7 +264,14 @@ Options:
 - `--no-epd`: skip E-Paper dependencies  
 - `--no-enable`: do not enable systemd services  
 - `--no-suricata`: skip lightweight Suricata rules  
+- `--no-webui`: skip Web UI (monitor/control)  
+- `--no-ntfy`: skip ntfy (notification backend)  
+- `--no-canary`: skip OpenCanary  
+- `--no-gadget`: skip USB gadget boot config (dwc2/g_ether)  
 - `--dry-run`: print actions only
+
+Note:
+- Wi-Fi connect/save is done via **Azazel tools (Web UI / Control Daemon)**. The installer does not hardcode SSID/PSK.
 
 1. Install **Raspberry Pi OS Lite (64bit)**  
 2. Configure **USB gadget mode**  

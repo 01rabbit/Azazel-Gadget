@@ -79,8 +79,11 @@ policy:
   default_tcp_ratelimit_degraded: "1 mbps"
 
 status_api:
-  host: 127.0.0.1          # Status API JSON エンドポイント（ローカルのみ）
-  port: 8082               # HTTP Status API
+  host: 10.55.0.10         # ダウンストリーム USB 管理インターフェース
+  port: 8082               # レガシー JSON API
+  web_host: 10.55.0.10
+  web_port: 8083           # Web UI ダッシュボード（デフォルト）
+  enable_remote_access: true  # リモートアクセスを有効化
 
 suricata:
   enabled: true
