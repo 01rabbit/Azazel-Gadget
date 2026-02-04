@@ -29,6 +29,7 @@ sudo install -d /etc/default
 sudo tee /etc/default/azazel-zero >/dev/null <<EOF
 AZAZEL_ROOT=${ROOT}
 AZAZEL_CANARY_VENV=/home/azazel/canary-venv
+AZAZEL_WEBUI_VENV=/home/azazel/azazel-webui-venv
 
 # 統一したEPDパスとロックファイル
 EPD_PY=${ROOT}/py/boot_splash_epd.py

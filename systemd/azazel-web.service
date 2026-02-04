@@ -10,7 +10,9 @@ User=azazel
 WorkingDirectory=/home/azazel/Azazel-Zero
 Environment="AZAZEL_WEB_HOST=10.55.0.10"
 Environment="AZAZEL_WEB_PORT=8084"
-ExecStart=/usr/bin/python3 /home/azazel/Azazel-Zero/azazel_web/app.py
+Environment="AZAZEL_WEBUI_VENV=/home/azazel/azazel-webui-venv"
+EnvironmentFile=-/etc/default/azazel-zero
+ExecStart=${AZAZEL_WEBUI_VENV}/bin/python /home/azazel/Azazel-Zero/azazel_web/app.py
 Restart=always
 RestartSec=5
 StandardOutput=journal

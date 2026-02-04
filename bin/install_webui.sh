@@ -11,6 +11,10 @@ DRY_RUN=0
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 AZAZEL_ROOT="${AZAZEL_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 LOG="${LOG:-/var/log/azazel-webui-install.log}"
+WEBUI_USER="${WEBUI_USER:-azazel}"
+WEBUI_VENV="${WEBUI_VENV:-/home/azazel/azazel-webui-venv}"
+WEBUI_PY="${WEBUI_VENV}/bin/python"
+WEBUI_PIP="${WEBUI_VENV}/bin/pip"
 
 # ---------- Helpers ----------
 log() { echo "[+] $*" | tee -a "$LOG"; }
@@ -24,6 +28,23 @@ cmd() {
     else
         echo "  (dry-run: skipped)" | tee -a "$LOG"
     fi
+}
+
+ensure_webui_user() {
+    if ! id "$WEBUI_USER" >/dev/null 2>&1; then
+        cmd "useradd -m -s /bin/bash $WEBUI_USER"
+    fi
+}
+
+ensure_webui_venv() {
+    log "Preparing Web UI venv: $WEBUI_VENV"
+    ensure_webui_user
+    cmd "apt-get update -y"
+    cmd "apt-get install -y python3-full python3-venv"
+    if [ ! -x "$WEBUI_PY" ]; then
+        cmd "runuser -u $WEBUI_USER -- python3 -m venv $WEBUI_VENV"
+    fi
+    cmd "runuser -u $WEBUI_USER -- $WEBUI_PIP install --upgrade pip wheel"
 }
 
 # ---------- Parse arguments ----------
@@ -68,19 +89,22 @@ log "Options: ENABLE_SYSTEMD=$ENABLE_SYSTEMD, DRY_RUN=$DRY_RUN"
 
 # ---------- Step 1: Install Python dependencies ----------
 install_python_deps() {
-    log "Installing Python dependencies for Web UI"
-    
-    # Check if Flask is already installed
-    if python3 -c "import flask" 2>/dev/null; then
-        local flask_version=$(python3 -c "import flask; print(flask.__version__)")
-        log "Flask already installed: version $flask_version"
+    log "Installing Python dependencies for Web UI (venv)"
+    log "System Python may be externally managed (PEP 668); using venv for Flask."
+    ensure_webui_venv
+
+    # Check if Flask is already installed in venv
+    if runuser -u "$WEBUI_USER" -- "$WEBUI_PY" -c "import flask" >/dev/null 2>&1; then
+        local flask_version
+        flask_version=$(runuser -u "$WEBUI_USER" -- "$WEBUI_PY" -c "import flask; print(flask.__version__)")
+        log "Flask already installed in venv: version $flask_version"
     else
-        log "Installing Flask..."
-        cmd "pip3 install Flask>=3.1.1"
+        log "Installing Flask into venv..."
+        cmd "runuser -u $WEBUI_USER -- $WEBUI_PIP install 'Flask>=3.1.1'"
     fi
-    
+
     # Verify installation
-    cmd "python3 -c 'import flask; print(\"Flask version:\", flask.__version__)'"
+    cmd "runuser -u $WEBUI_USER -- $WEBUI_PY -c 'import flask; print(\"Flask version:\", flask.__version__)'"
 }
 
 # ---------- Step 2: Verify directory structure ----------
@@ -198,7 +222,7 @@ test_webui() {
     
     # Test Flask app syntax
     log "Checking Flask app syntax..."
-    cmd "python3 -m py_compile $AZAZEL_ROOT/azazel_web/app.py"
+    cmd "$WEBUI_PY -m py_compile $AZAZEL_ROOT/azazel_web/app.py"
     
     # Test control daemon syntax
     log "Checking control daemon syntax..."
