@@ -280,55 +280,145 @@ def connect_nm(iface: str, ssid: str, security: str, passphrase: Optional[str], 
     try:
         sec_flags = parse_security(security)
 
-        # Check if connection exists
-        result = subprocess.run(
-            ["nmcli", "-t", "-f", "NAME,TYPE", "con", "show"],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        
-        con_exists = False
-        for line in result.stdout.splitlines():
-            parts = line.split(":")
-            if len(parts) >= 2 and parts[0] == ssid and parts[1] == "802-11-wireless":
-                con_exists = True
-                break
+        def find_nm_connection_for_ssid(target_ssid: str) -> Optional[str]:
+            """Find NM connection name by matching 802-11-wireless.ssid."""
+            try:
+                result = subprocess.run(
+                    [
+                        "nmcli",
+                        "-t",
+                        "-f",
+                        "NAME,TYPE",
+                        "con",
+                        "show",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if result.returncode != 0:
+                    return None
+                for line in result.stdout.splitlines():
+                    parts = line.split(":", 1)
+                    if len(parts) != 2:
+                        continue
+                    name, con_type = parts
+                    if con_type != "802-11-wireless":
+                        continue
+                    # Query SSID for each Wi-Fi connection (older nmcli doesn't expose it in list mode).
+                    ssid_result = subprocess.run(
+                        ["nmcli", "-t", "-f", "802-11-wireless.ssid", "con", "show", name],
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                    )
+                    if ssid_result.returncode != 0:
+                        continue
+                    ssid_line = (ssid_result.stdout or "").strip()
+                    if ":" in ssid_line:
+                        _, ssid_value = ssid_line.split(":", 1)
+                    else:
+                        ssid_value = ssid_line
+                    if ssid_value == target_ssid:
+                        return name
+                return None
+            except Exception:
+                return None
+
+        def get_nm_key_mgmt(connection_name: str) -> str:
+            """Return current key-mgmt for an existing NM connection (empty if unset)."""
+            try:
+                result = subprocess.run(
+                    ["nmcli", "-g", "802-11-wireless-security.key-mgmt", "con", "show", connection_name],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                if result.returncode == 0:
+                    return (result.stdout or "").strip()
+            except Exception:
+                pass
+
+            try:
+                result = subprocess.run(
+                    ["nmcli", "-t", "-f", "802-11-wireless-security.key-mgmt", "con", "show", connection_name],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                if result.returncode != 0:
+                    return ""
+                line = (result.stdout or "").strip()
+                if ":" in line:
+                    _, value = line.split(":", 1)
+                    return value.strip()
+                return line
+            except Exception:
+                return ""
+
+        def desired_nm_key_mgmt() -> Optional[str]:
+            """Decide key-mgmt to set based on security flags."""
+            if sec_flags["open"]:
+                return "none"
+            if sec_flags["wpa3"]:
+                return "sae"
+            if sec_flags["wpa2"] or sec_flags["wpa"]:
+                return "wpa-psk"
+            return None
+
+        # Check if connection exists for this SSID
+        con_name = find_nm_connection_for_ssid(ssid)
+        con_exists = con_name is not None
         
         if con_exists:
             # Update credentials if provided (or clear for OPEN)
             if sec_flags["open"]:
                 subprocess.run(
-                    ["nmcli", "con", "mod", ssid, "wifi-sec.key-mgmt", "none"],
+                    ["nmcli", "con", "mod", con_name, "wifi-sec.key-mgmt", "none"],
                     capture_output=True,
                     timeout=5
                 )
                 subprocess.run(
-                    ["nmcli", "con", "mod", ssid, "-u", "wifi-sec.psk"],
+                    ["nmcli", "con", "mod", con_name, "-u", "wifi-sec.psk"],
                     capture_output=True,
                     timeout=5
                 )
-            elif passphrase:
-                key_mgmt = "sae" if sec_flags["wpa3"] else "wpa-psk"
-                subprocess.run(
-                    ["nmcli", "con", "mod", ssid, "wifi-sec.key-mgmt", key_mgmt],
-                    capture_output=True,
-                    timeout=5
-                )
-                subprocess.run(
-                    ["nmcli", "con", "mod", ssid, "wifi-sec.psk", passphrase],
-                    capture_output=True,
-                    timeout=5
-                )
+            else:
+                existing_key_mgmt = get_nm_key_mgmt(con_name)
+                desired = desired_nm_key_mgmt()
+                key_mgmt = None
+
+                # Only set key-mgmt if missing (or clearly wrong) to avoid breaking saved profiles.
+                if not existing_key_mgmt or existing_key_mgmt == "none":
+                    key_mgmt = desired or "wpa-psk"  # safe default for WPA2-PSK
+                elif passphrase and desired and existing_key_mgmt != desired:
+                    # User provided credentials explicitly; align key-mgmt with the requested security.
+                    key_mgmt = desired
+
+                if key_mgmt:
+                    subprocess.run(
+                        ["nmcli", "con", "mod", con_name, "wifi-sec.key-mgmt", key_mgmt],
+                        capture_output=True,
+                        timeout=5
+                    )
+                if passphrase:
+                    subprocess.run(
+                        ["nmcli", "con", "mod", con_name, "wifi-sec.psk", passphrase],
+                        capture_output=True,
+                        timeout=5
+                    )
 
             # Connect to existing connection
             result = subprocess.run(
-                ["nmcli", "con", "up", ssid],
+                ["nmcli", "con", "up", con_name],
                 capture_output=True,
                 text=True,
                 timeout=20
             )
         else:
+            if not sec_flags["open"] and not passphrase:
+                return {"ok": False, "error": "Saved connection not found; passphrase required"}
+
             # Create new connection
             cmd = ["nmcli", "dev", "wifi", "connect", ssid, "ifname", iface]
             
@@ -344,8 +434,9 @@ def connect_nm(iface: str, ssid: str, security: str, passphrase: Optional[str], 
             
             # If not persisting, delete the connection after use (best-effort)
             if not persist and result.returncode == 0:
+                con_name = find_nm_connection_for_ssid(ssid) or ssid
                 subprocess.run(
-                    ["nmcli", "con", "delete", ssid],
+                    ["nmcli", "con", "delete", con_name],
                     capture_output=True,
                     timeout=5
                 )
@@ -356,8 +447,10 @@ def connect_nm(iface: str, ssid: str, security: str, passphrase: Optional[str], 
         # Disable auto-connect to ensure Wi-Fi only connects on explicit user action
         if con_exists or persist:
             try:
+                if not con_name:
+                    con_name = find_nm_connection_for_ssid(ssid) or ssid
                 subprocess.run(
-                    ["nmcli", "con", "mod", ssid, "connection.autoconnect", "no"],
+                    ["nmcli", "con", "mod", con_name, "connection.autoconnect", "no"],
                     capture_output=True,
                     timeout=5
                 )
