@@ -177,7 +177,7 @@ def main():
         backup_dir = args.snapshot.parent / f"{args.snapshot.name}_backup"
         if not backup_dir.exists():
             print(f"Creating backup: {backup_dir}")
-            shutil.copytree(args.snapshot, backup_dir)
+            shutil.copytree(args.snapshot, backup_dir, symlinks=True, ignore_dangling_symlinks=True)
     
     # マスク実行
     result = mask_snapshot(args.snapshot)

@@ -78,19 +78,26 @@ def parse_ss(snapshot_dir: Path) -> List[Dict[str, Any]]:
             if len(parts) < 5:
                 continue
             
-            # Local Address:Port
-            local = parts[4] if len(parts) > 4 else ''
+            # ss -tlnp の出力フォーマット:
+            # State Recv-Q Send-Q Local-Address:Port Peer-Address:Port Process
+            # parts[0]=State, parts[1]=Recv-Q, parts[2]=Send-Q, 
+            # parts[3]=Local-Address:Port, parts[4]=Peer-Address:Port, parts[5]=Process
+            
+            if parts[0] != 'LISTEN':
+                continue
+            
+            local = parts[3]
             if ':' in local:
                 addr, port = local.rsplit(':', 1)
                 
-                # Process情報
-                process = parts[-1] if len(parts) > 6 else ''
+                # Process情報（parts[5]以降）
+                process = ' '.join(parts[5:]) if len(parts) > 5 else ''
                 pid_match = re.search(r'pid=(\d+)', process)
                 pid = int(pid_match.group(1)) if pid_match else None
                 
                 listeners.append({
                     'proto': proto,
-                    'addr': addr.replace('[', '').replace(']', ''),
+                    'addr': addr.replace('[', '').replace(']', '').replace('*', '0.0.0.0'),
                     'port': port,
                     'pid': pid,
                     'process': process
@@ -161,6 +168,10 @@ def parse_systemd_services(snapshot_dir: Path) -> List[Dict[str, Any]]:
     
     return services
 
+def service_is_active(service: Dict[str, Any]) -> bool:
+    """ActiveState を広めに判定（auto-restart の activating も稼働とみなす）"""
+    return service.get('active_state') in {'active', 'activating', 'reloading'}
+
 def parse_tc(snapshot_dir: Path, interface: str) -> Dict[str, Any]:
     """tc（トラフィック制御）状態を抽出"""
     tc_file = snapshot_dir / 'network' / f'tc_{interface}.txt'
@@ -202,8 +213,16 @@ def infer_azazel_topology(interfaces: Dict, default_route: Dict, listeners: List
                 break
     
     # デフォルトルートから外向きIFを推論
+    # wlan0を最優先（Azazel-Gadgetの標準構成）、次に実際の IF
     if default_route:
-        outside_if = default_route.get('interface')
+        candidate_if = default_route.get('interface')
+        
+        # wlan0 が存在すればそれを優先（DOWN状態でも構わない - 新機で UP想定）
+        if 'wlan0' in interfaces:
+            outside_if = 'wlan0'
+        else:
+            outside_if = candidate_if
+        
         # 外向きIPはDHCPで変動するため、現在の値を記録
         if outside_if and outside_if in interfaces:
             addrs = interfaces[outside_if].get('addrs', [])
@@ -237,31 +256,55 @@ def generate_profile(snapshot_dir: Path) -> Dict[str, Any]:
     # トラフィック制御（外向きIFのみ）
     tc_state = parse_tc(snapshot_dir, topology['outside_if'])
     
-    # 管理UIリスナー検出
+    # 管理UIリスナー検出（8084: Web UI, 8082: Status API）
     mgmt_ui_port = None
+    status_api_port = None
+    
     for listener in listeners:
-        if listener['addr'] in ['0.0.0.0', topology['inside_ip'], '*'] and listener['port'] in ['8081', '80', '443']:
-            if 'azazel' in listener.get('process', '').lower() or 'python' in listener.get('process', ''):
+        if listener['addr'] in ['0.0.0.0', topology['inside_ip'], '*']:
+            # Web UI (8084 優先、次に 80, 443)
+            if listener['port'] == '8084' and 'python' in listener.get('process', '').lower():
                 mgmt_ui_port = listener['port']
-                break
+            # Status API (8082)
+            elif listener['port'] == '8082' and 'python' in listener.get('process', '').lower():
+                status_api_port = listener['port']
+            # フォールバック
+            elif mgmt_ui_port is None and listener['port'] in ['80', '443', '8081']:
+                if 'azazel' in listener.get('process', '').lower() or 'python' in listener.get('process', ''):
+                    mgmt_ui_port = listener['port']
+    
+    # ntfy 検出（プロセスとポートから）
+    ntfy_mode = 'none'
+    ntfy_port = None
+
+    # systemd で稼働していれば server とみなす
+    ntfy_service_active = any('ntfy' == s['name'] and service_is_active(s) for s in services)
+    if ntfy_service_active:
+        ntfy_mode = 'server'
+
+    # プロセス/ポートからの検出（補強）
+    for listener in listeners:
+        if 'ntfy' in listener.get('process', '').lower():
+            ntfy_mode = 'server'
+            ntfy_port = listener['port']
+            break
+
+    # 設定ファイルから補完
+    if ntfy_mode == 'none':
+        first_minute_yaml = snapshot_dir / 'config' / 'configs' / 'first_minute.yaml'
+        if first_minute_yaml.exists():
+            try:
+                fm_config = yaml.safe_load(first_minute_yaml.read_text())
+                if 'ntfy' in fm_config and fm_config['ntfy'].get('enabled'):
+                    ntfy_mode = fm_config['ntfy'].get('mode', 'client')
+            except:
+                pass
     
     # OpenCanaryリスナー検出
-    opencanary_enabled = any('opencanary' in s['name'] for s in services if s.get('active_state') == 'active')
+    opencanary_enabled = any('opencanary' in s['name'] and service_is_active(s) for s in services)
     
     # Suricata検出
-    suricata_enabled = any('suricata' in s['name'] for s in services if s.get('active_state') == 'active')
-    
-    # ntfy検出（config/first_minute.yaml から）
-    ntfy_mode = 'none'
-    first_minute_yaml = snapshot_dir / 'config' / 'configs' / 'first_minute.yaml'
-    if first_minute_yaml.exists():
-        try:
-            fm_config = yaml.safe_load(first_minute_yaml.read_text())
-            if 'ntfy' in fm_config:
-                if fm_config['ntfy'].get('enabled'):
-                    ntfy_mode = fm_config['ntfy'].get('mode', 'client')
-        except:
-            pass
+    suricata_enabled = any('suricata' in s['name'] and service_is_active(s) for s in services)
     
     # Profile生成
     profile = {
@@ -291,8 +334,15 @@ def generate_profile(snapshot_dir: Path) -> Dict[str, Any]:
         # 必須：管理UI
         'management_ui': {
             'enabled': mgmt_ui_port is not None,
-            'port': mgmt_ui_port or 8081,
+            'port': int(mgmt_ui_port) if mgmt_ui_port else 8084,
             'bind_inside_only': True,  # usb0側のみ
+        },
+        
+        # Status API
+        'status_api': {
+            'enabled': status_api_port is not None,
+            'port': int(status_api_port) if status_api_port else 8082,
+            'bind_inside_only': True,
         },
         
         # 必須：Suricata
@@ -316,6 +366,7 @@ def generate_profile(snapshot_dir: Path) -> Dict[str, Any]:
         # 任意：ntfy
         'ntfy': {
             'mode': ntfy_mode,  # client/server/none
+            'port': int(ntfy_port) if ntfy_port else 8081,
         },
         
         # SSH（USB経由維持は絶対条件）
@@ -326,7 +377,7 @@ def generate_profile(snapshot_dir: Path) -> Dict[str, Any]:
         },
         
         # systemd services
-        'services': [s for s in services if s.get('active_state') == 'active'],
+        'services': [s for s in services if service_is_active(s)],
     }
     
     return profile

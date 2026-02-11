@@ -90,8 +90,8 @@ systemctl list-units --type=service --all --no-pager > "$SNAPSHOT_DIR/services/s
 systemctl list-unit-files --type=service --no-pager > "$SNAPSHOT_DIR/services/systemctl_unit_files.txt" 2>&1
 
 # Azazel関連サービスの詳細
-for service in azazel-first-minute azazel-nat azazel-web azazel-control-daemon opencanary suri-epaper azazel-epd usb0-static; do
-    if systemctl list-unit-files | grep -q "^${service}.service"; then
+for service in azazel-first-minute azazel-nat azazel-web azazel-control-daemon opencanary suricata ntfy suri-epaper azazel-epd usb0-static; do
+    if systemctl is-enabled "${service}.service" >/dev/null 2>&1 || systemctl is-active "${service}.service" >/dev/null 2>&1; then
         systemctl show "$service.service" --no-pager > "$SNAPSHOT_DIR/services/${service}_show.txt" 2>&1 || true
         systemctl status "$service.service" --no-pager > "$SNAPSHOT_DIR/services/${service}_status.txt" 2>&1 || true
         
