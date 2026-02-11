@@ -16,7 +16,7 @@ from pathlib import Path
 
 # Import Wi-Fi modules
 sys.path.insert(0, str(Path(__file__).parent))
-from wifi_scan import scan_wifi, get_wireless_interface, check_wpa_supplicant, check_networkmanager
+from wifi_scan import scan_wifi, get_wireless_interface, check_networkmanager
 from wifi_connect import connect_wifi, update_state_json
 
 # Logging setup
@@ -60,18 +60,6 @@ def suppress_auto_wifi():
         if not iface:
             return
 
-        # wpa_supplicant: disable all networks to prevent auto-connect
-        if check_wpa_supplicant(iface):
-            try:
-                subprocess.run(
-                    ["wpa_cli", "-i", iface, "disable_network", "all"],
-                    capture_output=True,
-                    timeout=5
-                )
-                logger.info("Disabled wpa_supplicant auto-connect")
-            except Exception as e:
-                logger.debug(f"Failed to disable wpa_supplicant auto-connect: {e}")
-
         # NetworkManager: disable autoconnect for all Wi-Fi connections and disconnect
         if check_networkmanager(iface):
             try:
@@ -97,6 +85,8 @@ def suppress_auto_wifi():
                 logger.info("Disabled NetworkManager auto-connect and disconnected Wi-Fi")
             except Exception as e:
                 logger.debug(f"Failed to disable NetworkManager auto-connect: {e}")
+        else:
+            logger.warning("NetworkManager not found or not managing interface")
 
         # Update UI snapshot to reflect disconnected state
         update_state_json(

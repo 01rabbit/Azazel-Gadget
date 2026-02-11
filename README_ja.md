@@ -334,3 +334,37 @@ python3 epd_2in13b_V4_test.py
 ```
 
 `install_waveshare_epd.sh` は `/opt/waveshare-epd` へライブラリを配置し、`E-Paper_code.zip` を取得します。`--run-demo` を付けると最後にデモ実行まで自動化します。
+
+---
+
+## インフラ移行（旧機 → 新機）
+
+**推測ゼロ、決定論的移行**: 既存の Azazel-Gadget（旧機）のインフラ構成を自動採取し、新環境（新機）へ完全再現します。
+
+詳細は **[installer/README.md](installer/README.md)** を参照してください。
+
+### クイックスタート
+
+**旧機で実行**（collect のみ）：
+```bash
+sudo installer/collect_snapshot.sh
+python3 installer/mask.py --snapshot installer/snapshot/<dir>
+python3 installer/generate_profile.py --snapshot installer/snapshot/<dir>/snapshot.json
+```
+
+**Mac へ転送後、新機で実行**（apply & validate）：
+```bash
+sudo installer/apply.sh --profile installer/profiles/gadget_profile_YYYYMMDD.yaml --dry-run
+sudo installer/apply.sh --profile installer/profiles/gadget_profile_YYYYMMDD.yaml
+sudo installer/validate.sh --profile installer/profiles/gadget_profile_YYYYMMDD.yaml
+```
+
+検証が **PASS** ならカットオーバー。**FAIL** なら failure bundle を回収して再実行。
+
+### 絶対禁止事項
+
+- **旧機で `apply.sh` を実行しない**（旧機は真実、変更禁止）
+- **旧機と新機を同時に同一ネットワークで有効化しない**（IP衝突防止）
+- **USB経由SSH破壊禁止**（移行中も usb0 経由アクセスを維持）
+
+完全な移行ワークフロー、トラブルシューティング、設計原則は **[installer/README.md](installer/README.md)** を参照してください。

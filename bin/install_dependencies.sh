@@ -46,7 +46,7 @@ apt-get install -y \
   jq tmux git curl ca-certificates \
   python3 python3-venv python3-pip python3-yaml python3-requests \
   suricata suricata-update \
-  util-linux wireless-tools iw wpasupplicant network-manager
+  util-linux wireless-tools iw network-manager
 
 # Persist iptables on reboot (no prompt)
 if ! systemctl is-enabled netfilter-persistent >/dev/null 2>&1; then

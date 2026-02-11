@@ -2,9 +2,7 @@
 """
 Wi-Fi Scan Module for Azazel-Zero Control Daemon
 
-Auto-detects environment and performs Wi-Fi AP scan:
-- Prefers wpa_supplicant/wpa_cli if managing wlan iface
-- Falls back to NetworkManager/nmcli if available
+Performs Wi-Fi AP scan using NetworkManager/nmcli:
 - Returns deduplicated AP list (strongest per SSID)
 """
 
@@ -55,20 +53,6 @@ def get_wireless_interface() -> Optional[str]:
         return None
 
 
-def check_wpa_supplicant(iface: str) -> bool:
-    """Check if wpa_supplicant manages this interface"""
-    try:
-        result = subprocess.run(
-            ["wpa_cli", "-i", iface, "status"],
-            capture_output=True,
-            text=True,
-            timeout=2
-        )
-        return result.returncode == 0
-    except:
-        return False
-
-
 def check_networkmanager(iface: str) -> bool:
     """Check if NetworkManager manages this interface"""
     try:
@@ -81,29 +65,6 @@ def check_networkmanager(iface: str) -> bool:
         return iface in result.stdout
     except:
         return False
-
-
-def get_saved_networks_wpa(iface: str) -> set:
-    """Get saved network SSIDs from wpa_supplicant"""
-    try:
-        result = subprocess.run(
-            ["wpa_cli", "-i", iface, "list_networks"],
-            capture_output=True,
-            text=True,
-            timeout=2
-        )
-        
-        saved = set()
-        for line in result.stdout.splitlines()[1:]:  # Skip header
-            parts = line.split("\t")
-            if len(parts) >= 2:
-                ssid = parts[1].strip()
-                if ssid:
-                    saved.add(ssid)
-        return saved
-    except Exception as e:
-        logger.warning(f"Failed to get saved networks from wpa_cli: {e}")
-        return set()
 
 
 def get_saved_networks_nm() -> set:
@@ -251,27 +212,18 @@ def scan_wifi() -> Dict[str, Any]:
     
     logger.info(f"Using wireless interface: {iface}")
     
-    # Detect Wi-Fi manager
-    use_wpa = check_wpa_supplicant(iface)
-    use_nm = check_networkmanager(iface)
-    
-    if not use_wpa and not use_nm:
+    # Check if NetworkManager is available
+    if not check_networkmanager(iface):
         return {
             "ok": False,
-            "error": "No supported Wi-Fi manager found (need wpa_supplicant or NetworkManager)",
+            "error": "NetworkManager not found or not managing interface",
             "ts": time.time()
         }
     
-    # Get saved networks
-    saved_ssids = set()
-    if use_wpa:
-        logger.info("Using wpa_supplicant for scan")
-        saved_ssids = get_saved_networks_wpa(iface)
-        aps = scan_with_iw(iface, saved_ssids)
-    else:
-        logger.info("Using NetworkManager for scan")
-        saved_ssids = get_saved_networks_nm()
-        aps = scan_with_nmcli(iface, saved_ssids)
+    # Get saved networks from NetworkManager
+    logger.info("Using NetworkManager for scan")
+    saved_ssids = get_saved_networks_nm()
+    aps = scan_with_nmcli(iface, saved_ssids)
     
     if not aps:
         return {

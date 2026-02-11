@@ -404,3 +404,37 @@ Port whitelisting on `usb0` (downstream):
 ICMP (ping) and IGMP fully supported for network diagnostics.
 
 ---
+
+## Infrastructure Migration (Old Machine → New Machine)
+
+**Zero-guesswork, deterministic migration**: Automatically capture infrastructure configuration from an existing Azazel-Gadget (old machine) and reproduce it identically on a new environment (new machine).
+
+For detailed instructions, see **[installer/README.md](installer/README.md)**.
+
+### Quick Start
+
+**On old machine** (collect only):
+```bash
+sudo installer/collect_snapshot.sh
+python3 installer/mask.py --snapshot installer/snapshot/<dir>
+python3 installer/generate_profile.py --snapshot installer/snapshot/<dir>/snapshot.json
+```
+
+**Transfer to Mac**, then **on new machine** (apply & validate):
+```bash
+sudo installer/apply.sh --profile installer/profiles/gadget_profile_YYYYMMDD.yaml --dry-run
+sudo installer/apply.sh --profile installer/profiles/gadget_profile_YYYYMMDD.yaml
+sudo installer/validate.sh --profile installer/profiles/gadget_profile_YYYYMMDD.yaml
+```
+
+If validation **PASSES**, cutover to new machine. If **FAILS**, collect failure bundle and iterate.
+
+### Critical Rules
+
+- **Never run `apply.sh` on the old machine** (old machine is truth, must not be modified)
+- **Never activate both old and new machines simultaneously** on the same network (IP collision)
+- **USB-based SSH must never be broken** during migration
+
+See **[installer/README.md](installer/README.md)** for complete migration workflow, troubleshooting, and design principles.
+
+---
