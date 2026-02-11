@@ -1,4 +1,15 @@
 #!/bin/bash
+# ⚠️  DEPRECATED: This script is superseded by the unified installer.
+# 
+# **新形式は以下を使用してください：**
+# 
+#   sudo ./install.sh [OPTIONS]
+# 
+# このスクリプトは v3.0 で削除されます。
+# 詳細: docs/INSTALLER_DEPRECATION_SCHEDULE.md
+# 
+# ============================================================================
+
 # Re-exec under bash if not already
 [ -n "${BASH_VERSION:-}" ] || exec /bin/bash "$0" "$@"
 

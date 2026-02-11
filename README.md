@@ -246,195 +246,95 @@ Threat: [🔴🔴🔴🔴🔴] Critical ← Dangerous
 
 ---
 
-## Setup (overview)
+## Installation
 
-See [docs/setup-zero.md](docs/setup-zero.md) for details.
+**Complete setup with the unified installer.** See [installer/README.md](installer/README.md) for details.
 
-### Quick start
+### Prerequisites
 
-Use the automated setup script for reproducible installs.
+- **Raspberry Pi Zero 2 W** running Raspberry Pi OS Lite 64-bit
+- **USB gadget mode** configured:
+  - Add `dtoverlay=dwc2` to `/boot/config.txt`
+  - Add `modules-load=dwc2,g_ether` to `/boot/cmdline.txt`
+  - After reboot, `usb0` is available
+- Repository deployed to `/home/azazel/Azazel-Zero`
 
-```bash
-sudo chmod +x tools/bootstrap_zero.sh
-sudo tools/bootstrap_zero.sh
-```
-
-Options:
-
-- `--no-epd`: skip E-Paper dependencies  
-- `--no-enable`: do not enable systemd services  
-- `--no-suricata`: skip lightweight Suricata rules  
-- `--no-webui`: skip Web UI (monitor/control)  
-- `--no-ntfy`: skip ntfy (notification backend)  
-- `--no-canary`: skip OpenCanary  
-- `--no-gadget`: skip USB gadget boot config (dwc2/g_ether)  
-- `--dry-run`: print actions only
-
-Note:
-- Wi-Fi connect/save is done via **Azazel tools (Web UI / Control Daemon)**. The installer does not hardcode SSID/PSK.
-
-1. Install **Raspberry Pi OS Lite (64bit)**  
-2. Configure **USB gadget mode**  
-   - Add `dtoverlay=dwc2` to `/boot/config.txt`  
-   - Add `modules-load=dwc2,g_ether` to `/boot/cmdline.txt`  
-3. Install **E-Paper control library** (e.g., Waveshare Python)  
-4. Deploy **UI scripts** to display threat level and delay state  
-5. Enable **systemd services** to autostart shield/UI
-
-## Boot-time E-Paper splash (~/Azazel-Zero)
-
-See [Boot_E-Paper_Splash_ja.md](/docs/Boot_E-Paper_Splash_ja.md) for details.
-
-At boot, display **SSID** and **IPv4** on the Waveshare E-Paper.  
-Script: `py/boot_splash_epd.py`
-
-**Setup**
-
-1. Install dependencies together: `sudo bash bin/install_dependencies.sh --with-epd`  
-2. Test: `sudo python3 ~/Azazel-Zero/py/boot_splash_epd.py`  
-3. Enable service `azazel-epd.service` (path managed in `/etc/default/azazel-zero`)
-
-If your panel driver is not `epd2in13_V4`, change to `V3` or `V2`.
-
-### Install Waveshare libraries (Raspberry Pi Zero 2 W)
-
-`bin/install_waveshare_epd.sh` automates the official steps so Waveshare demos run immediately:
+### Quick Start (Recommended)
 
 ```bash
-sudo bash bin/install_waveshare_epd.sh
+cd ~/Azazel-Zero
+sudo ./install.sh
 ```
 
-Script contents (can run manually):
+**That's it.** The following is automatically executed:
+
+✅ **Stage 00**: Prerequisites check (root, OS, disk, interfaces)  
+✅ **Stage 10**: Dependency installation (nftables, dnsmasq, Python venv, etc.)  
+✅ **Stage 20**: Network configuration (usb0, NAT, iptables)  
+  - **Auto-detect network changes** → prompt reboot → resumable with `--resume`  
+✅ **Stage 30**: Deploy configs to `/etc/azazel-zero/`  
+✅ **Stage 40**: Register and enable systemd units  
+✅ **Stage 99**: Validate all services and complete
+
+### Network Change Handling
+
+If wlan0 IP changes during installation (e.g., DHCP reassignment):
+
+1. **Stage 20** detects the network change
+2. Displays a reboot prompt message
+3. Saves state and exits safely
+4. After reboot, run:
+   ```bash
+   sudo ./install.sh --resume
+   ```
+5. Continues from **Stage 30**
+
+### Enable Optional Features
 
 ```bash
-# Dependencies
-sudo apt-get update
-sudo apt-get install python3-pip
-sudo apt-get install python3-pil
-sudo apt-get install python3-numpy
-sudo python3 -m pip install spidev
+# Include Web UI + OpenCanary + E-Paper
+sudo ./install.sh --with-webui --with-canary --with-epd
 
-# gpiozero (only if missing)
-sudo apt-get update
-sudo apt install python3-gpiozero
-sudo apt install python-gpiozero
+# Enable all optional features
+sudo ./install.sh --all
 
-# Fetch Waveshare demos
-git clone https://github.com/waveshare/e-Paper.git
-cd e-Paper/RaspberryPi_JetsonNano/
-wget https://files.waveshare.com/upload/7/71/E-Paper_code.zip
-unzip E-Paper_code.zip -d e-Paper
-# Alternative: use 7zip
-sudo apt-get install p7zip-full
-7z x E-Paper_code.zip -O./e-Paper
-
-# Run demo (2.13in mono V4)
-cd e-Paper/RaspberryPi_JetsonNano/python/examples/
-python3 epd_2in13b_V4_test.py
+# Preview only (no changes)
+sudo ./install.sh --dry-run
 ```
 
-`install_waveshare_epd.sh` installs the library under `/opt/waveshare-epd` and fetches `E-Paper_code.zip`. Add `--run-demo` to automatically execute the demo at the end.
----
+**Available Options:**
 
-## Web UI
+| Option | Description |
+|--------|-------------|
+| `--with-webui` | Enable Flask-based Web UI (port 8084) |
+| `--with-canary` | Enable OpenCanary honeypot |
+| `--with-epd` | Install Waveshare E-Paper driver |
+| `--with-ntfy` | Enable ntfy notifications |
+| `--all` | Enable all options |
+| `--dry-run` | Print actions only (no changes) |
+| `--resume` | Resume from interrupted installation |
 
-### Overview
+### After Installation
 
-A responsive Flask-based Web UI accessible from MacBook via USB gadget network. Provides real-time security status, system metrics, and control actions.
+Once complete:
 
-### Architecture
+1. **Access Web UI** (from MacBook via usb0):
+   ```
+   http://10.55.0.10:8084
+   ```
 
-- **Backend**: Python Flask (port 8084)
-  - Reads shared state from `/run/azazel-zero/ui_snapshot.json` (first-minute controller)
-  - Unix socket control daemon for action execution
-  - JSON API endpoints: `/api/state`, `/api/action/*`, `/health`
+2. **Verify systemd services**:
+   ```bash
+   systemctl status azazel-first-minute
+   systemctl status azazel-nat
+   systemctl status usb0-static
+   ```
 
-- **Frontend**: HTML5 + CSS3 + JavaScript
-  - Responsive 2-column layout (PC) / stacked (mobile)
-  - 2-second polling interval for real-time updates
-  - Risk Assessment, Connection Info, Control & Safety panels
-  - System Health metrics (CPU temp, usage; memory usage)
+3. **Monitor logs** (real-time):
+   ```bash
+   journalctl -u azazel-first-minute -f
+   ```
 
-### Access
-
-**MacBook via USB gadget:**
-```bash
-# Network configuration
-usb0 (ラズパイ): 10.55.0.10/24
-en17 (MacBook):  10.55.0.114/24 (DHCP assigned)
-
-# Web UI
-http://10.55.0.10:8084
-```
-
-### State Information
-
-All data flows through single source: `/run/azazel-zero/ui_snapshot.json`
-
-```json
-{
-  "ssid": "JCOM_NYRY",
-  "temp_c": 30.7,
-  "cpu_percent": 2.2,
-  "mem_percent": 25.7,
-  "internal": {
-    "state_name": "NORMAL",
-    "suspicion": 0.0
-  }
-}
-```
-
-Shared between:
-- **Web UI (Flask)** - Remote access via HTTP
-- **TUI (Terminal UI)** - Local text-based interface
-- **Control Daemon** - Action execution (refresh, reprobe, contain, etc.)
-
-### Firewall Rules
-
-Port whitelisting on `usb0` (downstream):
-
-| Port | Purpose |
-|------|---------|
-| 22   | SSH management |
-| 80   | HTTP probes, redirects |
-| 443  | HTTPS/TLS probes |
-| 8081 | Status API |
-| 8084 | **Web UI** |
-
-ICMP (ping) and IGMP fully supported for network diagnostics.
-
----
-
-## Infrastructure Migration (Old Machine → New Machine)
-
-**Zero-guesswork, deterministic migration**: Automatically capture infrastructure configuration from an existing Azazel-Gadget (old machine) and reproduce it identically on a new environment (new machine).
-
-For detailed instructions, see **[installer/README.md](installer/README.md)**.
-
-### Quick Start
-
-**On old machine** (collect only):
-```bash
-sudo installer/collect_snapshot.sh
-python3 installer/mask.py --snapshot installer/snapshot/<dir>
-python3 installer/generate_profile.py --snapshot installer/snapshot/<dir>/snapshot.json
-```
-
-**Transfer to Mac**, then **on new machine** (apply & validate):
-```bash
-sudo installer/apply.sh --profile installer/profiles/gadget_profile_YYYYMMDD.yaml --dry-run
-sudo installer/apply.sh --profile installer/profiles/gadget_profile_YYYYMMDD.yaml
-sudo installer/validate.sh --profile installer/profiles/gadget_profile_YYYYMMDD.yaml
-```
-
-If validation **PASSES**, cutover to new machine. If **FAILS**, collect failure bundle and iterate.
-
-### Critical Rules
-
-- **Never run `apply.sh` on the old machine** (old machine is truth, must not be modified)
-- **Never activate both old and new machines simultaneously** on the same network (IP collision)
-- **USB-based SSH must never be broken** during migration
-
-See **[installer/README.md](installer/README.md)** for complete migration workflow, troubleshooting, and design principles.
+For advanced configuration changes and troubleshooting, see [installer/README.md](installer/README.md).
 
 ---

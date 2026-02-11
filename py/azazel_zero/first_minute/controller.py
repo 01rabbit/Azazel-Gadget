@@ -238,10 +238,71 @@ class FirstMinuteController:
 
     def start_dnsmasq(self) -> None:
         if self.no_dns_start or not self.cfg.dnsmasq.get("enable", True):
+            self.logger.info("dnsmasq start skipped (--no-dns-start or disabled in config)")
             return
-        cmd = ["dnsmasq", f"--conf-file={self.cfg.dnsmasq_conf_path}"]
-        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        self.processes["dnsmasq"] = proc
+        
+        # コンフィグファイル存在確認
+        conf_path = self.cfg.dnsmasq_conf_path
+        if not conf_path.exists():
+            self.logger.error(f"dnsmasq config not found: {conf_path}")
+            return
+        
+        # usb0インターフェースが UP していることを確認
+        downstream = self.cfg.interfaces.get("downstream", "usb0")
+        try:
+            import subprocess
+            result = subprocess.run(["ip", "link", "show", downstream], capture_output=True, text=True, timeout=3)
+            if result.returncode != 0:
+                self.logger.warning(f"Interface {downstream} not found yet. Retrying...")
+                # 再試行：インターフェースが起動するまで待機
+                for attempt in range(10):
+                    time.sleep(0.5)
+                    result = subprocess.run(["ip", "link", "show", downstream], capture_output=True, text=True, timeout=3)
+                    if result.returncode == 0:
+                        self.logger.info(f"Interface {downstream} is now available")
+                        break
+                else:
+                    self.logger.error(f"Interface {downstream} did not appear after 5 seconds")
+                    return
+            
+            # インターフェースがUPしているか確認
+            if "UP" not in result.stdout:
+                self.logger.warning(f"Interface {downstream} exists but is not UP. Bringing up...")
+                subprocess.run(["ip", "link", "set", downstream, "up"], timeout=3)
+        except Exception as e:
+            self.logger.warning(f"Could not verify interface {downstream}: {e}")
+        
+        cmd = ["dnsmasq", f"--conf-file={conf_path}"]
+        try:
+            # フォアグラウンド/バックグラウンドは設定で決定
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                universal_newlines=True
+            )
+            self.processes["dnsmasq"] = proc
+            self.logger.info(f"dnsmasq started with PID {proc.pid} using config: {conf_path}")
+            
+            # ログ出力をリアルタイムで読み込むスレッド
+            def read_dnsmasq_output():
+                try:
+                    while True:
+                        line = proc.stdout.readline()
+                        if not line:
+                            break
+                        if line.strip():
+                            self.logger.debug(f"[dnsmasq] {line.rstrip()}")
+                except Exception:
+                    pass
+            
+            output_thread = threading.Thread(target=read_dnsmasq_output, daemon=True)
+            output_thread.start()
+        except FileNotFoundError:
+            self.logger.error("dnsmasq binary not found. Install with: apt-get install dnsmasq")
+        except Exception as e:
+            self.logger.error(f"Failed to start dnsmasq: {e}")
 
     def stop_dnsmasq(self) -> None:
         proc = self.processes.get("dnsmasq")

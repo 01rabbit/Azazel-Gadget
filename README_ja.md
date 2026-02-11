@@ -246,125 +246,93 @@ sudo python3 py/azazel_zero/cli_unified.py
 
 ---
 
-## セットアップ手順（概要）
+## インストール手順
 
-※ 詳細は [docs/setup-zero.md](docs/setup-zero.md) を参照してください。
+**統合インストーラーで完全セットアップが完了します。** 詳細は [installer/README.md](installer/README.md) を参照してください。
 
-### クイックスタート
+### 前提条件
 
-再現性の高い構築を行う場合は自動セットアップスクリプトが利用できます。
+- **Raspberry Pi Zero 2 W** 上で Raspberry Pi OS Lite 64-bit を実行中
+- **USB ガジェットモード** を設定済み：
+  - `/boot/config.txt` に `dtoverlay=dwc2` を追記
+  - `/boot/cmdline.txt` に `modules-load=dwc2,g_ether` を追記
+  - 再起動後、`usb0` が使用可能
+- リポジトリを `/home/azazel/Azazel-Zero` に展開
 
-```bash
-sudo chmod +x tools/bootstrap_zero.sh
-sudo tools/bootstrap_zero.sh
-```
-
-オプション:
-
-- `--no-epd` : E-Paper 関連の依存をスキップ  
-- `--no-enable` : systemd サービスの有効化を行わない  
-- `--no-suricata` : Suricata の軽量ルール設定をスキップ  
-- `--no-webui` : Web UI（監視/操作）をスキップ  
-- `--no-ntfy` : ntfy（通知基盤）をスキップ  
-- `--no-canary` : OpenCanary をスキップ  
-- `--no-gadget` : USB ガジェット設定（dwc2/g_ether）をスキップ  
-- `--dry-run` : 実行内容のみを表示
-
-注意:
-- Wi-Fi 接続/保存は **Azazel のツール（Web UI/Control Daemon）から行う前提**です。インストーラは SSID/PSK を固定化しません。
-
-1. **Raspberry Pi OS Lite (64bit)** をインストール  
-2. **USB ガジェットモード** を設定  
-   - `/boot/config.txt` に `dtoverlay=dwc2` を追記  
-   - `/boot/cmdline.txt` に `modules-load=dwc2,g_ether` を追記  
-3. **E-Paper 制御ライブラリ**（例: Waveshare Python）を導入  
-4. 脅威レベルや遅延状況を表示する **UI スクリプト** を設置  
-5. **systemd サービス**としてシールド/UI を自動起動
-
-## 起動時 E-Paper スプラッシュ（~/Azazel-Zero）
-
-※ 詳細手順は [Boot_E-Paper_Splash_ja.md](/docs/Boot_E-Paper_Splash_ja.md) を参照してください。
-
-起動時に Waveshare 製 E-Paper へ **SSID** と **IPv4** を表示します。  
-スクリプト: `py/boot_splash_epd.py`
-
-**セットアップ**
-
-1. 依存関係をまとめて導入: `sudo bash bin/install_dependencies.sh --with-epd`  
-2. テスト: `sudo python3 ~/Azazel-Zero/py/boot_splash_epd.py`  
-3. サービス `azazel-epd.service` を有効化（パスは `/etc/default/azazel-zero` で管理）
-
-パネルドライバが `epd2in13_V4` でない場合は `V3` もしくは `V2` に変更してください。
-
-### Waveshare 機能ライブラリ導入（Raspberry Pi Zero 2 W）
-
-`bin/install_waveshare_epd.sh` は公式手順を自動化したスクリプトです。以下を実行すれば Waveshare デモがすぐ動作します。
+### クイックスタート（推奨）
 
 ```bash
-sudo bash bin/install_waveshare_epd.sh
+cd ~/Azazel-Zero
+sudo ./install.sh
 ```
 
-スクリプト内容（手動実行も可）:
+**それだけです。** 以下が自動化されます：
+
+✅ **Stage 00**: 前提条件確認（root、OS、ディスク、インターフェース）  
+✅ **Stage 10**: 依存パッケージ導入（nftables、dnsmasq、Python venv など）  
+✅ **Stage 20**: ネットワーク設定（usb0、NAT、iptables）  
+  - **ネットワーク変更を自動検出** → 再起動を要求 → `--resume` で再開可能  
+✅ **Stage 30**: 設定ファイルをデプロイ（/etc/azazel-zero/）  
+✅ **Stage 40**: systemd ユニットを登録・有効化  
+✅ **Stage 99**: 全サービスを検証・完了
+
+### ネットワーク変更時の対応
+
+インストール中に wlan0 の IP が変わった場合（DHCP 再割り当てなど）：
+
+1. **Stage 20** でネットワーク変更を検出
+2. 再起動を促すメッセージが表示される
+3. 状態を保存して安全に終了
+4. 再起動後、以下を実行：
+   ```bash
+   sudo ./install.sh --resume
+   ```
+5. **Stage 30** から続行
+
+### オプション機能の有効化
 
 ```bash
-# 依存パッケージ
-sudo apt-get update
-sudo apt-get install python3-pip
-sudo apt-get install python3-pil
-sudo apt-get install python3-numpy
-sudo python3 -m pip install spidev
+# Web UI + OpenCanary + E-Paper デモを含める
+sudo ./install.sh --with-webui --with-canary --with-epd
 
-# gpiozero（未導入の場合のみ）
-sudo apt-get update
-sudo apt install python3-gpiozero
-sudo apt install python-gpiozero
+# すべてのオプション機能を含める
+sudo ./install.sh --all
 
-# Waveshare デモ取得
-git clone https://github.com/waveshare/e-Paper.git
-cd e-Paper/RaspberryPi_JetsonNano/
-wget https://files.waveshare.com/upload/7/71/E-Paper_code.zip
-unzip E-Paper_code.zip -d e-Paper
-# 代替: 7zip を使用
-sudo apt-get install p7zip-full
-7z x E-Paper_code.zip -O./e-Paper
-
-# デモ実行（2.13in mono V4）
-cd e-Paper/RaspberryPi_JetsonNano/python/examples/
-python3 epd_2in13b_V4_test.py
+# 実行内容を確認のみ（変更しない）
+sudo ./install.sh --dry-run
 ```
 
-`install_waveshare_epd.sh` は `/opt/waveshare-epd` へライブラリを配置し、`E-Paper_code.zip` を取得します。`--run-demo` を付けると最後にデモ実行まで自動化します。
+**利用可能なオプション：**
 
----
+| オプション | 説明 |
+|----------|------|
+| `--with-webui` | Flask ベースの Web UI（ポート 8084）を有効化 |
+| `--with-canary` | OpenCanary ハニーポット機能を有効化 |
+| `--with-epd` | Waveshare E-Paper ドライバを導入 |
+| `--with-ntfy` | ntfy 通知機能を有効化 |
+| `--all` | すべてのオプションを有効化 |
+| `--dry-run` | 実行内容を表示（変更なし） |
+| `--resume` | 中断された場所から再開 |
 
-## インフラ移行（旧機 → 新機）
+### セットアップ後
 
-**推測ゼロ、決定論的移行**: 既存の Azazel-Gadget（旧機）のインフラ構成を自動採取し、新環境（新機）へ完全再現します。
+インストール完了後：
 
-詳細は **[installer/README.md](installer/README.md)** を参照してください。
+1. **Web UI にアクセス**（MacBook 側から usb0 経由）：
+   ```
+   http://10.55.0.10:8084
+   ```
 
-### クイックスタート
+2. **systemd サービスの状態確認**：
+   ```bash
+   systemctl status azazel-first-minute
+   systemctl status azazel-nat
+   systemctl status usb0-static
+   ```
 
-**旧機で実行**（collect のみ）：
-```bash
-sudo installer/collect_snapshot.sh
-python3 installer/mask.py --snapshot installer/snapshot/<dir>
-python3 installer/generate_profile.py --snapshot installer/snapshot/<dir>/snapshot.json
-```
+3. **ログ確認**（リアルタイム監視）：
+   ```bash
+   journalctl -u azazel-first-minute -f
+   ```
 
-**Mac へ転送後、新機で実行**（apply & validate）：
-```bash
-sudo installer/apply.sh --profile installer/profiles/gadget_profile_YYYYMMDD.yaml --dry-run
-sudo installer/apply.sh --profile installer/profiles/gadget_profile_YYYYMMDD.yaml
-sudo installer/validate.sh --profile installer/profiles/gadget_profile_YYYYMMDD.yaml
-```
-
-検証が **PASS** ならカットオーバー。**FAIL** なら failure bundle を回収して再実行。
-
-### 絶対禁止事項
-
-- **旧機で `apply.sh` を実行しない**（旧機は真実、変更禁止）
-- **旧機と新機を同時に同一ネットワークで有効化しない**（IP衝突防止）
-- **USB経由SSH破壊禁止**（移行中も usb0 経由アクセスを維持）
-
-完全な移行ワークフロー、トラブルシューティング、設計原則は **[installer/README.md](installer/README.md)** を参照してください。
+詳細な設定変更やトラブルシューティングについては [installer/README.md](installer/README.md) を参照してください。

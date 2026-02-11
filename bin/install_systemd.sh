@@ -1,4 +1,11 @@
-#!/usr/bin/env bash
+#!/usr/bin/env bash# ⚠️  DEPRECATED: This script is superseded by the unified installer.
+# 
+# **新形式は以下を使用してください：**
+# 
+#   sudo ./install.sh
+# 
+# このスクリプトは v3.0 で削除されます。
+# 詳細: docs/INSTALLER_DEPRECATION_SCHEDULE.md
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 echo "AZAZEL_ROOT=${ROOT}"
@@ -51,6 +58,11 @@ sudo install -m 0644 "${ROOT}/configs/first_minute.yaml" /etc/azazel-zero/first_
 sudo install -m 0644 "${ROOT}/configs/dnsmasq-first_minute.conf" /etc/azazel-zero/dnsmasq-first_minute.conf
 sudo install -m 0644 "${ROOT}/configs/known_wifi.json" /etc/azazel-zero/known_wifi.json
 sudo install -m 0644 "${ROOT}/nftables/first_minute.nft" /etc/azazel-zero/nftables/first_minute.nft
+
+# dnsmasq ディレクトリ設定
+sudo install -d /var/lib/dnsmasq
+sudo touch /var/lib/dnsmasq/dnsmasq.leases
+sudo chown nobody:nogroup /var/lib/dnsmasq/dnsmasq.leases
 
 # iptables-persistent rules (USB NAT)
 sudo install -d /etc/iptables

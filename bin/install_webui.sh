@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
+# ⚠️  DEPRECATED: This script is superseded by the unified installer.
+# 
+# **新形式は以下を使用してください：**
+# 
+#   sudo ./install.sh --with-webui
+# 
+# このスクリプトは v3.0 で削除されます。
+# 詳細: docs/INSTALLER_DEPRECATION_SCHEDULE.md
+
 # Azazel-Zero Web UI installer
 # Purpose: Reproducible Web UI setup for remote monitoring
 # Usage: sudo bin/install_webui.sh [--no-systemd] [--dry-run]

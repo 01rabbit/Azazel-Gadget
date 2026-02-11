@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
+# ⚠️  DEPRECATED: This script is superseded by the unified installer.
+# 
+# **新形式は以下を使用してください：**
+# 
+#   sudo ./install.sh --with-epd
+# 
+# このスクリプトは v3.0 で削除されます。
+# 詳細: docs/INSTALLER_DEPRECATION_SCHEDULE.md
+
 # Waveshare e-Paper function library installer for Raspberry Pi Zero 2 W
 # Mirrors the official steps (apt → git clone → demo archive) following Raspberry Pi OS Trixie/PEP 668 best practices (no system-wide pip).
 set -euo pipefail

@@ -1,4 +1,13 @@
 #!/bin/bash
+# ⚠️  DEPRECATED: This script is superseded by the unified installer.
+# 
+# **新形式は以下を使用してください：**
+# 
+#   sudo ./install.sh --with-ntfy
+# 
+# このスクリプトは v3.0 で削除されます。
+# 詳細: docs/INSTALLER_DEPRECATION_SCHEDULE.md
+
 # install_ntfy.sh - Install and configure ntfy.sh self-hosted push notification server
 # for Azazel-Gadget (Raspberry Pi Zero 2 W)
 #
