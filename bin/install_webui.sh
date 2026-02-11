@@ -15,6 +15,7 @@ WEBUI_USER="${WEBUI_USER:-azazel}"
 WEBUI_VENV="${WEBUI_VENV:-/home/azazel/azazel-webui-venv}"
 WEBUI_PY="${WEBUI_VENV}/bin/python"
 WEBUI_PIP="${WEBUI_VENV}/bin/pip"
+WEBUI_VERIFY="${WEBUI_VERIFY:-1}"
 
 # ---------- Helpers ----------
 log() { echo "[+] $*" | tee -a "$LOG"; }
@@ -103,8 +104,19 @@ install_python_deps() {
         cmd "runuser -u $WEBUI_USER -- $WEBUI_PIP install 'Flask>=3.1.1'"
     fi
 
-    # Verify installation
-    cmd "runuser -u $WEBUI_USER -- $WEBUI_PY -c 'import flask; print(\"Flask version:\", flask.__version__)'"
+    # Verify installation (non-fatal; low-memory systems may OOM-kill python)
+    local mem_kb=0
+    if [ -r /proc/meminfo ]; then
+        mem_kb=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)
+    fi
+    if [ "$WEBUI_VERIFY" -eq 1 ] && [ "${mem_kb:-0}" -ge 800000 ]; then
+        log "Verifying Flask import/version (non-fatal)"
+        if ! runuser -u "$WEBUI_USER" -- "$WEBUI_PY" -c 'import flask; print("Flask version:", flask.__version__)' 2>&1 | tee -a "$LOG"; then
+            warn "Flask version check failed (possibly low memory). Continuing."
+        fi
+    else
+        warn "Skipping Flask version check (WEBUI_VERIFY=0 or low memory: ${mem_kb} kB)"
+    fi
 }
 
 # ---------- Step 2: Verify directory structure ----------

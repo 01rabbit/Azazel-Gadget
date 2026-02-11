@@ -18,13 +18,30 @@ NTFY_PORT="8081"
 NTFY_LISTEN=":${NTFY_PORT}"
 NTFY_ADMIN_USER="azazel"
 NTFY_TOKEN_FILE="/etc/azazel/ntfy.token"
+NTFY_PASSWORD_FILE="/etc/azazel/ntfy.password"
 NTFY_SERVER_CONF="/etc/ntfy/server.yml"
 NTFY_MGMT_IP="10.55.0.10"
 NTFY_BASE_URL="http://${NTFY_MGMT_IP}:${NTFY_PORT}"
+APT_OPTS=${APT_OPTS:-"-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Dpkg::Use-Pty=0"}
+LOCK_WAIT_SECS=${LOCK_WAIT_SECS:-120}
 
 echo "============================================"
 echo "Azazel-Gadget ntfy Installation Script"
 echo "============================================"
+
+# Wait for apt/dpkg lock to clear
+wait_for_apt_lock() {
+    local waited=0
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+        if [ "$waited" -ge "$LOCK_WAIT_SECS" ]; then
+            echo "ERROR: dpkg lock still held after ${LOCK_WAIT_SECS}s. Please try again later."
+            exit 1
+        fi
+        echo "Waiting for dpkg lock... (${waited}s)"
+        sleep 5
+        waited=$((waited + 5))
+    done
+}
 
 # Check if running as root
 if [[ $EUID -ne 0 ]]; then
@@ -35,16 +52,25 @@ fi
 # Step 1: Check port availability
 echo ""
 echo "[1/6] Checking port availability (${NTFY_PORT})..."
-if sudo ss -tulpen 2>/dev/null | grep -qE ":${NTFY_PORT}\b"; then
-    echo "ERROR: Port ${NTFY_PORT} is already in use. Please resolve before proceeding."
-    echo "Using process: $(sudo lsof -i :${NTFY_PORT} 2>/dev/null | tail -1)"
-    exit 1
+port_line="$(sudo ss -tulpen 2>/dev/null | grep -E ":${NTFY_PORT}\b" | head -n 1 || true)"
+if [[ -n "${port_line}" ]]; then
+    if echo "${port_line}" | grep -qi "ntfy"; then
+        echo "✓ Port ${NTFY_PORT} is already in use by ntfy; continuing"
+    else
+        echo "ERROR: Port ${NTFY_PORT} is already in use. Please resolve before proceeding."
+        if command -v lsof >/dev/null 2>&1; then
+            echo "Using process: $(sudo lsof -i :${NTFY_PORT} 2>/dev/null | tail -1)"
+        fi
+        exit 1
+    fi
+else
+    echo "✓ Port ${NTFY_PORT} is available"
 fi
-echo "✓ Port ${NTFY_PORT} is available"
 
 # Step 2: Install ntfy
 echo ""
 echo "[2/6] Installing ntfy from apt repository..."
+wait_for_apt_lock
 
 # Add ntfy repository key and source
 if ! grep -q "archive.ntfy.sh" /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null; then
@@ -67,15 +93,15 @@ if ! grep -q "archive.ntfy.sh" /etc/apt/sources.list /etc/apt/sources.list.d/* 2
             tee /etc/apt/sources.list.d/ntfy.list > /dev/null
     }
     
-    apt-get update
+    apt-get update $APT_OPTS
 else
     echo "ntfy repository already configured"
 fi
 
 # Install ntfy package
 if ! dpkg -l | grep -q "^ii.*ntfy"; then
-    apt-get install -y --allow-unauthenticated ntfy || \
-    apt-get install -y ntfy
+    apt-get install -y --allow-unauthenticated ntfy $APT_OPTS || \
+    apt-get install -y ntfy $APT_OPTS
     echo "✓ ntfy installed"
 else
     echo "✓ ntfy already installed"
@@ -112,6 +138,22 @@ EOF
 
 echo "✓ Server configuration created at ${NTFY_SERVER_CONF}"
 
+# Ensure auth file exists (ntfy needs to start once)
+echo ""
+echo "Initializing ntfy auth database (if missing)..."
+if [ ! -f /var/lib/ntfy/user.db ]; then
+    systemctl daemon-reload || true
+    systemctl start ntfy || true
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+        [ -f /var/lib/ntfy/user.db ] && break
+        sleep 1
+    done
+fi
+if [ ! -f /var/lib/ntfy/user.db ]; then
+    echo "ERROR: auth-file was not created. Check: sudo systemctl status ntfy"
+    exit 1
+fi
+
 # Step 4: Create ntfy admin user and generate token
 echo ""
 echo "[4/6] Setting up ntfy user and token..."
@@ -121,7 +163,16 @@ if ntfy user list 2>/dev/null | grep -q "^${NTFY_ADMIN_USER}"; then
     echo "✓ User '${NTFY_ADMIN_USER}' already exists"
 else
     echo "Creating ntfy admin user..."
-    ntfy user add --role=admin "${NTFY_ADMIN_USER}" || {
+    if [[ -f "${NTFY_PASSWORD_FILE}" ]] && [[ -s "${NTFY_PASSWORD_FILE}" ]]; then
+        NTFY_PASSWORD="$(cat "${NTFY_PASSWORD_FILE}")"
+    else
+        NTFY_PASSWORD="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 24)"
+        mkdir -p /etc/azazel
+        echo -n "${NTFY_PASSWORD}" > "${NTFY_PASSWORD_FILE}"
+        chmod 600 "${NTFY_PASSWORD_FILE}"
+        chown root:root "${NTFY_PASSWORD_FILE}"
+    fi
+    NTFY_PASSWORD="${NTFY_PASSWORD}" ntfy user add --role=admin --ignore-exists "${NTFY_ADMIN_USER}" || {
         echo "Warning: Could not create user (may already exist)"
     }
 fi
@@ -134,7 +185,7 @@ if [[ -f "${NTFY_TOKEN_FILE}" ]] && [[ -s "${NTFY_TOKEN_FILE}" ]]; then
     echo "✓ Using existing token from ${NTFY_TOKEN_FILE}"
 else
     echo "Generating new bearer token..."
-    NTFY_TOKEN=$(ntfy token add --label="azazel-gadget" "${NTFY_ADMIN_USER}" 2>/dev/null | grep "^tk_" || echo "")
+    NTFY_TOKEN=$(ntfy token add --label="azazel-gadget" "${NTFY_ADMIN_USER}" 2>/dev/null | awk '{for (i=1;i<=NF;i++) if ($i ~ /^tk_/) {print $i; exit}}')
     
     if [[ -z "${NTFY_TOKEN}" ]]; then
         echo "ERROR: Failed to generate token. Please manually run:"

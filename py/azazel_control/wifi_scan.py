@@ -71,7 +71,14 @@ def get_saved_networks_nm() -> set:
     """Get saved network SSIDs from NetworkManager"""
     try:
         result = subprocess.run(
-            ["nmcli", "-t", "-f", "NAME,TYPE", "con", "show"],
+            [
+                "nmcli",
+                "-t",
+                "-f",
+                "NAME,TYPE",
+                "con",
+                "show",
+            ],
             capture_output=True,
             text=True,
             timeout=2
@@ -79,9 +86,27 @@ def get_saved_networks_nm() -> set:
         
         saved = set()
         for line in result.stdout.splitlines():
-            parts = line.split(":")
-            if len(parts) >= 2 and parts[1] == "802-11-wireless":
-                saved.add(parts[0])
+            parts = line.split(":", 1)
+            if len(parts) != 2:
+                continue
+            name, con_type = parts
+            if con_type != "802-11-wireless":
+                continue
+            ssid_result = subprocess.run(
+                ["nmcli", "-t", "-f", "802-11-wireless.ssid", "con", "show", name],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            if ssid_result.returncode != 0:
+                continue
+            ssid_line = (ssid_result.stdout or "").strip()
+            if ":" in ssid_line:
+                _, ssid_value = ssid_line.split(":", 1)
+            else:
+                ssid_value = ssid_line
+            if ssid_value:
+                saved.add(ssid_value)
         return saved
     except Exception as e:
         logger.warning(f"Failed to get saved networks from nmcli: {e}")
