@@ -1,49 +1,59 @@
-# 統合インストーラ - 廃止スケジュール
+# 統合インストーラ - 廃止完了通知
 
-## 廃止対象ツール
+## ✅ 廃止完了（2026年2月11日）
 
-以下のスクリプトは元のプロファイルシステムに関連するため、**廃止予定**となります：
+以下のスクリプトとディレクトリは **完全に削除されました**。
 
-| スクリプト | 廃止理由 | 代替手段 |
-|-----------|--------|--------|
-| `installer/collect_snapshot.sh` | スナップショット採取は本番運用では不要 | `sudo ./install.sh` で直接インストール |
-| `installer/mask.py` | プロファイルシステムとともに廃止 | テンプレート設定で事足りる |
-| `installer/generate_profile.py` | プロファイル層は冗長（固定インフラ） | 不要 |
-| `installer/apply.sh --profile` | プロファイル適用は廃止 | ダイレクトインストール |
-| `bin/install_dependencies.sh` | 統合インストーラに吸収 | `sudo ./install.sh` |
-| `bin/install_systemd.sh` | 統合インストーラに吸収 | `sudo ./install.sh` |
-| `bin/install_waveshare_epd.sh` | 統合インストーラに吸収 | `sudo ./install.sh --with-epd` |
-| `bin/install_webui.sh` | 統合インストーラに吸収 | `sudo ./install.sh --with-webui` |
-| `scripts/install_ntfy.sh` | 統合インストーラに吸収 | `sudo ./install.sh --with-ntfy` |
+### 削除されたスクリプト
 
-## 廃止スケジュール
+| スクリプト | 代替手段 |
+|-----------|--------|
+| `installer/collect_snapshot.sh` | `sudo ./install.sh` で直接インストール |
+| `installer/mask.py` | テンプレート設定（installer/defaults/）で代替 |
+| `installer/generate_profile.py` | 不要（プロファイルシステム廃止） |
+| `installer/apply.sh` | `sudo ./install.sh` で直接インストール |
+| `bin/install_dependencies.sh` | `sudo ./install.sh` |
+| `bin/install_systemd.sh` | `sudo ./install.sh` |
+| `bin/install_waveshare_epd.sh` | `sudo ./install.sh --with-epd` |
+| `bin/install_webui.sh` | `sudo ./install.sh --with-webui` |
+| `scripts/install_ntfy.sh` | `sudo ./install.sh --with-ntfy` |
+| `tools/bootstrap_zero.sh` | `sudo ./install.sh` |
 
-### Phase 1: 移行期（v2.0 - v2.1） ✅ 現在地
-- ✅ 統合インストーラ `install.sh` リリース
-- ✅ 新しいドキュメント公開
-- ⚠️ **古いスクリプトは並存（廃止警告を表示）**
-- 推奨：新規ユーザーは統合インストーラを使用
+### 削除されたディレクトリ
 
-### Phase 2: 廃止通知期（v2.2 - v2.3） 予定
-- 古いスクリプトの先頭に deprecated 警告を追加
-- 機能不具合の修正は受け付けない（セキュリティパッチのみ）
-- ドキュメントから古い手順を削除
+| ディレクトリ | 理由 |
+|------------|------|
+| `installer/snapshot/` | スナップショットシステム廃止 |
+| `installer/__pycache__/` | 不要なキャッシュ |
+| `installer/phases/` | 古いステージシステム廃止 |
+| `installer/profiles/` | プロファイルシステム廃止 |
+| `installer/templates/` | installer/defaults/ に統合 |
+| `installer/logs/` | 不要なログディレクトリ |
 
-### Phase 3: 削除（v3.0 以降） 予定
-- 古いスクリプト完全削除
-- `installer/profiles/`、`installer/snapshot/` ディレクトリ削除
+## 現在のインストール方法
+
+### 基本インストール
+```bash
+cd ~/Azazel-Zero
+sudo ./install.sh
+```
+
+### オプション機能の有効化
+```bash
+sudo ./install.sh --with-webui --with-canary --with-epd --with-ntfy
+# または
+sudo ./install.sh --all
+```
 
 ## ユーザーへの影響
 
-### 既存ユーザー（古いインストーラ使用中）
-**推奨アクション**:
-1. 新しい `install.sh` でのインストール再実行を検討
-2. 既存環境が安定している場合は、そのまま運用可能
+### 既存ユーザー
+- 古いスクリプトを使用している場合は、新しい `./install.sh` への移行を推奨
+- 既存環境が安定している場合は、再インストールは不要
 
 ### 新規ユーザー
-**必須**:
-- `sudo ./install.sh` を使用
-- 古いスクリプトは使用しないこと
+- **必須**: `sudo ./install.sh` を使用
+- 古いドキュメントの手順は無効
 
 ## 廃止理由の詳細
 

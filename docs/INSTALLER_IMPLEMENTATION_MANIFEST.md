@@ -25,19 +25,29 @@
 | `docs/INSTALLER_UNIFIED_DESIGN.md` | インストーラ設計ドキュメント |
 | `docs/INSTALLER_DEPRECATION_SCHEDULE.md` | 廃止スケジュール＆移行ガイド |
 
-### ✅ 既存ファイル修正
+### ✅ 削除完了
+
+| ファイル | 状態 |
+|---------|------|
+| `bin/install_dependencies.sh` | ❌ 削除完了 |
+| `bin/install_systemd.sh` | ❌ 削除完了 |
+| `bin/install_waveshare_epd.sh` | ❌ 削除完了 |
+| `bin/install_webui.sh` | ❌ 削除完了 |
+| `scripts/install_ntfy.sh` | ❌ 削除完了 |
+| `tools/bootstrap_zero.sh` | ❌ 削除完了 |
+| `installer/snapshot/` | ❌ 削除完了 |
+| `installer/__pycache__/` | ❌ 削除完了 |
+| `installer/phases/` | ❌ 削除完了 |
+| `installer/profiles/` | ❌ 削除完了 |
+| `installer/templates/` | ❌ 削除完了 |
+
+### ✅ systemd サービス修正（DHCP 対応）
 
 | ファイル | 変更 |
 |---------|------|
-| `bin/install_dependencies.sh` | 先頭に廃止通知を追加 |
-| `bin/install_systemd.sh` | 先頭に廃止通知を追加 |
-| `bin/install_waveshare_epd.sh` | 先頭に廃止通知を追加 |
-| `bin/install_webui.sh` | 先頭に廃止通知を追加 |
-| `scripts/install_ntfy.sh` | 先頭に廃止通知を追加 |
-| `systemd/azazel-first-minute.service` | usb0-static への依存追加（DHCP修正時） |
-| `py/azazel_zero/first_minute/controller.py` | dnsmasq デバッグ出力強化（DHCP修正時） |
-| `configs/dnsmasq-first_minute.conf` | DHCP ログ設定追加（DHCP修正時） |
-| `bin/install_systemd.sh` | dnsmasq ディレクトリ権限設定追加（DHCP修正時） |
+| `systemd/azazel-first-minute.service` | usb0-static への依存追加 |
+| `py/azazel_zero/first_minute/controller.py` | dnsmasq デバッグ出力強化 |
+| `configs/dnsmasq-first_minute.conf` | DHCP ログ設定追加 |
 
 ### 📦 統合テンプレート
 

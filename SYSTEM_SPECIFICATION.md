@@ -602,12 +602,13 @@ pip3 install Flask>=3.1.1 PyYAML
 
 **Full System Setup:**
 ```bash
-sudo tools/bootstrap_zero.sh --with-webui
+cd ~/Azazel-Zero
+sudo ./install.sh --with-webui
 ```
 
-**Web UI Only:**
+**All Optional Features:**
 ```bash
-sudo bin/install_webui.sh
+sudo ./install.sh --all
 ```
 
 **Flags:**

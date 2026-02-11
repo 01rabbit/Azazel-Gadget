@@ -202,7 +202,7 @@ The installer does **not** hardcode SSID/PSK.
 
 Shortest path:
 
-1. Run `tools/bootstrap_zero.sh` to completion (enables Web UI)
+1. Run `./install.sh --with-webui` to completion (enables Web UI)
 2. Open `http://10.55.0.10:8084`
 3. Scan Wi‑Fi → connect (save if needed)
 

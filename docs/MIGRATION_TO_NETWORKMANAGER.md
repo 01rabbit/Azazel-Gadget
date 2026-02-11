@@ -32,14 +32,17 @@ Azazel-Zero は Wi-Fi 制御を **wpa_supplicant から NetworkManager に完全
   - 起動時の自動接続抑制を NetworkManager のみに簡素化
 
 ### 設定ファイル
-- [installer/apply.sh](../installer/apply.sh)
-  - dhcpcd.conf から `nohook wpa_supplicant` を削除
+
+**注**: 以下のスクリプトは削除済みのため、参考情報としてのみ記載。現在は `./install.sh` で自動設定されます。
+
+- ~~installer/apply.sh~~ （削除済み）
+  - dhcpcd.conf から `nohook wpa_supplicant` を削除していた
   
-- [bin/install_dependencies.sh](../bin/install_dependencies.sh)
-  - wpasupplicant パッケージを依存関係から削除
+- ~~bin/install_dependencies.sh~~ （削除済み）
+  - wpasupplicant パッケージを依存関係から削除していた
   
-- [installer/mask.py](../installer/mask.py)
-  - コメントを更新（NetworkManager connections に言及）
+- ~~installer/mask.py~~ （削除済み）
+  - コメントを更新（NetworkManager connections に言及）していた
 
 ## 必要なパッケージ
 

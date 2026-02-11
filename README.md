@@ -87,10 +87,6 @@ Heavyweight ML remains a future research theme; the current deterministic stack 
 - **tmux console**  
   - `py/azazel_menu.py` is a curses menu with Wi-Fi selector, Portal/Shield/Lockdown scripts, OpenCanary control, and E-Paper tests.  
   - `py/azazel_status.py` is a telemetry panel showing SSID/BSSID, USB gadget IP, RSSI, captive-portal indicators, etc.
-  
-- **Bootstrap tools**  
-  - `tools/bootstrap_zero.sh` installs dependencies, systemd units, minimal Suricata rules, and smoke tests in one shot.  
-  - Flags `--no-epd`, `--no-enable`, `--no-suricata`, `--dry-run` tailor for lab/production.
 
 ---
 

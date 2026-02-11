@@ -19,27 +19,26 @@
 
 ```bash
 cd ~/Azazel-Zero
-sudo tools/bootstrap_zero.sh --with-webui
+sudo ./install.sh --with-webui
 ```
 
 **オプション：**
-- `--no-epd`: E-Paper サポートをスキップ
-- `--no-enable`: systemd サービスを自動起動しない
-- `--no-suricata`: Suricata ルール更新をスキップ
+- `--with-canary`: OpenCanary ハニーポットを追加
+- `--with-epd`: Waveshare E-Paper ドライバを追加
+- `--with-ntfy`: ntfy.sh 通知を追加
+- `--all`: すべてのオプション機能を有効化
 - `--dry-run`: 実行内容を表示のみ（テスト用）
 
-### オプション 2: Web UI のみインストール
+### オプション 2: Web UI のみ追加
 
-既存の Azazel-Zero システムに Web UI のみを追加：
+既存の Azazel-Zero システムに Web UI のみを追加する場合は、再度 `./install.sh` を実行してください：
 
 ```bash
 cd ~/Azazel-Zero
-sudo bin/install_webui.sh
+sudo ./install.sh --with-webui
 ```
 
-**オプション：**
-- `--no-systemd`: systemd サービスのインストールをスキップ
-- `--dry-run`: 実行内容を表示のみ
+既存の設定は上書きされず、Web UI 関連のコンポーネントのみが追加・更新されます。
 
 ## インストール内容
 
