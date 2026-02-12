@@ -51,6 +51,7 @@ main() {
         "azazel-web.service"
         "azazel-nat.service"
         "suri-epaper.service"
+        "suricata.service"
     )
     if [[ "$WITH_CANARY" == "1" ]]; then
         optional_services+=("opencanary.service")
@@ -83,6 +84,30 @@ main() {
         all_passed=false
     else
         log_info "  ✓ 既定 dnsmasq.service は停止済み"
+    fi
+
+    # 2.6 Suricata 設定/ルール整合チェック
+    if [[ -s /var/lib/suricata/rules/suricata.rules ]]; then
+        log_info "  ✓ Suricata ルールファイル存在: /var/lib/suricata/rules/suricata.rules"
+    else
+        log_error "  ✗ Suricata ルールファイルが見つかりません"
+        all_passed=false
+    fi
+
+    if grep -q "AZAZEL CANARY SSH SYN" /var/lib/suricata/rules/suricata.rules 2>/dev/null && \
+       grep -q "AZAZEL CANARY HTTP SYN" /var/lib/suricata/rules/suricata.rules 2>/dev/null; then
+        log_info "  ✓ OpenCanary 向け軽量ルール（22/80）を確認"
+    else
+        log_warn "  ⚠️  OpenCanary 向け軽量ルール（22/80）が見つかりません"
+    fi
+
+    if command -v suricata >/dev/null 2>&1; then
+        if suricata -T -c /etc/suricata/suricata.yaml -v >/dev/null 2>&1; then
+            log_info "  ✓ suricata -T 設定整合 OK"
+        else
+            log_error "  ✗ suricata -T 設定整合 NG"
+            all_passed=false
+        fi
     fi
     
     # 3. ポート確認

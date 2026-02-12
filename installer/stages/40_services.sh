@@ -92,6 +92,19 @@ main() {
         systemctl disable dnsmasq >> "$LOG_FILE" 2>&1 || log_warn "⚠️  dnsmasq 無効化失敗（継続）"
     fi
 
+    # 6.5 Suricata 軽量プロファイル適用（Pi Zero 2 向け）
+    local suri_updater="$PROJECT_ROOT/bin/suricata_update.sh"
+    if [[ -x "$suri_updater" ]]; then
+        log_info "Suricata 軽量ルールを適用..."
+        if "$suri_updater" --profile pi-zero2-lite --wan-if wlan0 >> "$LOG_FILE" 2>&1; then
+            log_info "✓ Suricata 軽量プロファイル適用完了"
+        else
+            die "Suricata 軽量プロファイル適用に失敗: $suri_updater"
+        fi
+    else
+        die "Suricata 更新スクリプトが見つかりません: $suri_updater"
+    fi
+
     # Stage 20 で置いたブートストラップ設定は Stage 40 で撤去
     if [[ -f /etc/dnsmasq.d/azazel-usb0-bootstrap.conf ]]; then
         rm -f /etc/dnsmasq.d/azazel-usb0-bootstrap.conf
