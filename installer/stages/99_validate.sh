@@ -71,23 +71,61 @@ main() {
             log_debug "  - $service (未有効化)"
         fi
     done
+
+    # 2.5 dnsmasq 競合チェック
+    if systemctl is-active --quiet dnsmasq.service 2>/dev/null; then
+        log_error "  ✗ 既定 dnsmasq.service が起動中（first-minute 管理 dnsmasq と競合）"
+        all_passed=false
+    else
+        log_info "  ✓ 既定 dnsmasq.service は停止済み"
+    fi
     
     # 3. ポート確認
     log_info ""
     log_info "【3】ネットワークポート確認:"
-    
-    if ss -ultn 2>/dev/null | grep -q ":67 "; then
+
+    local mgmt_ip="10.55.0.10"
+    if [[ -f /etc/default/azazel-zero ]]; then
+        # shellcheck disable=SC1091
+        source /etc/default/azazel-zero
+        if [[ -n "${MGMT_IP:-}" ]]; then
+            mgmt_ip="$MGMT_IP"
+        fi
+    fi
+
+    if pgrep -af "dnsmasq.*dnsmasq-first_minute.conf" >/dev/null 2>&1; then
+        log_info "  ✓ first-minute 管理 dnsmasq プロセスを確認"
+    else
+        log_error "  ✗ first-minute 管理 dnsmasq プロセスが見つかりません"
+        all_passed=false
+    fi
+
+    if ss -ulnH 2>/dev/null | grep -Eq ':67[[:space:]]'; then
         log_info "  ✓ DHCP (UDP/67) がリッスン中"
     else
         log_error "  ✗ DHCP (UDP/67) がリッスンしていません"
         all_passed=false
     fi
-    
-    if ss -ultn 2>/dev/null | grep -q ":53 "; then
+
+    if ss -ulnH 2>/dev/null | grep -Eq ':53[[:space:]]'; then
         log_info "  ✓ DNS (UDP/53) がリッスン中"
     else
         log_error "  ✗ DNS (UDP/53) がリッスンしていません"
         all_passed=false
+    fi
+
+    if systemctl is-enabled --quiet ntfy.service 2>/dev/null; then
+        if check_service "ntfy.service"; then
+            if ss -ltnH 2>/dev/null | grep -Eq ':8081[[:space:]]'; then
+                log_info "  ✓ ntfy (TCP/8081) がリッスン中"
+            else
+                log_error "  ✗ ntfy は有効だが TCP/8081 がリッスンしていません"
+                all_passed=false
+            fi
+        else
+            log_error "  ✗ ntfy.service が起動していません"
+            all_passed=false
+        fi
     fi
     
     # 4. ファイアウォール確認
@@ -181,6 +219,7 @@ main() {
         log_error "トラブルシューティング:"
         log_error "  • ログを確認: tail -50 $LOG_FILE"
         log_error "  • dnsmasq: tail -50 /var/log/azazel-dnsmasq.log"
+        log_error "  • 競合確認: systemctl status dnsmasq azazel-first-minute.service"
         log_error "  • サービスステータス: systemctl status azazel-first-minute.service"
         log_error ""
         log_error "詳細は以下を参照:"

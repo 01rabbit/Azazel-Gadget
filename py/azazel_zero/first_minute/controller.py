@@ -250,7 +250,6 @@ class FirstMinuteController:
         # usb0インターフェースが UP していることを確認
         downstream = self.cfg.interfaces.get("downstream", "usb0")
         try:
-            import subprocess
             result = subprocess.run(["ip", "link", "show", downstream], capture_output=True, text=True, timeout=3)
             if result.returncode != 0:
                 self.logger.warning(f"Interface {downstream} not found yet. Retrying...")
@@ -272,18 +271,18 @@ class FirstMinuteController:
         except Exception as e:
             self.logger.warning(f"Could not verify interface {downstream}: {e}")
         
-        cmd = ["dnsmasq", f"--conf-file={conf_path}"]
+        # dnsmasq は foreground で起動し、controller でライフサイクルを管理する
+        cmd = ["dnsmasq", "--keep-in-foreground", f"--conf-file={conf_path}"]
         try:
-            # フォアグラウンド/バックグラウンドは設定で決定
             proc = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
-                universal_newlines=True
+                universal_newlines=True,
+                bufsize=1,
             )
             self.processes["dnsmasq"] = proc
-            self.logger.info(f"dnsmasq started with PID {proc.pid} using config: {conf_path}")
             
             # ログ出力をリアルタイムで読み込むスレッド
             def read_dnsmasq_output():
@@ -299,6 +298,17 @@ class FirstMinuteController:
             
             output_thread = threading.Thread(target=read_dnsmasq_output, daemon=True)
             output_thread.start()
+
+            # 起動直後に落ちるケース（port競合など）を明示的に検知
+            time.sleep(0.5)
+            if proc.poll() is not None:
+                self.logger.error(
+                    f"dnsmasq exited immediately (rc={proc.returncode}) using config: {conf_path}"
+                )
+                self.processes.pop("dnsmasq", None)
+                return
+
+            self.logger.info(f"dnsmasq started with PID {proc.pid} using config: {conf_path}")
         except FileNotFoundError:
             self.logger.error("dnsmasq binary not found. Install with: apt-get install dnsmasq")
         except Exception as e:
@@ -312,6 +322,13 @@ class FirstMinuteController:
                 proc.wait(timeout=3)
             except subprocess.TimeoutExpired:
                 proc.kill()
+        # 旧実装で daemonize されたプロセスが残っている場合の掃除
+        subprocess.run(
+            ["pkill", "-f", f"dnsmasq.*{self.cfg.dnsmasq_conf_path.name}"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
 
     def start_dns_observer(self) -> None:
         self.dns_thread = DNSObserver(self.cfg.dns_log_path, self.nft, self.stop_event)

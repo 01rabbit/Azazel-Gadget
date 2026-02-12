@@ -8,6 +8,8 @@
 set -euo pipefail
 source "$(dirname "$0")/../_lib.sh"
 
+WITH_NTFY="${WITH_NTFY:-0}"
+
 main() {
     log_info "════════════════════════════════════════════"
     log_info "Stage 40: Systemd Services Registration"
@@ -81,8 +83,20 @@ main() {
     # 5. systemd daemon-reload
     log_info "systemd 設定を再読込..."
     systemctl daemon-reload >> "$LOG_FILE" 2>&1 || die "systemctl daemon-reload 失敗"
+
+    # 6. 競合回避: 既定 dnsmasq サービスを停止（first-minute 管理に一本化）
+    if systemctl list-unit-files | grep -q "^dnsmasq.service"; then
+        log_info "既定 dnsmasq.service を停止・無効化..."
+        systemctl stop dnsmasq >> "$LOG_FILE" 2>&1 || log_warn "⚠️  dnsmasq 停止失敗（継続）"
+        systemctl disable dnsmasq >> "$LOG_FILE" 2>&1 || log_warn "⚠️  dnsmasq 無効化失敗（継続）"
+    fi
+
+    # Stage 20 で置いたブートストラップ設定は Stage 40 で撤去
+    if [[ -f /etc/dnsmasq.d/azazel-usb0-bootstrap.conf ]]; then
+        rm -f /etc/dnsmasq.d/azazel-usb0-bootstrap.conf
+    fi
     
-    # 6. 主要サービス有効化＆起動
+    # 7. 主要サービス有効化＆起動
     log_info "主要サービスを有効化中..."
     
     local primary_services=(
@@ -94,6 +108,10 @@ main() {
         "suri-epaper.service"
         "azazel-epd-portal.timer"
     )
+
+    if [[ "$WITH_NTFY" == "1" ]]; then
+        primary_services+=("ntfy.service")
+    fi
     
     for service in "${primary_services[@]}"; do
         log_info "  サービス: $service"
@@ -102,7 +120,7 @@ main() {
         }
     done
     
-    # 7. サービス起動テスト（usb0-static, azazel-nat）
+    # 8. サービス起動テスト（usb0-static, azazel-nat, azazel-first-minute）
     log_info ""
     log_info "サービス起動をテスト中..."
     
@@ -116,10 +134,21 @@ main() {
         log_warn "⚠️  azazel-nat 起動失敗"
     }
     
-    # ファースト・ミニッツの起動は後の Stage 99 で確認
-    log_info "  • azazel-first-minute.service は後で確認"
+    # 競合していた dnsmasq を掃除してから first-minute を再起動
+    pkill -f "dnsmasq.*dnsmasq-first_minute.conf" >> "$LOG_FILE" 2>&1 || true
+    log_info "  • azazel-first-minute.service を再起動..."
+    systemctl restart azazel-first-minute.service >> "$LOG_FILE" 2>&1 || {
+        log_warn "⚠️  azazel-first-minute 再起動失敗"
+    }
+
+    if [[ "$WITH_NTFY" == "1" ]]; then
+        log_info "  • ntfy.service を再起動..."
+        systemctl restart ntfy.service >> "$LOG_FILE" 2>&1 || {
+            log_warn "⚠️  ntfy.service 再起動失敗"
+        }
+    fi
     
-    # 8. オプション: OpenCanary サービス
+    # 9. オプション: OpenCanary サービス
     if systemctl list-unit-files | grep -q "opencanary.service"; then
         log_info "OpenCanary サービスは登録済み（手動有効化が必要）"
         log_info "  有効化: sudo systemctl enable --now opencanary.service"

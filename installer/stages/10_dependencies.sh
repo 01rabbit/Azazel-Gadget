@@ -98,10 +98,13 @@ main() {
     
     # 8. オプション: ntfy
     if [[ "$WITH_NTFY" == "1" ]]; then
-        log_info "ntfy.sh をインストール..."
-        # ntfy リポジトリをセットアップ（簡易版）
-        # 実際のスクリプトは scripts/install_ntfy.sh を参照
-        log_info "✓ ntfy 準備完了（詳細は install_ntfy.sh 参照）"
+        log_info "ntfy サーバをインストール..."
+        local ntfy_installer="$PROJECT_ROOT/scripts/install_ntfy.sh"
+        if [[ ! -x "$ntfy_installer" ]]; then
+            die "ntfy インストーラスクリプトが見つかりません: $ntfy_installer"
+        fi
+        "$ntfy_installer" >> "$LOG_FILE" 2>&1 || die "ntfy インストール失敗"
+        log_info "✓ ntfy サーバ設定完了"
     fi
     
     # 9. Locale 設定
