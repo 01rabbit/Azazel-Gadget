@@ -119,7 +119,7 @@ def cmd_status(cfg: FirstMinuteConfig) -> None:
         print(f"Daemon PID: {pid}")
     except SystemExit:
         print("Daemon not running.")
-    url = f"http://{cfg.status_api.get('host', '127.0.0.1')}:{cfg.status_api.get('port', 8081)}/"
+    url = f"http://{cfg.status_api.get('host', '127.0.0.1')}:{cfg.status_api.get('port', 8082)}/"
     try:
         with urllib.request.urlopen(url, timeout=2) as resp:
             print(resp.read().decode("utf-8"))

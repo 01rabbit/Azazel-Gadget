@@ -85,6 +85,7 @@ function updateUI(state) {
     const monitoring = state.monitoring || {};
     updateBadge('riskSuricata', monitoring.suricata || 'UNKNOWN');
     updateBadge('riskOpenCanary', monitoring.opencanary || 'UNKNOWN');
+    updateBadge('riskNtfy', monitoring.ntfy || 'UNKNOWN');
     
     // Connection Info
     updateElement('connSSID', state.ssid || '-');

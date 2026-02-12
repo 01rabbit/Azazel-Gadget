@@ -21,6 +21,64 @@ from azazel_zero.sensors.wifi_scanner import scan_and_parse, get_security_label
 logger = logging.getLogger("wifi_scan")
 
 
+def _split_nmcli_terse_line(line: str, expected_fields: int) -> List[str]:
+    """
+    Split nmcli -t output by unescaped ':'.
+    nmcli escapes ':' inside fields as '\\:' (for BSSID, SSID with colon, etc.).
+    """
+    fields: List[str] = []
+    cur: List[str] = []
+    escaped = False
+
+    for ch in line:
+        if escaped:
+            cur.append(ch)
+            escaped = False
+            continue
+        if ch == "\\":
+            escaped = True
+            continue
+        if ch == ":" and len(fields) < expected_fields - 1:
+            fields.append("".join(cur))
+            cur = []
+            continue
+        cur.append(ch)
+
+    if escaped:
+        cur.append("\\")
+    fields.append("".join(cur))
+
+    if len(fields) < expected_fields:
+        fields.extend([""] * (expected_fields - len(fields)))
+    return fields[:expected_fields]
+
+
+def _nmcli_security_label(security_raw: str) -> str:
+    sec = (security_raw or "").upper()
+    if not sec or sec == "--":
+        return "OPEN"
+    if "WPA3" in sec or "SAE" in sec:
+        return "WPA3"
+    if "WPA2" in sec or "RSN" in sec:
+        return "WPA2"
+    if "WPA" in sec:
+        return "WPA"
+    if "WEP" in sec:
+        return "WEP"
+    return "UNKNOWN"
+
+
+def _signal_percent_to_dbm(signal_raw: str) -> int:
+    """
+    Convert nmcli SIGNAL(0-100) to approximate RSSI dBm.
+    Approximation used: dBm ~= (percent / 2) - 100
+    """
+    if signal_raw.isdigit():
+        pct = max(0, min(100, int(signal_raw)))
+        return int(round((pct / 2.0) - 100.0))
+    return -100
+
+
 def get_wireless_interface() -> Optional[str]:
     """Detect wireless interface (prefer wlan0, else auto-detect)"""
     try:
@@ -86,14 +144,14 @@ def get_saved_networks_nm() -> set:
         
         saved = set()
         for line in result.stdout.splitlines():
-            parts = line.split(":", 1)
+            parts = _split_nmcli_terse_line(line, 2)
             if len(parts) != 2:
                 continue
             name, con_type = parts
             if con_type != "802-11-wireless":
                 continue
             ssid_result = subprocess.run(
-                ["nmcli", "-t", "-f", "802-11-wireless.ssid", "con", "show", name],
+                ["nmcli", "-g", "802-11-wireless.ssid", "con", "show", name],
                 capture_output=True,
                 text=True,
                 timeout=2,
@@ -101,10 +159,7 @@ def get_saved_networks_nm() -> set:
             if ssid_result.returncode != 0:
                 continue
             ssid_line = (ssid_result.stdout or "").strip()
-            if ":" in ssid_line:
-                _, ssid_value = ssid_line.split(":", 1)
-            else:
-                ssid_value = ssid_line
+            ssid_value = ssid_line.splitlines()[0] if ssid_line else ""
             if ssid_value:
                 saved.add(ssid_value)
         return saved
@@ -123,6 +178,7 @@ def scan_with_iw(iface: str, saved_ssids: set) -> List[Dict[str, Any]]:
         for ap in aps:
             ap["saved"] = ap["ssid"] in saved_ssids
             ap["security"] = get_security_label(ap)
+            ap["channel"] = int(ap["chan"]) if ap.get("chan") else 0
             # Convert float signal to int for consistency
             if ap["signal"] is not None:
                 ap["signal_dbm"] = int(ap["signal"])
@@ -148,7 +204,19 @@ def scan_with_nmcli(iface: str, saved_ssids: set) -> List[Dict[str, Any]]:
         
         # Get scan results
         result = subprocess.run(
-            ["nmcli", "-t", "-f", "SSID,BSSID,CHAN,SIGNAL,SECURITY", "dev", "wifi", "list", "ifname", iface],
+            [
+                "nmcli",
+                "-t",
+                "--escape",
+                "yes",
+                "-f",
+                "SSID,BSSID,CHAN,SIGNAL,SECURITY",
+                "dev",
+                "wifi",
+                "list",
+                "ifname",
+                iface,
+            ],
             capture_output=True,
             text=True,
             timeout=5
@@ -159,32 +227,26 @@ def scan_with_nmcli(iface: str, saved_ssids: set) -> List[Dict[str, Any]]:
         
         aps = []
         for line in result.stdout.splitlines():
-            parts = line.split(":")
-            if len(parts) < 5:
+            if not line.strip():
                 continue
-            
-            ssid, bssid, chan, signal, security = parts[:5]
-            
+
+            ssid, bssid, chan, signal, security_raw = _split_nmcli_terse_line(line, 5)
             if not ssid:
                 continue
-            
-            # Map nmcli security to standard labels
-            sec_label = "UNKNOWN"
-            if "WPA3" in security:
-                sec_label = "WPA3"
-            elif "WPA2" in security:
-                sec_label = "WPA2"
-            elif "WPA" in security:
-                sec_label = "WPA"
-            elif not security or security == "--":
-                sec_label = "OPEN"
-            
+
+            channel = 0
+            ch_match = re.search(r"\d+", chan or "")
+            if ch_match:
+                channel = int(ch_match.group(0))
+
+            signal_pct = int(signal) if signal.isdigit() else None
             aps.append({
                 "ssid": ssid,
                 "bssid": bssid if bssid != "--" else "unknown",
-                "channel": int(chan) if chan.isdigit() else 0,
-                "signal_dbm": int(signal) - 100 if signal.isdigit() else -100,  # nmcli gives 0-100, convert to dBm approx
-                "security": sec_label,
+                "channel": channel,
+                "signal_percent": signal_pct,
+                "signal_dbm": _signal_percent_to_dbm(signal),
+                "security": _nmcli_security_label(security_raw),
                 "saved": ssid in saved_ssids
             })
         
@@ -236,19 +298,22 @@ def scan_wifi() -> Dict[str, Any]:
         }
     
     logger.info(f"Using wireless interface: {iface}")
-    
-    # Check if NetworkManager is available
-    if not check_networkmanager(iface):
-        return {
-            "ok": False,
-            "error": "NetworkManager not found or not managing interface",
-            "ts": time.time()
-        }
-    
-    # Get saved networks from NetworkManager
-    logger.info("Using NetworkManager for scan")
+
+    # Saved SSIDs are managed by NetworkManager; scanning itself can still fallback to iw.
     saved_ssids = get_saved_networks_nm()
-    aps = scan_with_nmcli(iface, saved_ssids)
+    aps = scan_with_iw(iface, saved_ssids)
+
+    if aps:
+        logger.info("Using iw scan results")
+    else:
+        if not check_networkmanager(iface):
+            return {
+                "ok": False,
+                "error": "Scan failed (iw unavailable) and NetworkManager is not managing interface",
+                "ts": time.time()
+            }
+        logger.info("Using NetworkManager for scan")
+        aps = scan_with_nmcli(iface, saved_ssids)
     
     if not aps:
         return {

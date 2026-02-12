@@ -8,6 +8,8 @@
 set -euo pipefail
 source "$(dirname "$0")/../_lib.sh"
 
+WITH_CANARY="${WITH_CANARY:-0}"
+
 main() {
     log_info "════════════════════════════════════════════"
     log_info "Stage 99: Validation & Completion"
@@ -50,6 +52,9 @@ main() {
         "azazel-nat.service"
         "suri-epaper.service"
     )
+    if [[ "$WITH_CANARY" == "1" ]]; then
+        optional_services+=("opencanary.service")
+    fi
     
     for service in "${critical_services[@]}"; do
         if check_service "$service"; then
@@ -118,6 +123,11 @@ main() {
         if check_service "ntfy.service"; then
             if ss -ltnH 2>/dev/null | grep -Eq ':8081[[:space:]]'; then
                 log_info "  ✓ ntfy (TCP/8081) がリッスン中"
+                if curl -fsS --max-time 3 "http://${mgmt_ip}:8081/v1/health" | grep -q '"healthy":true'; then
+                    log_info "  ✓ ntfy Web API (/v1/health) 応答 OK"
+                else
+                    log_warn "  ⚠️  ntfy ポートは開いていますが /v1/health 応答を確認できません"
+                fi
             else
                 log_error "  ✗ ntfy は有効だが TCP/8081 がリッスンしていません"
                 all_passed=false
@@ -198,11 +208,16 @@ main() {
         log_info "   - 既知 SSID リスト"
         log_info "   - 状態遷移閾値"
         log_info ""
-        log_info "3) OpenCanary 有効化（ハニーポット）:"
-        log_info "   sudo systemctl enable --now opencanary.service"
+        if [[ "$WITH_CANARY" == "1" ]]; then
+            log_info "3) OpenCanary 状態確認（ハニーポット）:"
+            log_info "   sudo systemctl status opencanary.service"
+        fi
         log_info ""
         log_info "4) Web UI へアクセス:"
-        log_info "   http://10.55.0.10:8083 (別途インストール必要)"
+        log_info "   http://10.55.0.10:8084 (Web UI オプション有効時)"
+        if systemctl is-enabled --quiet ntfy.service 2>/dev/null; then
+            log_info "   ntfy health: http://10.55.0.10:8081/v1/health"
+        fi
         log_info ""
         log_info "【ログ確認】"
         log_info "  tail -f /var/log/azazel-zero/first_minute.log"

@@ -9,6 +9,7 @@ set -euo pipefail
 source "$(dirname "$0")/../_lib.sh"
 
 WITH_NTFY="${WITH_NTFY:-0}"
+WITH_CANARY="${WITH_CANARY:-0}"
 
 main() {
     log_info "════════════════════════════════════════════"
@@ -149,9 +150,21 @@ main() {
     fi
     
     # 9. オプション: OpenCanary サービス
-    if systemctl list-unit-files | grep -q "opencanary.service"; then
-        log_info "OpenCanary サービスは登録済み（手動有効化が必要）"
-        log_info "  有効化: sudo systemctl enable --now opencanary.service"
+    if [[ "$WITH_CANARY" == "1" ]]; then
+        if systemctl list-unit-files | grep -q "opencanary.service"; then
+            log_info "  • opencanary.service を有効化..."
+            systemctl enable opencanary.service >> "$LOG_FILE" 2>&1 || {
+                log_warn "⚠️  opencanary.service 有効化失敗"
+            }
+            log_info "  • opencanary.service を再起動..."
+            systemctl restart opencanary.service >> "$LOG_FILE" 2>&1 || {
+                log_warn "⚠️  opencanary.service 起動失敗"
+            }
+        else
+            log_warn "⚠️  opencanary.service が未登録です"
+        fi
+    else
+        log_info "OpenCanary は未選択（--with-canary で有効化）"
     fi
     
     log_info ""

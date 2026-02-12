@@ -86,7 +86,8 @@ def parse_iw_scan(text: str) -> List[Dict[str, Any]]:
         # Frequency
         if line.strip().startswith("freq:"):
             try:
-                cur["freq"] = int(line.split("freq:", 1)[1].strip())
+                freq_text = line.split("freq:", 1)[1].strip()
+                cur["freq"] = int(float(freq_text))
             except Exception:
                 pass
             continue

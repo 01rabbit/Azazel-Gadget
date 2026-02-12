@@ -17,6 +17,7 @@ import subprocess
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional
+from urllib.request import urlopen
 
 app = Flask(__name__)
 
@@ -86,16 +87,33 @@ def _service_active(service: str) -> bool:
         return False
 
 
+def _ntfy_health_ok() -> bool:
+    """Check ntfy HTTP health endpoint."""
+    mgmt_ip = os.environ.get("MGMT_IP", "10.55.0.10")
+    ntfy_port = os.environ.get("NTFY_PORT", "8081")
+    url = f"http://{mgmt_ip}:{ntfy_port}/v1/health"
+    try:
+        with urlopen(url, timeout=2) as resp:
+            if resp.status != 200:
+                return False
+            body = resp.read(256).decode("utf-8", errors="ignore")
+            return '"healthy":true' in body
+    except Exception:
+        return False
+
+
 def get_monitoring_state() -> Dict[str, str]:
     """Return ON/OFF status for local monitoring daemons."""
     # Prefer systemd state to avoid pidfile permission issues
     opencanary_ok = _service_active("opencanary.service")
     suricata_ok = _service_active("suricata.service")
+    ntfy_ok = _service_active("ntfy.service") and _ntfy_health_ok()
     opencanary_pid = Path("/home/azazel/canary-venv/bin/opencanaryd.pid")
     suricata_pid = Path("/run/suricata.pid")
     return {
         "opencanary": "ON" if (opencanary_ok or _pid_running(opencanary_pid)) else "OFF",
         "suricata": "ON" if (suricata_ok or _pid_running(suricata_pid)) else "OFF",
+        "ntfy": "ON" if ntfy_ok else "OFF",
     }
 
 

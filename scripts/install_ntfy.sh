@@ -91,12 +91,16 @@ systemctl restart ntfy.service
 
 for _ in {1..20}; do
     if ss -ltnH 2>/dev/null | grep -Eq ":${NTFY_PORT}[[:space:]]"; then
-        echo "[ntfy] Service is listening on TCP/${NTFY_PORT}"
-        echo "[ntfy] Setup complete. token file: ${TOKEN_PATH}"
-        exit 0
+        if curl -fsS --max-time 3 "http://${MGMT_IP}:${NTFY_PORT}/v1/health" | grep -q '"healthy":true'; then
+            echo "[ntfy] Service is listening on TCP/${NTFY_PORT}"
+            echo "[ntfy] Health endpoint OK: http://${MGMT_IP}:${NTFY_PORT}/v1/health"
+            echo "[ntfy] NOTE: Debian package may not provide rich web app at '/'"
+            echo "[ntfy] Setup complete. token file: ${TOKEN_PATH}"
+            exit 0
+        fi
     fi
     sleep 0.25
 done
 
-echo "ERROR: ntfy did not open TCP/${NTFY_PORT}"
+echo "ERROR: ntfy did not pass TCP/health checks on ${MGMT_IP}:${NTFY_PORT}"
 exit 1
