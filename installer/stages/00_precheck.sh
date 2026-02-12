@@ -55,8 +55,9 @@ main() {
     # 6. インストール状態ファイル初期化
     init_state_file "$@"
     
-    # 7. 必要なコマンド確認
-    local required_cmds=("jq" "systemctl" "ip" "apt-get")
+    # 7. 必要なコマンド確認（インストーラ実行に最低限必要なもののみ）
+    # 注: jq, python3 等は Stage 10 でインストールされる
+    local required_cmds=("systemctl" "ip" "apt-get")
     for cmd in "${required_cmds[@]}"; do
         if command -v "$cmd" >/dev/null 2>&1; then
             log_debug "✓ コマンド発見: $cmd"
@@ -64,6 +65,8 @@ main() {
             die "✗ 必須コマンドが見つかりません: $cmd"
         fi
     done
+    
+    log_info "✓ 事前チェック完了（追加パッケージは Stage 10 でインストール）"
     
     log_info ""
     log_info "════════════════════════════════════════════"

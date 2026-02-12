@@ -174,24 +174,46 @@ mark_stage_passed() {
 
 install_package() {
     local pkg="$1"
-    if dpkg -l | grep -q "^ii.*$pkg"; then
+    
+    # dpkg-query で正確にパッケージの状態を確認
+    if dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "install ok installed"; then
         log_debug "パッケージ既にインストール: $pkg"
         return 0
     fi
     
     log_info "パッケージをインストール: $pkg"
-    apt-get install -y "$pkg" >> "$LOG_FILE" 2>&1 || {
-        die "パッケージインストール失敗: $pkg"
-    }
+    if apt-get install -y "$pkg" >> "$LOG_FILE" 2>&1; then
+        log_debug "✓ $pkg インストール成功"
+        return 0
+    else
+        log_warn "⚠ $pkg のインストールに失敗（スキップして続行）"
+        echo "[WARN] apt-get install -y $pkg の出力:" >> "$LOG_FILE"
+        apt-get install -y "$pkg" >> "$LOG_FILE" 2>&1 || true
+        return 1
+    fi
 }
 
 install_packages() {
     local packages=("$@")
-    apt-get update >> "$LOG_FILE" 2>&1 || die "apt-get update 失敗"
+    
+    # apt update は呼び出し側で実施済みと想定（重複回避）
+    local failed_packages=()
     
     for pkg in "${packages[@]}"; do
-        install_package "$pkg" || true
+        if ! install_package "$pkg"; then
+            failed_packages+=("$pkg")
+        fi
     done
+    
+    # 失敗したパッケージがあれば警告（致命的ではない）
+    if [[ ${#failed_packages[@]} -gt 0 ]]; then
+        log_warn "以下のパッケージのインストールに失敗しました（続行）："
+        for pkg in "${failed_packages[@]}"; do
+            log_warn "  - $pkg"
+        done
+    fi
+    
+    return 0
 }
 
 # ============================================================================
@@ -377,4 +399,4 @@ init_installer() {
     echo ""
 }
 
-echo "✓ Installer library loaded: $_lib.sh"
+echo "✓ Installer library loaded: ${BASH_SOURCE[0]}"
