@@ -28,6 +28,7 @@ CONTROL_SOCKET = Path("/run/azazel/control.sock")
 TOKEN_FILE = Path.home() / ".azazel-zero" / "web_token.txt"
 BIND_HOST = os.environ.get("AZAZEL_WEB_HOST", "0.0.0.0")
 BIND_PORT = int(os.environ.get("AZAZEL_WEB_PORT", "8084"))
+STATUS_API_HOSTS = ["10.55.0.10", "127.0.0.1"]
 
 # Allowed actions
 ALLOWED_ACTIONS = {
@@ -210,26 +211,104 @@ def execute_disconnect_action() -> Dict[str, Any]:
     except Exception as e:
         return {"ok": False, "action": "disconnect", "error": str(e)}
 
-def execute_release_action() -> Dict[str, Any]:
-    """Execute release action: clear manual CONTAIN override via Status API"""
+def _post_status_action(host: str, action: str) -> Optional[Dict[str, Any]]:
+    """POST action to first-minute Status API and normalize response."""
     try:
-        for host in ["10.55.0.10", "127.0.0.1"]:
-            try:
-                result = subprocess.run(
-                    ["curl", "-s", "-X", "POST", f"http://{host}:8082/action/release"],
-                    capture_output=True,
-                    timeout=2,
-                )
-                if result.returncode == 0:
-                    response_text = result.stdout.decode("utf-8").strip()
-                    if response_text:
-                        payload = json.loads(response_text)
-                        if payload.get("status") == "ok" and "ok" not in payload:
-                            payload["ok"] = True
-                        return payload
-                    return {"ok": True, "action": "release", "message": "Containment released"}
-            except Exception:
+        result = subprocess.run(
+            ["curl", "-s", "-X", "POST", f"http://{host}:8082/action/{action}"],
+            capture_output=True,
+            timeout=2,
+        )
+        if result.returncode != 0:
+            return None
+        response_text = result.stdout.decode("utf-8").strip()
+        if not response_text:
+            return {"ok": True, "action": action}
+        payload = json.loads(response_text)
+        if payload.get("status") == "ok" and "ok" not in payload:
+            payload["ok"] = True
+        return payload
+    except Exception:
+        return None
+
+def _read_status_state(host: str) -> Optional[Dict[str, Any]]:
+    """GET current state from first-minute Status API."""
+    try:
+        result = subprocess.run(
+            ["curl", "-s", f"http://{host}:8082/"],
+            capture_output=True,
+            timeout=2,
+        )
+        if result.returncode != 0:
+            return None
+        response_text = result.stdout.decode("utf-8").strip()
+        if not response_text:
+            return None
+        payload = json.loads(response_text)
+        if isinstance(payload, dict):
+            return payload
+        return None
+    except Exception:
+        return None
+
+def execute_release_action() -> Dict[str, Any]:
+    """Execute release action and verify that stage actually leaves CONTAIN."""
+    try:
+        for host in STATUS_API_HOSTS:
+            first = _post_status_action(host, "release")
+            if not first:
                 continue
+            if not first.get("ok", False):
+                return {
+                    "ok": False,
+                    "action": "release",
+                    "error": first.get("error", "Failed to send release command"),
+                }
+
+            second_sent = False
+            last_reason = ""
+            deadline = time.time() + 12.0
+
+            while time.time() < deadline:
+                state_payload = _read_status_state(host)
+                if not state_payload:
+                    time.sleep(0.25)
+                    continue
+
+                state_name = str(state_payload.get("stage") or state_payload.get("state") or "").upper()
+                reason = str(state_payload.get("reason") or "").strip()
+                if reason:
+                    last_reason = reason
+
+                if state_name and state_name != "CONTAIN":
+                    return {
+                        "ok": True,
+                        "action": "release",
+                        "message": "Containment released",
+                        "state": state_name,
+                        "reason": reason,
+                    }
+
+                reason_lower = reason.lower()
+                if "minimum duration not reached" in reason_lower:
+                    return {"ok": False, "action": "release", "error": reason}
+
+                if ("confirmation required" in reason_lower) and not second_sent:
+                    second = _post_status_action(host, "release")
+                    if not second or not second.get("ok", False):
+                        return {
+                            "ok": False,
+                            "action": "release",
+                            "error": (second or {}).get("error", "Failed to send release confirmation"),
+                        }
+                    second_sent = True
+
+                time.sleep(0.25)
+
+            if last_reason:
+                return {"ok": False, "action": "release", "error": f"Release timeout: {last_reason}"}
+            return {"ok": False, "action": "release", "error": "Release timeout: stage stayed CONTAIN"}
+
         return {"ok": False, "action": "release", "error": "Failed to reach Status API on any host"}
     except Exception as e:
         return {"ok": False, "action": "release", "error": str(e)}

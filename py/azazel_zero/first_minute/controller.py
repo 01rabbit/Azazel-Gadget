@@ -193,6 +193,19 @@ class FirstMinuteController:
         self.manual_contain_min_until: float = 0.0
         self.release_confirm_pending: bool = False
         self.release_confirm_until: float = 0.0
+        # Manual contain/release guard rails (configurable; defaults favor immediate release).
+        try:
+            self.manual_contain_min_duration_sec = max(
+                0.0, float(cfg.state_machine.get("manual_contain_min_duration_sec", 0.0))
+            )
+        except (TypeError, ValueError):
+            self.manual_contain_min_duration_sec = 0.0
+        try:
+            self.manual_release_confirm_window_sec = max(
+                0.0, float(cfg.state_machine.get("manual_release_confirm_window_sec", 0.0))
+            )
+        except (TypeError, ValueError):
+            self.manual_release_confirm_window_sec = 0.0
         self.status_server: Optional[ThreadingHTTPServer] = None
         self.web_server: Optional[object] = None
         self.processes: Dict[str, subprocess.Popen] = {}
@@ -1149,10 +1162,10 @@ class FirstMinuteController:
             
             if force_contain:
                 self.logger.info("ACTION: Force CONTAIN stage requested via API")
-                # Manual CONTAIN: enforce minimum 30 minutes before release
+                # Manual CONTAIN: optionally enforce minimum hold duration before release
                 now = time.time()
                 self.manual_contain_active = True
-                self.manual_contain_min_until = now + 1800.0
+                self.manual_contain_min_until = now + self.manual_contain_min_duration_sec
                 self.release_confirm_pending = False
                 self.release_confirm_until = 0.0
                 self.forced_contain_until = 0.0
@@ -1186,7 +1199,11 @@ class FirstMinuteController:
                         "suspicion": 75,
                         "reason": "Manual containment activated via WebUI",
                     })
-                self.logger.info("CONTAIN stage activated via API (min 30 minutes, manual release required)")
+                self.logger.info(
+                    "CONTAIN stage activated via API (manual_min_hold=%.1fs, release_confirm_window=%.1fs)",
+                    self.manual_contain_min_duration_sec,
+                    self.manual_release_confirm_window_sec,
+                )
                 # Skip state machine this loop to preserve CONTAIN
                 time.sleep(0.1)  # Brief delay before next iteration
                 continue  # Skip the rest of the loop
@@ -1209,26 +1226,34 @@ class FirstMinuteController:
                         )
                     time.sleep(0.1)
                     continue
-                if not self.release_confirm_pending or now > self.release_confirm_until:
-                    self.release_confirm_pending = True
-                    self.release_confirm_until = now + 10.0
-                    self.logger.info("Release confirmation required (press again within 10s)")
-                    link_meta = {}
-                    confirm_summary = {
-                        "changed": False,
-                        "suspicion": 75,
-                        "reason": "Release confirmation required (press again within 10s)",
-                        "constraints": [],
-                    }
-                    self.write_snapshot(confirm_summary, link_meta)
-                    with self.status_ctx_lock:
-                        self.status_ctx.update(
-                            {
-                                "reason": "Release confirmation required (press again within 10s)",
-                            }
+                if self.manual_release_confirm_window_sec > 0.0:
+                    if not self.release_confirm_pending or now > self.release_confirm_until:
+                        self.release_confirm_pending = True
+                        self.release_confirm_until = now + self.manual_release_confirm_window_sec
+                        self.logger.info(
+                            "Release confirmation required (press again within %.1fs)",
+                            self.manual_release_confirm_window_sec,
                         )
-                    time.sleep(0.1)
-                    continue
+                        link_meta = {}
+                        confirm_reason = (
+                            f"Release confirmation required (press again within "
+                            f"{self.manual_release_confirm_window_sec:.1f}s)"
+                        )
+                        confirm_summary = {
+                            "changed": False,
+                            "suspicion": 75,
+                            "reason": confirm_reason,
+                            "constraints": [],
+                        }
+                        self.write_snapshot(confirm_summary, link_meta)
+                        with self.status_ctx_lock:
+                            self.status_ctx.update(
+                                {
+                                    "reason": confirm_reason,
+                                }
+                            )
+                        time.sleep(0.1)
+                        continue
                 # Confirmed release
                 self.release_confirm_pending = False
                 self.release_confirm_until = 0.0

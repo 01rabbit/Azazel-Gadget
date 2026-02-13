@@ -44,6 +44,8 @@ state_machine:
   # ★ NEW: CONTAIN 復帰制御
   contain_min_duration_sec: 20.0  # CONTAIN 状態の最小継続時間（秒）
   contain_exit_suspicion: 30.0    # CONTAIN から脱出する suspicion 閾値
+  manual_contain_min_duration_sec: 0.0  # WebUI手動Containの最小保持時間（0で即時Release可）
+  manual_release_confirm_window_sec: 0.0  # WebUI手動Releaseの再確認窓（0で単発Release）
 
 probes:
   captive_portal:

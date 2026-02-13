@@ -234,12 +234,11 @@ function displayErrorState() {
 
 // Execute action via API
 async function executeAction(action) {
-    if (action === 'release') {
-        await executeReleaseAction();
-        return;
-    }
-
     try {
+        if (action === 'release') {
+            showToast('⏳ Releasing...', 'info');
+        }
+
         const data = await postAction(action);
         
         if (data.ok) {
@@ -271,33 +270,6 @@ async function postAction(action) {
     });
     
     return res.json();
-}
-
-// Release action needs confirmation; send a second request automatically
-async function executeReleaseAction() {
-    try {
-        showToast('⏳ Releasing...', 'info');
-        
-        const first = await postAction('release');
-        if (!first.ok) {
-            showToast(`❌ release failed: ${first.error}`, 'error');
-            return;
-        }
-        
-        // Wait for controller to register confirmation window
-        await new Promise(resolve => setTimeout(resolve, 800));
-        
-        const second = await postAction('release');
-        if (second.ok) {
-            showToast('✅ release executed successfully', 'success');
-            setTimeout(fetchState, 500);
-        } else {
-            showToast(`❌ release failed: ${second.error}`, 'error');
-        }
-    } catch (e) {
-        console.error('Action release failed:', e);
-        showToast(`❌ release failed: ${e.message}`, 'error');
-    }
 }
 
 // Show toast notification
