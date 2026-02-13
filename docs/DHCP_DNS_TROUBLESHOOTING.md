@@ -183,7 +183,7 @@ tail -50 /var/log/azazel-dnsmasq.log | grep -i dhcp
 3. **リース配布されたがアドレスが異なる** → 設定確認
    ```bash
    grep dhcp-range /etc/azazel-zero/dnsmasq-first_minute.conf
-   # 確認: dhcp-range=10.55.0.50,10.55.0.200,255.255.255.0,12h
+   # 確認: dhcp-range=10.55.0.50,10.55.0.200,255.255.255.0,5m
    ```
 
 ### 問題 5: DNS が機能していない
@@ -223,7 +223,18 @@ AZAZEL_DEBUG=1 python3 /home/azazel/Azazel-Zero/py/azazel-first-minute.py start 
 
 ## 手動修復（ラップトップ側）
 
-接続できるまで、ラップトップで手動設定：
+まずは DHCP 再取得を優先（手動ルート追加の前に実施）：
+
+```bash
+# Linux
+sudo dhclient -r usb0 || true
+sudo dhclient -v usb0
+
+# macOS
+sudo ipconfig set en5 DHCP
+```
+
+それでも復旧しない場合のみ、暫定で手動設定：
 
 ```bash
 # Linux

@@ -33,9 +33,12 @@ main() {
 interface=usb0
 bind-interfaces
 listen-address=10.55.0.10
-dhcp-range=10.55.0.50,10.55.0.200,255.255.255.0,12h
+dhcp-range=10.55.0.50,10.55.0.200,255.255.255.0,5m
+dhcp-authoritative
 dhcp-option=option:router,10.55.0.10
 dhcp-option=option:dns-server,10.55.0.10
+dhcp-option-force=option:router,10.55.0.10
+dhcp-option-force=option:dns-server,10.55.0.10
 dhcp-leasefile=/var/lib/dnsmasq/dnsmasq.leases
 EOF
 
@@ -65,6 +68,15 @@ EOF
     # 5. IP フォワーディング有効化
     log_info "IP フォワーディングを有効化..."
     sysctl -w net.ipv4.ip_forward=1 >> "$LOG_FILE" 2>&1 || die "IP フォワーディング有効化失敗"
+
+    # 5.5 USB ガジェット互換性（テザリング向け）
+    # use_eem=0 にしてホストOS互換性を上げる（次回起動時に有効）
+    log_info "USB ガジェット互換設定を適用..."
+    mkdir -p /etc/modprobe.d
+    cat > /etc/modprobe.d/g_ether.conf <<'EOF'
+# Azazel-Zero: improve host-side compatibility for USB tethering
+options g_ether use_eem=0
+EOF
     
     # 6. nftables ベース設定（後の Stage 40 で systemd 経由で適用）
     # ここでは、usb0 に対する入力ルールをテスト

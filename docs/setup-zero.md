@@ -15,7 +15,7 @@ so that you can build the following path:
 
 > Upstream Internet (Wi-Fi) → Raspberry Pi (Azazel-Zero) → Laptop (via USB)
 
-Configuration of the laptop side (USB NIC IP / default gateway / DNS) is assumed to be done by the user according to the environment.
+Laptop-side configuration is expected to be automatic via DHCP from Azazel-Zero (USB tethering style), without manual route edits.
 
 ---
 
@@ -154,7 +154,7 @@ diskutil eject /Volumes/bootfs 2>/dev/null || diskutil eject /Volumes/boot
 
 ---
 
-## 3. First boot and logging in over USB (host-side configuration)
+## 3. First boot and logging in over USB (host-side auto-DHCP)
 
 1. Insert the SD card into the Raspberry Pi Zero 2 W.  
 2. Connect the **USB data port of the Zero 2 W (the side labeled “USB”)** to your laptop via the USB gadget adapter.  
@@ -170,11 +170,17 @@ Example (macOS host):
 
    Identify the interface corresponding to `RNDIS/Ethernet Gadget` or `Raspberry Pi USB` (e.g. `en17`).
 
-2. Assign an IP address to the USB NIC (example with `en17`):
+2. Verify that the USB NIC obtained an address by DHCP:
 
    ```bash
    IF=en17  # Replace with the actual interface name
-   sudo ifconfig "$IF" inet 10.55.0.2 netmask 255.255.255.0 up
+   ipconfig getifaddr "$IF"    # macOS
+   ```
+
+   If this is empty, renew DHCP once:
+
+   ```bash
+   sudo ipconfig set "$IF" DHCP
    ```
 
 3. Verify connectivity and log in to the Pi:
@@ -187,7 +193,7 @@ Example (macOS host):
 At this point:
 
 - Pi side: `usb0 = 10.55.0.10/24`  
-- Laptop: `USB NIC = 10.55.0.2/24`  
+- Laptop: `USB NIC = 10.55.0.x/24` (via DHCP)  
 
 and you should be able to log in to the Pi over USB via SSH.
 
@@ -235,7 +241,7 @@ The following steps turn the Pi into a **USB–Wi-Fi router**.
 - Upstream interface: `wlan0` (Wi-Fi)  
 - Downstream interface: `usb0` (USB gadget / laptop side)
 
-Configuration of the default gateway on the laptop side is left to the user and is described only as a prerequisite.
+The default gateway and DNS are handed out automatically by dnsmasq on Azazel-Zero.
 
 ### 5-1. Persist IPv4 forwarding
 
@@ -316,15 +322,15 @@ If you see a `MASQUERADE` rule in `POSTROUTING` and `usb0` ↔ `wlan0` rules in 
 
 ---
 
-## 6. Laptop-side prerequisites and connectivity test
+## 6. Laptop-side auto-routing check
 
-If you configure the USB NIC on your laptop as follows:
+With DHCP enabled on the laptop USB NIC, Azazel-Zero provides:
 
-- IP address: `10.55.0.2/24`  
-- Default gateway: `10.55.0.10`  
-- DNS: your home router’s IP or `8.8.8.8`, etc.
+- IP address: `10.55.0.x/24`
+- Default gateway: `10.55.0.10`
+- DNS: `10.55.0.10`
 
-then all traffic will flow as:
+Then traffic flows as:
 
 > Laptop → usb0 (10.55.0.10) → wlan0 → Upstream Internet
 

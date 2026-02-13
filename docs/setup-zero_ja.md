@@ -17,7 +17,7 @@
 
 という経路を構築する手順を示します。
 
-ラップトップ側（USB NIC の IP / デフォルトゲートウェイ / DNS）の設定は、利用環境に応じてユーザーが行う前提とします。
+ラップトップ側は、Azazel-Zero からの DHCP（USB テザリング相当）で自動設定される前提です。手動の経路変更は不要です。
 
 ---
 
@@ -153,7 +153,7 @@ diskutil eject /Volumes/bootfs 2>/dev/null || diskutil eject /Volumes/boot
 
 ---
 
-## 3. 初回起動と USB 経由でのログイン（ラップトップ側設定）
+## 3. 初回起動と USB 経由でのログイン（ラップトップ側自動DHCP）
 
 1. SD カードを Raspberry Pi Zero 2 W に挿入します。
 2. Zero 2 W の **USB データポート（USB と印字された側）**とラップトップを USB ガジェットアダプタ経由で接続します。
@@ -169,11 +169,17 @@ diskutil eject /Volumes/bootfs 2>/dev/null || diskutil eject /Volumes/boot
 
    `RNDIS/Ethernet Gadget` や `Raspberry Pi USB` に相当する IF（例: `en17`）を特定します。
 
-2. USB NIC に IP を設定します（例: `en17`）。
+2. USB NIC が DHCP でアドレス取得できていることを確認します（例: `en17`）。
 
    ```bash
    IF=en17  # 実際の IF 名に置き換え
-   sudo ifconfig "$IF" inet 10.55.0.2 netmask 255.255.255.0 up
+   ipconfig getifaddr "$IF"    # macOS
+   ```
+
+   空の場合は DHCP を 1 回再要求します。
+
+   ```bash
+   sudo ipconfig set "$IF" DHCP
    ```
 
 3. Pi への疎通・ログインを確認します。
@@ -186,7 +192,7 @@ diskutil eject /Volumes/bootfs 2>/dev/null || diskutil eject /Volumes/boot
 ここまでで、
 
 - Pi 側: `usb0 = 10.55.0.10/24`
-- ラップトップ: `USB NIC = 10.55.0.2/24`
+- ラップトップ: `USB NIC = 10.55.0.x/24`（DHCP）
 
 となり、USB 経由で SSH ログインできる状態になります。
 
@@ -234,7 +240,7 @@ sudo nmcli con mod "SSID_NAME" connection.autoconnect yes
 - 上流インターフェース: `wlan0`（Wi-Fi）
 - 下流インターフェース: `usb0`（USB ガジェット / ラップトップ側）
 
-ラップトップ側でのデフォルトゲートウェイ設定は、後述する前提条件に沿ってユーザーが行います。
+デフォルトゲートウェイと DNS は Azazel-Zero 側 `dnsmasq` から自動配布されます。
 
 ### 5-1. IP フォワーディングを永続化
 
@@ -315,15 +321,15 @@ sudo iptables -L FORWARD -n -v
 
 ---
 
-## 6. ラップトップ側の前提条件と動作確認
+## 6. ラップトップ側の自動ルーティング確認
 
-ラップトップ側の USB NIC に対して、以下のような設定を行うと、
+ラップトップ側 USB NIC が DHCP 利用のままなら、Azazel-Zero から以下が自動配布されます。
 
-- IP アドレス: `10.55.0.2/24`
+- IP アドレス: `10.55.0.x/24`
 - デフォルトゲートウェイ: `10.55.0.10`
-- DNS: 自宅ルータの IP または `8.8.8.8` など
+- DNS: `10.55.0.10`
 
-すべてのトラフィックが
+このとき、すべてのトラフィックは
 
 > ラップトップ → usb0 (10.55.0.10) → wlan0 → 上流インターネット
 

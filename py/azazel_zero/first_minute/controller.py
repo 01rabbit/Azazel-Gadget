@@ -209,6 +209,7 @@ class FirstMinuteController:
         self.status_server: Optional[ThreadingHTTPServer] = None
         self.web_server: Optional[object] = None
         self.processes: Dict[str, subprocess.Popen] = {}
+        self._last_dnsmasq_restart: float = 0.0
         self.last_console = 0.0
         self.snapshot_path = cfg.runtime_dir / "ui_snapshot.json"
         self.snapshot_path.parent.mkdir(parents=True, exist_ok=True)
@@ -368,6 +369,13 @@ class FirstMinuteController:
         if self.no_dns_start or not self.cfg.dnsmasq.get("enable", True):
             self.logger.info("dnsmasq start skipped (--no-dns-start or disabled in config)")
             return
+
+        existing = self.processes.get("dnsmasq")
+        if existing and existing.poll() is None:
+            self.logger.debug("dnsmasq already running (pid=%s)", existing.pid)
+            return
+        if existing and existing.poll() is not None:
+            self.processes.pop("dnsmasq", None)
         
         # コンフィグファイル存在確認
         conf_path = self.cfg.dnsmasq_conf_path
@@ -441,6 +449,23 @@ class FirstMinuteController:
             self.logger.error("dnsmasq binary not found. Install with: apt-get install dnsmasq")
         except Exception as e:
             self.logger.error(f"Failed to start dnsmasq: {e}")
+
+    def ensure_dnsmasq_running(self) -> None:
+        if self.dry_run or self.no_dns_start or not self.cfg.dnsmasq.get("enable", True):
+            return
+
+        proc = self.processes.get("dnsmasq")
+        if proc and proc.poll() is None:
+            return
+
+        now = time.time()
+        if now - self._last_dnsmasq_restart < 5.0:
+            return
+
+        rc = proc.poll() if proc else "none"
+        self.logger.warning("dnsmasq is not running (rc=%s), attempting restart", rc)
+        self._last_dnsmasq_restart = now
+        self.start_dnsmasq()
 
     def stop_dnsmasq(self) -> None:
         proc = self.processes.get("dnsmasq")
@@ -1144,6 +1169,7 @@ class FirstMinuteController:
         probe_done = False
         while not self.stop_event.is_set():
             self._refresh_upstream_iface(reapply_rules=True)
+            self.ensure_dnsmasq_running()
             # Check for force flags from Status API (with lock)
             with self.status_ctx_lock:
                 force_reprobe = self.status_ctx.pop("force_reprobe", False)
