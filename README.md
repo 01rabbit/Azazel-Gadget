@@ -1,4 +1,4 @@
-# Azazel-Zero (English translation of README_ja.md)
+# Azazel-Zero
 
 English | [日本語](/README_ja.md)
 
@@ -85,8 +85,22 @@ Heavyweight ML remains a future research theme; the current deterministic stack 
   - Manual refresh mode ([U] key).
   
 - **tmux console**  
-  - `py/azazel_menu.py` is a curses menu with Wi-Fi selector, Portal/Shield/Lockdown scripts, OpenCanary control, and E-Paper tests.  
+  - `py/azazel_menu.py` is a curses menu for Wi-Fi selection, OpenCanary start/stop/log tail, and E-Paper test actions.  
   - `py/azazel_status.py` is a telemetry panel showing SSID/BSSID, USB gadget IP, RSSI, captive-portal indicators, etc.
+
+---
+
+## Runtime Components
+
+| Component | Entry Point | Notes |
+|-----------|-------------|-------|
+| Unified installer | `install.sh`, `installer/stages/*.sh` | Single installation flow with Stage 00/10/20/30/40/99 |
+| First-Minute controller | `py/azazel-first-minute.py` | Core state machine (`PROBE/NORMAL/DEGRADED/CONTAIN/DECEPTION`) |
+| Status API | `py/azazel_zero/first_minute/controller.py` | JSON + actions on `10.55.0.10:8082` |
+| Control daemon | `py/azazel_control/daemon.py` | Unix socket `/run/azazel/control.sock`, executes action scripts and Wi-Fi scan/connect |
+| Web UI (optional) | `azazel_web/app.py` | Flask dashboard/API via `azazel-web.service` on `10.55.0.10:8084` |
+| TUI monitor | `py/azazel_zero/cli_unified.py` | Manual-refresh terminal monitor |
+| E-Paper tools | `py/azazel_epd.py`, `py/boot_splash_epd.py` | Status/alert rendering and boot/shutdown splash |
 
 ---
 
@@ -288,8 +302,9 @@ If wlan0 IP changes during installation (e.g., DHCP reassignment):
 ### Enable Optional Features
 
 ```bash
-# Include Web UI + OpenCanary + E-Paper
-sudo ./install.sh --with-webui --with-canary --with-epd
+# Include Web UI + OpenCanary + ntfy
+# (E-Paper is enabled by default in the installer)
+sudo ./install.sh --with-webui --with-canary --with-ntfy
 
 # Enable all optional features
 sudo ./install.sh --all
@@ -304,11 +319,13 @@ sudo ./install.sh --dry-run
 |--------|-------------|
 | `--with-webui` | Enable Flask-based Web UI (port 8084) |
 | `--with-canary` | Enable OpenCanary honeypot |
-| `--with-epd` | Install Waveshare E-Paper driver |
+| `--with-epd` | Install Waveshare E-Paper driver (enabled by default) |
 | `--with-ntfy` | Enable ntfy notifications |
 | `--all` | Enable all options |
 | `--dry-run` | Print actions only (no changes) |
 | `--resume` | Resume from interrupted installation |
+| `--auto-reboot` | Auto-reboot when Stage 20 detects network changes |
+| `--debug` | Enable debug logging for installer stages |
 
 ### After Installation
 
@@ -321,14 +338,20 @@ Once complete:
 
 2. **Verify systemd services**:
    ```bash
-   systemctl status azazel-first-minute
-   systemctl status azazel-nat
-   systemctl status usb0-static
+   systemctl status azazel-first-minute.service
+   systemctl status azazel-control-daemon.service
+   systemctl status usb0-static.service
    ```
 
-3. **Monitor logs** (real-time):
+3. **Check APIs**:
    ```bash
-   journalctl -u azazel-first-minute -f
+   curl http://10.55.0.10:8082/
+   curl http://10.55.0.10:8084/health
+   ```
+
+4. **Monitor logs** (real-time):
+   ```bash
+   journalctl -u azazel-first-minute.service -f
    ```
 
 For advanced configuration changes and troubleshooting, see [installer/README.md](installer/README.md).
