@@ -95,8 +95,11 @@ main() {
     # 6.5 Suricata 軽量プロファイル適用（Pi Zero 2 向け）
     local suri_updater="$PROJECT_ROOT/bin/suricata_update.sh"
     if [[ -x "$suri_updater" ]]; then
+        local detected_wan_if
+        detected_wan_if="$(ip -4 route show default | awk '{for (i=1; i<=NF; i++) if ($i == "dev") {print $(i+1); exit}}')"
+        detected_wan_if="${detected_wan_if:-wlan0}"
         log_info "Suricata 軽量ルールを適用..."
-        if "$suri_updater" --profile pi-zero2-lite --wan-if wlan0 >> "$LOG_FILE" 2>&1; then
+        if "$suri_updater" --profile pi-zero2-lite --wan-if "$detected_wan_if" >> "$LOG_FILE" 2>&1; then
             log_info "✓ Suricata 軽量プロファイル適用完了"
         else
             die "Suricata 軽量プロファイル適用に失敗: $suri_updater"

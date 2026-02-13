@@ -147,16 +147,20 @@ class FirstMinuteController:
         self.state_machine = FirstMinuteStateMachine(cfg.state_machine)
         self.current_stage: Stage = Stage.INIT
         self.last_probe: Optional[ProbeOutcome] = None
+        initial_upstream = str(cfg.interfaces.get("upstream", "wlan0") or "wlan0")
+        if initial_upstream.lower() == "auto":
+            initial_upstream = "wlan0"
+            cfg.interfaces["upstream"] = initial_upstream
         self.nft = NftManager(
             cfg.nft_template_path,
-            cfg.interfaces["upstream"],
+            initial_upstream,
             cfg.interfaces["downstream"],
             cfg.interfaces["mgmt_ip"],
             cfg.interfaces["mgmt_subnet"],
             int(cfg.policy.get("probe_allow_ttl", 120)),
             int(cfg.policy.get("dynamic_allow_ttl", 300)),
         )
-        self.tc = TcManager(cfg.interfaces["downstream"], cfg.interfaces["upstream"])
+        self.tc = TcManager(cfg.interfaces["downstream"], initial_upstream)
         self.dns_thread: Optional[DNSObserver] = None
         
         # ★ ntfy 通知クライアントを初期化
@@ -181,6 +185,7 @@ class FirstMinuteController:
             "config_hash": self.config_hash,
             "last_decision_id": self.last_decision_id,
             "start_time": self._start_time,
+            "upstream_if": initial_upstream,
         }
         # Manual action flags to force and maintain state
         self.forced_contain_until: float = 0.0  # Timestamp until which to maintain temporary CONTAIN
@@ -235,6 +240,116 @@ class FirstMinuteController:
         ]
         for cmd in cmds:
             subprocess.run(cmd, check=False)
+
+    def _iface_exists(self, iface: str) -> bool:
+        return bool(iface) and Path(f"/sys/class/net/{iface}").exists()
+
+    def _is_wireless_iface(self, iface: str) -> bool:
+        return bool(iface) and Path(f"/sys/class/net/{iface}/wireless").exists()
+
+    def _default_routes(self) -> list[Dict[str, object]]:
+        routes: list[Dict[str, object]] = []
+        try:
+            out = subprocess.check_output(["ip", "-4", "route", "show", "default"], text=True, timeout=2)
+        except Exception:
+            return routes
+        for line in out.splitlines():
+            parts = line.split()
+            if "dev" not in parts:
+                continue
+            dev_idx = parts.index("dev")
+            if dev_idx + 1 >= len(parts):
+                continue
+            dev = parts[dev_idx + 1]
+            via = ""
+            metric = 0
+            if "via" in parts:
+                via_idx = parts.index("via")
+                if via_idx + 1 < len(parts):
+                    via = parts[via_idx + 1]
+            if "metric" in parts:
+                metric_idx = parts.index("metric")
+                if metric_idx + 1 < len(parts):
+                    try:
+                        metric = int(parts[metric_idx + 1])
+                    except ValueError:
+                        metric = 0
+            routes.append({"dev": dev, "via": via, "metric": metric, "line": line.strip()})
+        routes.sort(key=lambda item: int(item.get("metric", 0)))
+        return routes
+
+    def _default_gateway_for_iface(self, iface: str) -> str:
+        for route in self._default_routes():
+            if route.get("dev") == iface and route.get("via"):
+                return str(route["via"])
+        return ""
+
+    def _detect_best_upstream(self) -> str:
+        downstream = self.cfg.interfaces.get("downstream", "usb0")
+        configured = str(self.cfg.interfaces.get("upstream", "") or "").strip()
+        auto_mode = configured.lower() in ("", "auto")
+
+        for route in self._default_routes():
+            dev = str(route.get("dev") or "")
+            if dev in ("", "lo", downstream):
+                continue
+            if not self._iface_exists(dev):
+                continue
+            if self._get_interface_ip(dev) == "-":
+                continue
+            return dev
+
+        if not auto_mode and configured not in ("", downstream) and self._iface_exists(configured):
+            return configured
+
+        for candidate in ("wlan0", "eth0"):
+            if candidate != downstream and self._iface_exists(candidate):
+                return candidate
+
+        return configured or "wlan0"
+
+    def _rebuild_network_managers(self) -> None:
+        upstream = self.cfg.interfaces.get("upstream", "wlan0")
+        downstream = self.cfg.interfaces["downstream"]
+        self.nft = NftManager(
+            self.cfg.nft_template_path,
+            upstream,
+            downstream,
+            self.cfg.interfaces["mgmt_ip"],
+            self.cfg.interfaces["mgmt_subnet"],
+            int(self.cfg.policy.get("probe_allow_ttl", 120)),
+            int(self.cfg.policy.get("dynamic_allow_ttl", 300)),
+        )
+        self.tc = TcManager(downstream, upstream)
+
+    def _refresh_upstream_iface(self, force: bool = False, reapply_rules: bool = False) -> bool:
+        selected = self._detect_best_upstream()
+        current = str(self.cfg.interfaces.get("upstream", "") or "")
+        if not selected:
+            return False
+        if not force and selected == current:
+            return False
+
+        self.cfg.interfaces["upstream"] = selected
+        self._rebuild_network_managers()
+        self.logger.info("upstream interface updated: %s -> %s", current or "-", selected)
+
+        if hasattr(self, "status_ctx_lock"):
+            with self.status_ctx_lock:
+                self.status_ctx["upstream_if"] = selected
+
+        if reapply_rules and not self.dry_run:
+            try:
+                self.nft.apply_base()
+                stage = self.current_stage
+                if stage not in (Stage.PROBE, Stage.DEGRADED, Stage.NORMAL, Stage.CONTAIN, Stage.DECEPTION):
+                    stage = Stage.NORMAL
+                self.apply_stage(stage)
+                self.seed_probe_destinations()
+            except Exception as exc:
+                self.logger.warning("failed to reapply rules after uplink change: %s", exc)
+
+        return True
 
     def start_dnsmasq(self) -> None:
         if self.no_dns_start or not self.cfg.dnsmasq.get("enable", True):
@@ -361,14 +476,15 @@ class FirstMinuteController:
         # Gather Wi-Fi channel scan data
         channel_congestion = "unknown"
         channel_ap_count = 0
-        try:
-            from azazel_zero.sensors.wifi_channel_scanner import scan_wifi_channels
-            scan_result = scan_wifi_channels(self.cfg.interfaces.get("upstream", "wlan0"))
-            if scan_result.get("scan_success"):
-                channel_congestion = scan_result.get("congestion_level", "unknown")
-                channel_ap_count = scan_result.get("ap_count", 0)
-        except Exception as e:
-            self.logger.debug(f"snapshot: Wi-Fi channel scan failed: {e}")
+        if self._is_wireless_iface(self.cfg.interfaces.get("upstream", "wlan0")):
+            try:
+                from azazel_zero.sensors.wifi_channel_scanner import scan_wifi_channels
+                scan_result = scan_wifi_channels(self.cfg.interfaces.get("upstream", "wlan0"))
+                if scan_result.get("scan_success"):
+                    channel_congestion = scan_result.get("congestion_level", "unknown")
+                    channel_ap_count = scan_result.get("ap_count", 0)
+            except Exception as e:
+                self.logger.debug(f"snapshot: Wi-Fi channel scan failed: {e}")
         
         # Gather Suricata alerts from eve.json (if available)
         suricata_critical = 0
@@ -871,6 +987,7 @@ class FirstMinuteController:
         self.preflight()
         if not self.dry_run:
             self.apply_sysctl()
+            self._refresh_upstream_iface(force=True, reapply_rules=False)
             self.nft.apply_base()
             # まずは開放状態 (NORMAL) から開始し、脅威を検知した場合のみ縮退させる
             self.apply_stage(Stage.NORMAL)
@@ -1013,6 +1130,7 @@ class FirstMinuteController:
         self.handle_signals()
         probe_done = False
         while not self.stop_event.is_set():
+            self._refresh_upstream_iface(reapply_rules=True)
             # Check for force flags from Status API (with lock)
             with self.status_ctx_lock:
                 force_reprobe = self.status_ctx.pop("force_reprobe", False)
@@ -1462,11 +1580,29 @@ class FirstMinuteController:
         self.stop()
 
     def poll_wifi(self) -> tuple[bool, Dict[str, object], bool]:
-        tags, meta = evaluate_wifi_safety(
-            self.cfg.interfaces["upstream"],
-            self.cfg.paths.get("known_db", ""),
-            self.cfg.interfaces.get("gateway_ip"),
-        )
+        upstream_iface = self.cfg.interfaces["upstream"]
+        if self._is_wireless_iface(upstream_iface):
+            tags, meta = evaluate_wifi_safety(
+                upstream_iface,
+                self.cfg.paths.get("known_db", ""),
+                self.cfg.interfaces.get("gateway_ip"),
+            )
+        else:
+            has_ip = self._get_interface_ip(upstream_iface) != "-"
+            has_default_route = any(
+                str(route.get("dev") or "") == upstream_iface for route in self._default_routes()
+            )
+            connected = has_ip and has_default_route
+            gw = self._default_gateway_for_iface(upstream_iface)
+            link_meta = {
+                "connected": "1" if connected else "0",
+                "ssid": f"Wired:{upstream_iface}" if connected else "",
+                "bssid": upstream_iface if connected else "",
+            }
+            if gw:
+                link_meta["gateway"] = gw
+            tags = []
+            meta = {"link": link_meta, "capture_len": 0}
         link = meta.get("link", {})
         connected = link.get("connected") == "1"
         bssid = link.get("bssid", "")

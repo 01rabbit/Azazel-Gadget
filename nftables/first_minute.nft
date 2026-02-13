@@ -139,6 +139,6 @@ table inet azazel_fmc {
 table ip nat_azazel_fmc {
   chain postrouting {
     type nat hook postrouting priority srcnat; policy accept;
-    oifname "@UPSTREAM@" masquerade
+    ip saddr @MGMT_SUBNET@ oifname != "@DOWNSTREAM@" masquerade
   }
 }

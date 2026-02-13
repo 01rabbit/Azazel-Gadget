@@ -61,7 +61,7 @@ EPD_PY=$PROJECT_ROOT/py/boot_splash_epd.py
 EPD_LOCK=/run/azazel-epd.lock
 
 # ネットワークインターフェース
-WAN_IF=wlan0
+WAN_IF=auto
 USB_IF=usb0
 MGMT_IP=10.55.0.10
 MGMT_SUBNET=10.55.0.0/24

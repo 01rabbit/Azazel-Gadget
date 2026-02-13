@@ -1,5 +1,5 @@
 [Unit]
-Description=Azazel NAT and forwarding rules (usb0 -> wlan0)
+Description=Azazel NAT and forwarding rules (usb0 -> dynamic uplink)
 After=network-online.target
 Wants=network-online.target
 

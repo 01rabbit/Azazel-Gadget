@@ -1,17 +1,23 @@
 #!/bin/sh
 set -eu
 
-OUT_IF="wlan0"
-IN_IF="usb0"
+AZAZEL_DEFAULTS="/etc/default/azazel-zero"
+if [ -r "$AZAZEL_DEFAULTS" ]; then
+  # shellcheck disable=SC1090
+  . "$AZAZEL_DEFAULTS"
+fi
 
-# NAT (POSTROUTING) - avoid duplicates
-iptables -t nat -C POSTROUTING -o "$OUT_IF" -j MASQUERADE 2>/dev/null || \
-iptables -t nat -A POSTROUTING -o "$OUT_IF" -j MASQUERADE
+IN_IF="${USB_IF:-usb0}"
+MGMT_SUBNET_CIDR="${MGMT_SUBNET:-10.55.0.0/24}"
 
-# FORWARD (usb0 -> wlan0)
-iptables -C FORWARD -i "$IN_IF" -o "$OUT_IF" -j ACCEPT 2>/dev/null || \
-iptables -A FORWARD -i "$IN_IF" -o "$OUT_IF" -j ACCEPT
+# NAT (POSTROUTING): downstream subnet to any non-downstream uplink
+iptables -t nat -C POSTROUTING -s "$MGMT_SUBNET_CIDR" ! -o "$IN_IF" -j MASQUERADE 2>/dev/null || \
+iptables -t nat -A POSTROUTING -s "$MGMT_SUBNET_CIDR" ! -o "$IN_IF" -j MASQUERADE
 
-# FORWARD (wlan0 -> usb0 established/related)
-iptables -C FORWARD -i "$OUT_IF" -o "$IN_IF" -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || \
-iptables -A FORWARD -i "$OUT_IF" -o "$IN_IF" -m state --state ESTABLISHED,RELATED -j ACCEPT
+# FORWARD (downstream -> any uplink)
+iptables -C FORWARD -i "$IN_IF" ! -o "$IN_IF" -s "$MGMT_SUBNET_CIDR" -j ACCEPT 2>/dev/null || \
+iptables -A FORWARD -i "$IN_IF" ! -o "$IN_IF" -s "$MGMT_SUBNET_CIDR" -j ACCEPT
+
+# FORWARD (uplink -> downstream, return traffic only)
+iptables -C FORWARD ! -i "$IN_IF" -o "$IN_IF" -d "$MGMT_SUBNET_CIDR" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || \
+iptables -A FORWARD ! -i "$IN_IF" -o "$IN_IF" -d "$MGMT_SUBNET_CIDR" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT

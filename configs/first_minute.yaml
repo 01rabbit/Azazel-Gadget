@@ -2,7 +2,7 @@
 # Copy to /etc/azazel-zero/first_minute.yaml and adjust for your environment.
 
 interfaces:
-  upstream: wlan0           # Wi-Fi uplink interface
+  upstream: auto            # Auto-select best default-route uplink (wlan0/eth0)
   downstream: usb0          # OTG gadget interface presented to the user device
   mgmt_ip: 10.55.0.10       # IP bound on downstream for management/API/DNS (fixed)
   mgmt_subnet: 10.55.0.0/24

@@ -33,7 +33,7 @@ class FirstMinuteConfig:
         data = yaml.safe_load(p.read_text()) or {}
         # Provide minimal defaults for keys that may be missing to avoid KeyErrors
         defaults = {
-            "interfaces": {"upstream": "wlan0", "downstream": "usb0", "mgmt_ip": "192.168.7.1", "mgmt_subnet": "192.168.7.0/24"},
+            "interfaces": {"upstream": "auto", "downstream": "usb0", "mgmt_ip": "192.168.7.1", "mgmt_subnet": "192.168.7.0/24"},
             "paths": {},
             "dnsmasq": {"enable": True},
             "state_machine": {},
