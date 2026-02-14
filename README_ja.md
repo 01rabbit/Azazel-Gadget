@@ -327,6 +327,19 @@ sudo ./install.sh --dry-run
 | `--auto-reboot` | Stage 20 でネットワーク変更検出時に自動再起動 |
 | `--debug` | インストーラのデバッグログを有効化 |
 
+### ntfy 実運用チャネル
+
+`--with-ntfy` を有効化した場合、Azazel-Zero の通知で実際に利用する ntfy topic は次の 2 つです。
+
+- `azg-alert-critical`（重大アラート）
+- `azg-info-status`（状態/情報通知）
+
+デバイス上での確認コマンド:
+
+```bash
+sudo ntfy access
+```
+
 ### セットアップ後
 
 インストール完了後：

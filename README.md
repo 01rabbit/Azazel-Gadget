@@ -327,6 +327,19 @@ sudo ./install.sh --dry-run
 | `--auto-reboot` | Auto-reboot when Stage 20 detects network changes |
 | `--debug` | Enable debug logging for installer stages |
 
+### ntfy Channels in Operation
+
+When `--with-ntfy` is enabled, Azazel-Zero uses these two ntfy topics for runtime notifications:
+
+- `azg-alert-critical` (critical alerts)
+- `azg-info-status` (status/info updates)
+
+Quick verification on the device:
+
+```bash
+sudo ntfy access
+```
+
 ### After Installation
 
 Once complete:
