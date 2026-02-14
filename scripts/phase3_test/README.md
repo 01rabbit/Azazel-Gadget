@@ -16,6 +16,7 @@ scripts/phase3_test/
 ├── run_test1_wifi.sh            # テスト1: 不審AP検知
 ├── run_test2_suricata.sh        # テスト2A: Suricata→CONTAIN遷移
 ├── run_test2b_cooldown.sh       # テスト2B: Cooldown機構検証
+├── run_test7_router_regression.sh # テスト7: ルータ疎通回帰
 └── run_all_tests.sh             # 全テスト一括実行
 ```
 
@@ -57,12 +58,22 @@ scripts/phase3_test/
 ./scripts/phase3_test/run_test2b_cooldown.sh
 ```
 
+#### テスト7: ルータ疎通回帰
+```bash
+./scripts/phase3_test/run_test7_router_regression.sh
+```
+
+非対話モード:
+```bash
+./scripts/phase3_test/run_test7_router_regression.sh --non-interactive
+```
+
 ### 4. 全テスト一括実行
 ```bash
 ./scripts/phase3_test/run_all_tests.sh
 ```
 
-テスト2A、3、2B を自動実行します（テスト1は手動）。
+テスト2A、3、2B を自動実行します（テスト1は手動、テスト7は任意）。
 
 ## 📝 各スクリプト詳細
 
@@ -190,8 +201,23 @@ Suricata Cooldown機構（30秒）を検証します。
 # ✓✓✓ テスト2B: PASS ✓✓✓
 ```
 
+### run_test7_router_regression.sh
+ルータ機能の回帰（FORWARD/NAT/stage mark）を検証します。
+
+**判定基準**:
+- `nftables/first_minute.nft` が `meta mark` ベースである
+- 実行時ルールで `mark set` が `vmap` より前にある
+- Pi 自身の上流疎通（ICMP/HTTPS）が成功
+- クライアント通信後に FORWARD/NAT カウンタが増加
+
+**使用例**:
+```bash
+./scripts/phase3_test/run_test7_router_regression.sh
+# ✓✓✓ テスト7: PASS ✓✓✓
+```
+
 ### run_all_tests.sh
-テスト2A、3、2Bを自動実行します。
+テスト2A、3、2Bを自動実行します（テスト7は任意実行）。
 
 **実行フロー**:
 1. 環境セットアップ

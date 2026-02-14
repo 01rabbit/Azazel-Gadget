@@ -46,7 +46,7 @@ table inet azazel_fmc {
 
   chain stage_switch {
     type filter hook prerouting priority -300; policy accept;
-    ct mark set $STAGE_PROBE
+    meta mark set $STAGE_PROBE
   }
 
   chain input {
@@ -80,8 +80,8 @@ table inet azazel_fmc {
     type filter hook forward priority 0; policy drop;
     ct state established,related accept
     iifname $DOWNSTREAM ip daddr $MGMT_IP accept
-    iifname $DOWNSTREAM ip saddr $MGMT_SUBNET ct mark vmap { $STAGE_PROBE : jump stage_probe, $STAGE_DEGRADED : jump stage_degraded, $STAGE_NORMAL : jump stage_normal, $STAGE_CONTAIN : jump stage_contain, $STAGE_DECEPTION : jump stage_deception }
-    iifname $DOWNSTREAM ct mark set ct mark map { 0 : $STAGE_PROBE }
+    iifname $DOWNSTREAM meta mark set meta mark map { 0 : $STAGE_PROBE }
+    iifname $DOWNSTREAM ip saddr $MGMT_SUBNET meta mark vmap { $STAGE_PROBE : jump stage_probe, $STAGE_DEGRADED : jump stage_degraded, $STAGE_NORMAL : jump stage_normal, $STAGE_CONTAIN : jump stage_contain, $STAGE_DECEPTION : jump stage_deception }
   }
 
   chain stage_probe {

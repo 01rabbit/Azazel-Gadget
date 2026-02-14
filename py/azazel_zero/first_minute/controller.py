@@ -247,11 +247,18 @@ class FirstMinuteController:
                 raise SystemExit(f"{bin_name} not found in PATH")
 
     def apply_sysctl(self) -> None:
+        # Use loose rp_filter for gateway mode to avoid asymmetric-route drops
+        # when multiple uplinks (e.g. eth0 + wlan0) coexist.
+        upstream = str(self.cfg.interfaces.get("upstream", "") or "").strip()
+        downstream = str(self.cfg.interfaces.get("downstream", "") or "").strip()
         cmds = [
             ["sysctl", "-w", "net.ipv4.ip_forward=1"],
-            ["sysctl", "-w", "net.ipv4.conf.all.rp_filter=1"],
-            ["sysctl", "-w", "net.ipv4.conf.default.rp_filter=1"],
+            ["sysctl", "-w", "net.ipv4.conf.all.rp_filter=2"],
+            ["sysctl", "-w", "net.ipv4.conf.default.rp_filter=2"],
         ]
+        for iface in {upstream, downstream}:
+            if iface and self._iface_exists(iface):
+                cmds.append(["sysctl", "-w", f"net.ipv4.conf.{iface}.rp_filter=2"])
         for cmd in cmds:
             subprocess.run(cmd, check=False)
 
@@ -302,6 +309,12 @@ class FirstMinuteController:
         downstream = self.cfg.interfaces.get("downstream", "usb0")
         configured = str(self.cfg.interfaces.get("upstream", "") or "").strip()
         auto_mode = configured.lower() in ("", "auto")
+
+        # Respect explicit upstream settings unless unavailable.
+        if not auto_mode:
+            if configured not in ("", "lo", downstream) and self._iface_exists(configured):
+                if self._get_interface_ip(configured) != "-":
+                    return configured
 
         for route in self._default_routes():
             dev = str(route.get("dev") or "")

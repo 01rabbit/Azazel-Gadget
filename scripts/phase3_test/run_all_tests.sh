@@ -12,12 +12,14 @@ echo ""
 echo "実行するテスト:"
 echo "  1. 環境セットアップ"
 echo "  2. ツール確認"
-echo "  3. テスト2A: Suricata→CONTAIN遷移"
-echo "  4. テスト3: CONTAIN復帰タイムライン"
-echo "  5. テスト2B: Cooldown機構検証"
+echo "  3. テスト7: ルータ疎通回帰 (任意)"
+echo "  4. テスト2A: Suricata→CONTAIN遷移"
+echo "  5. テスト3: CONTAIN復帰タイムライン"
+echo "  6. テスト2B: Cooldown機構検証"
 echo ""
 echo "注意:"
 echo "  - テスト1 (不審AP検知) は手動で実施してください"
+echo "  - テスト7 はクライアント端末連動のため任意実行です"
 echo "  - 全テスト完了まで約5-10分かかります"
 echo ""
 read -p "テストを開始しますか? [y/N]: " -n 1 -r
@@ -74,6 +76,16 @@ bash "$SCRIPT_DIR/check_tools.sh" || {
   echo "ERROR: ツール確認に失敗しました"
   exit 1
 }
+
+# テスト7: ルータ疎通回帰（任意）
+echo ""
+read -p "Step 3: テスト7 (ルータ疎通回帰) を実行しますか? [y/N]: " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+  run_test "テスト7: ルータ疎通回帰" "$SCRIPT_DIR/run_test7_router_regression.sh"
+else
+  echo "○ テスト7: スキップ" >> "$RESULT_FILE"
+fi
 
 # テスト2A: Suricata→CONTAIN
 run_test "テスト2A: Suricata→CONTAIN遷移" "$SCRIPT_DIR/run_test2_suricata.sh"

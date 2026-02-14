@@ -68,7 +68,7 @@ class NftManager:
         mark = mark_map.get(stage, 1)
         subprocess.run(["nft", "flush", "chain", "inet", "azazel_fmc", "stage_switch"], check=False)
         subprocess.run(
-            ["nft", "add", "rule", "inet", "azazel_fmc", "stage_switch", "ct", "mark", "set", str(mark)],
+            ["nft", "add", "rule", "inet", "azazel_fmc", "stage_switch", "meta", "mark", "set", str(mark)],
             check=True,
         )
 
