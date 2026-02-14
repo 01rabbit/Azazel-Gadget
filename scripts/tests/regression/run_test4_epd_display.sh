@@ -1,6 +1,6 @@
 #!/bin/bash
 # テスト4: E-Paper ディスプレイ動作確認スクリプト
-# 使用方法: ./scripts/phase3_test/run_test4_epd_display.sh
+# 使用方法: ./scripts/tests/regression/run_test4_epd_display.sh
 
 echo "================================================"
 echo "  テスト4: E-Paper ディスプレイ動作確認"

@@ -1,13 +1,13 @@
 #!/bin/bash
 # テスト7: ルータ疎通回帰テスト（FORWARD/NAT + stage mark 経路）
 # 使用方法:
-#   ./scripts/phase3_test/run_test7_router_regression.sh
-#   ./scripts/phase3_test/run_test7_router_regression.sh --non-interactive
+#   ./scripts/tests/regression/run_test7_router_regression.sh
+#   ./scripts/tests/regression/run_test7_router_regression.sh --non-interactive
 
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 CFG_CANDIDATES=(
   "/etc/azazel-zero/first_minute.yaml"

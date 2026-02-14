@@ -1,6 +1,6 @@
 #!/bin/bash
 # テスト1: 不審AP検知テスト実行スクリプト
-# 使用方法: ./scripts/phase3_test/run_test1_wifi.sh [SSID] [PASSWORD]
+# 使用方法: ./scripts/tests/regression/run_test1_wifi.sh [SSID] [PASSWORD]
 
 SSID=${1:-""}
 PASSWORD=${2:-""}

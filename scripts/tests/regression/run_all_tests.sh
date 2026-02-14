@@ -1,12 +1,12 @@
 #!/bin/bash
-# Phase 3 テスト全体実行スクリプト
-# 使用方法: ./scripts/phase3_test/run_all_tests.sh
+# 回帰テスト全体実行スクリプト
+# 使用方法: ./scripts/tests/regression/run_all_tests.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-RESULT_FILE="/tmp/phase3_test_results.txt"
+RESULT_FILE="/tmp/azazel_regression_test_results.txt"
 
 echo "================================================"
-echo "  Phase 3 全テスト実行"
+echo "  回帰テスト全体実行"
 echo "================================================"
 echo ""
 echo "実行するテスト:"
@@ -30,7 +30,7 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
 fi
 
 # 結果ログ初期化
-echo "Phase 3 テスト結果" > "$RESULT_FILE"
+echo "回帰テスト結果" > "$RESULT_FILE"
 echo "実行日時: $(date '+%Y-%m-%d %H:%M:%S')" >> "$RESULT_FILE"
 echo "========================================" >> "$RESULT_FILE"
 echo "" >> "$RESULT_FILE"

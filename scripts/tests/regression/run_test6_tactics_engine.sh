@@ -1,6 +1,6 @@
 #!/bin/bash
 # テスト6: リスク採点（Tactics Engine 統合）動作確認スクリプト
-# 使用方法: ./scripts/phase3_test/run_test6_tactics_engine.sh
+# 使用方法: ./scripts/tests/regression/run_test6_tactics_engine.sh
 
 echo "================================================"
 echo "  テスト6: リスク採点（Tactics Engine）動作確認"

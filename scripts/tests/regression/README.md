@@ -1,13 +1,13 @@
-# Phase 3 テストスクリプト (v3.0 対応)
+# 回帰テストスクリプト (v3.0 対応)
 
-このディレクトリには Phase 3 テスト実施用のスクリプトが含まれています。
+このディレクトリには回帰テスト実施用のスクリプトが含まれています。
 
-**対応テスト計画**: PHASE3_TEST_PLAN.md v3.0（実装準拠・パラメータスナップショット方式）
+**対応テスト計画**: 回帰テスト計画 v3.0（実装準拠・パラメータスナップショット方式）
 
 ## 📁 ディレクトリ構成
 
 ```
-scripts/phase3_test/
+scripts/tests/regression/
 ├── README.md                    # このファイル
 ├── check_tools.sh               # ツール確認スクリプト
 ├── setup_env.sh                 # 環境セットアップスクリプト
@@ -24,14 +24,14 @@ scripts/phase3_test/
 
 ### 1. ツール確認
 ```bash
-./scripts/phase3_test/check_tools.sh
+./scripts/tests/regression/check_tools.sh
 ```
 
 すべてのツールと依存関係が正常かチェックします。
 
 ### 2. 環境セットアップ
 ```bash
-./scripts/phase3_test/setup_env.sh
+./scripts/tests/regression/setup_env.sh
 ```
 
 テスト環境を初期化します（ログクリア、eve.json 準備など）。
@@ -40,37 +40,37 @@ scripts/phase3_test/
 
 #### テスト1: 不審AP検知
 ```bash
-./scripts/phase3_test/run_test1_wifi.sh "Known-Evil-SSID" "password123"
+./scripts/tests/regression/run_test1_wifi.sh "Known-Evil-SSID" "password123"
 ```
 
 #### テスト2A: Suricata→CONTAIN遷移
 ```bash
-./scripts/phase3_test/run_test2_suricata.sh
+./scripts/tests/regression/run_test2_suricata.sh
 ```
 
 #### テスト3: CONTAIN復帰測定
 ```bash
-./scripts/phase3_test/measure_contain_recovery.sh
+./scripts/tests/regression/measure_contain_recovery.sh
 ```
 
 #### テスト2B: Cooldown機構検証
 ```bash
-./scripts/phase3_test/run_test2b_cooldown.sh
+./scripts/tests/regression/run_test2b_cooldown.sh
 ```
 
 #### テスト7: ルータ疎通回帰
 ```bash
-./scripts/phase3_test/run_test7_router_regression.sh
+./scripts/tests/regression/run_test7_router_regression.sh
 ```
 
 非対話モード:
 ```bash
-./scripts/phase3_test/run_test7_router_regression.sh --non-interactive
+./scripts/tests/regression/run_test7_router_regression.sh --non-interactive
 ```
 
 ### 4. 全テスト一括実行
 ```bash
-./scripts/phase3_test/run_all_tests.sh
+./scripts/tests/regression/run_all_tests.sh
 ```
 
 テスト2A、3、2B を自動実行します（テスト1は手動、テスト7は任意）。
@@ -90,7 +90,7 @@ scripts/phase3_test/
 
 **使用例**:
 ```bash
-./scripts/phase3_test/check_tools.sh
+./scripts/tests/regression/check_tools.sh
 # ✓ すべてのツール/設定が正常です → テスト実施可能
 # ✗ X件の問題が見つかりました → 修正が必要
 ```
@@ -113,18 +113,18 @@ scripts/phase3_test/
 8. ログ初期化
 9. テスト開始時刻記録
 
-**スナップショット保存先**: `/tmp/phase3_artifacts/`
+**スナップショット保存先**: `/tmp/azazel_regression_artifacts/`
 
 **使用例**:
 ```bash
-./scripts/phase3_test/setup_env.sh
+./scripts/tests/regression/setup_env.sh
 # [7/9] 実装パラメータ・スナップショット取得...
 #   ✓ Git コミット: a1b2c3d4
 #   ✓ first_minute.yaml スナップショット保存
 #   主要パラメータ:
 #     contain_threshold: 50
 #     decay_per_sec: 3
-#   ✓ スナップショット保存先: /tmp/phase3_artifacts/
+#   ✓ スナップショット保存先: /tmp/azazel_regression_artifacts/
 # [✓] セットアップ完了
 ```
 
@@ -137,7 +137,7 @@ Suricata アラートを eve.json に注入します。
 
 **使用例**:
 ```bash
-./scripts/phase3_test/inject_suricata_alert.sh 1 "Test Attack"
+./scripts/tests/regression/inject_suricata_alert.sh 1 "Test Attack"
 # ✓ アラート注入成功
 ```
 
@@ -150,7 +150,7 @@ CONTAIN状態の復帰タイムラインを測定します。
 
 **使用例**:
 ```bash
-./scripts/phase3_test/measure_contain_recovery.sh
+./scripts/tests/regression/measure_contain_recovery.sh
 # 測定を開始しますか? [y/N]: y
 # T=0秒 [12:00:00] state=CONTAIN, suspicion=50.0
 # ...
@@ -171,7 +171,7 @@ CONTAIN状態の復帰タイムラインを測定します。
 
 **使用例**:
 ```bash
-./scripts/phase3_test/run_test1_wifi.sh "Known-Evil-SSID" "password123"
+./scripts/tests/regression/run_test1_wifi.sh "Known-Evil-SSID" "password123"
 # ✓✓✓ テスト1: PASS ✓✓✓
 ```
 
@@ -184,7 +184,7 @@ Suricataアラート検知からCONTAIN遷移をテストします。
 
 **使用例**:
 ```bash
-./scripts/phase3_test/run_test2_suricata.sh
+./scripts/tests/regression/run_test2_suricata.sh
 # ✓✓✓ テスト2A: PASS ✓✓✓
 ```
 
@@ -197,7 +197,7 @@ Suricata Cooldown機構（30秒）を検証します。
 
 **使用例**:
 ```bash
-./scripts/phase3_test/run_test2b_cooldown.sh
+./scripts/tests/regression/run_test2b_cooldown.sh
 # ✓✓✓ テスト2B: PASS ✓✓✓
 ```
 
@@ -212,7 +212,7 @@ Suricata Cooldown機構（30秒）を検証します。
 
 **使用例**:
 ```bash
-./scripts/phase3_test/run_test7_router_regression.sh
+./scripts/tests/regression/run_test7_router_regression.sh
 # ✓✓✓ テスト7: PASS ✓✓✓
 ```
 
@@ -227,12 +227,12 @@ Suricata Cooldown機構（30秒）を検証します。
 5. テスト2B実行
 
 **結果出力**:
-- `/tmp/phase3_test_results.txt`
+- `/tmp/azazel_regression_test_results.txt`
 - `/tmp/contain_recovery.log`
 
 **使用例**:
 ```bash
-./scripts/phase3_test/run_all_tests.sh
+./scripts/tests/regression/run_all_tests.sh
 # テストを開始しますか? [y/N]: y
 # ...
 # ✓✓✓ 全テスト PASS ✓✓✓
@@ -242,7 +242,7 @@ Suricata Cooldown機構（30秒）を検証します。
 
 ### ツール確認で失敗する
 ```bash
-./scripts/phase3_test/check_tools.sh
+./scripts/tests/regression/check_tools.sh
 # ✗ jq (未インストール)
 # → sudo apt install jq
 ```
@@ -268,7 +268,7 @@ journalctl -u azazel-first-minute -n 100
 sudo systemctl restart azazel-first-minute.service
 
 # 環境再セットアップ
-./scripts/phase3_test/setup_env.sh
+./scripts/tests/regression/setup_env.sh
 ```
 
 ## 📊 テスト結果の確認
@@ -277,7 +277,7 @@ sudo systemctl restart azazel-first-minute.service
 各スクリプトは実行結果を標準出力に表示します。
 
 ### ログファイル
-- `/tmp/phase3_artifacts/` - **スナップショット＆証跡保存ディレクトリ** (v3.0)
+- `/tmp/azazel_regression_artifacts/` - **スナップショット＆証跡保存ディレクトリ** (v3.0)
   - `git_commit.txt` - テスト実施時のコミットハッシュ
   - `first_minute.yaml` - 実装パラメータのスナップショット
   - `api_baseline.json` - テスト開始時の API 状態
@@ -285,7 +285,7 @@ sudo systemctl restart azazel-first-minute.service
   - `test_start_time.txt` - テスト開始時刻
   - `contain_recovery_timeline.jsonl` - CONTAIN復帰測定データ
   - `epd_preview_*.png` - EPD プレビュー画像
-- `/tmp/phase3_test_results.txt` - テスト結果サマリー
+- `/tmp/azazel_regression_test_results.txt` - テスト結果サマリー
 - `/tmp/contain_recovery.log` - CONTAIN復帰測定ログ (旧形式)
 - `journalctl -u azazel-first-minute` - システムログ
 
@@ -294,7 +294,7 @@ v3.0 では期待値を固定せず、スナップショット値に基づいて
 
 ```bash
 # スナップショットの確認
-cat /tmp/phase3_artifacts/first_minute.yaml | grep -E "contain|decay|cooldown"
+cat /tmp/azazel_regression_artifacts/first_minute.yaml | grep -E "contain|decay|cooldown"
 
 # 出力例:
 #   contain_threshold: 50
@@ -305,7 +305,7 @@ cat /tmp/phase3_artifacts/first_minute.yaml | grep -E "contain|decay|cooldown"
 ```
 
 ### 期待される結果
-すべてのテストがPASSの場合、Phase 3 は完了です。
+すべてのテストがPASSの場合、回帰テストは完了です。
 
 ```
 ✓✓✓ 全テスト PASS ✓✓✓
@@ -315,14 +315,14 @@ cat /tmp/phase3_artifacts/first_minute.yaml | grep -E "contain|decay|cooldown"
 
 **証跡のアーカイブ** (推奨):
 ```bash
-tar -czf /tmp/phase3_artifacts_$(date +%Y%m%d_%H%M).tar.gz /tmp/phase3_artifacts
+tar -czf /tmp/azazel_regression_artifacts_$(date +%Y%m%d_%H%M).tar.gz /tmp/azazel_regression_artifacts
 ```
 
 ## 🔗 関連ドキュメント
 
-- [PHASE3_TEST_PLAN.md](../../PHASE3_TEST_PLAN.md) - 詳細テスト計画書 v3.0
-- [test_redesign_verification.py](../../test_redesign_verification.py) - ユニットテスト
-- [azazel_test.py](../../azazel_test.py) - 統合テスト
+- 回帰テスト計画書 (v3.0)
+- [test_redesign_verification.py](../../../test_redesign_verification.py) - ユニットテスト
+- [azazel_test.py](../../../azazel_test.py) - 統合テスト
 
 ## ⚠️ 注意事項
 

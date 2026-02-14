@@ -1,14 +1,14 @@
 #!/bin/bash
-# Phase 3 テスト環境セットアップスクリプト
-# 使用方法: ./scripts/phase3_test/setup_env.sh
+# 回帰テスト環境セットアップスクリプト
+# 使用方法: ./scripts/tests/regression/setup_env.sh
 
 # set -e は最後にエラーになる可能性があるため、個別に管理
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 echo "================================================"
-echo "  Phase 3 テスト環境セットアップ"
+echo "  回帰テスト環境セットアップ"
 echo "================================================"
 echo ""
 
@@ -88,16 +88,16 @@ fi
 
 # 7. 実装パラメータ・スナップショット取得 (v3.0 要件)
 echo "[7/9] 実装パラメータ・スナップショット取得..."
-mkdir -p /tmp/phase3_artifacts
+mkdir -p /tmp/azazel_regression_artifacts
 
 # Git コミット情報
-git rev-parse --abbrev-ref HEAD > /tmp/phase3_artifacts/git_branch.txt 2>/dev/null || echo "unknown" > /tmp/phase3_artifacts/git_branch.txt
-git rev-parse HEAD > /tmp/phase3_artifacts/git_commit.txt 2>/dev/null || echo "unknown" > /tmp/phase3_artifacts/git_commit.txt
-echo "  ✓ Git コミット: $(cat /tmp/phase3_artifacts/git_commit.txt | cut -c1-8)"
+git rev-parse --abbrev-ref HEAD > /tmp/azazel_regression_artifacts/git_branch.txt 2>/dev/null || echo "unknown" > /tmp/azazel_regression_artifacts/git_branch.txt
+git rev-parse HEAD > /tmp/azazel_regression_artifacts/git_commit.txt 2>/dev/null || echo "unknown" > /tmp/azazel_regression_artifacts/git_commit.txt
+echo "  ✓ Git コミット: $(cat /tmp/azazel_regression_artifacts/git_commit.txt | cut -c1-8)"
 
 # 設定ファイルコピー
 if [ -f configs/first_minute.yaml ]; then
-  cp -a configs/first_minute.yaml /tmp/phase3_artifacts/first_minute.yaml
+  cp -a configs/first_minute.yaml /tmp/azazel_regression_artifacts/first_minute.yaml
   echo "  ✓ first_minute.yaml スナップショット保存"
   
   # 主要パラメータ抽出
@@ -108,14 +108,14 @@ else
 fi
 
 # API ベースライン
-curl -s "${API_URL}" | jq '.' > /tmp/phase3_artifacts/api_baseline.json 2>/dev/null
+curl -s "${API_URL}" | jq '.' > /tmp/azazel_regression_artifacts/api_baseline.json 2>/dev/null
 echo "  ✓ API ベースライン保存"
 
 # Journal ベースライン
-journalctl -u azazel-first-minute -n 80 --no-pager > /tmp/phase3_artifacts/journal_baseline.log 2>/dev/null
+journalctl -u azazel-first-minute -n 80 --no-pager > /tmp/azazel_regression_artifacts/journal_baseline.log 2>/dev/null
 echo "  ✓ Journal ベースライン保存"
 
-echo "  ✓ スナップショット保存先: /tmp/phase3_artifacts/"
+echo "  ✓ スナップショット保存先: /tmp/azazel_regression_artifacts/"
 
 # 8. ログ初期化
 echo "[8/9] ログ初期化..."
@@ -127,8 +127,8 @@ echo "  ✓ ログ初期化完了"
 
 # 9. テスト開始時刻記録
 echo "[9/9] テスト開始時刻記録..."
-date '+%Y-%m-%d %H:%M:%S' > /tmp/phase3_artifacts/test_start_time.txt
-echo "  ✓ 開始時刻: $(cat /tmp/phase3_artifacts/test_start_time.txt)"
+date '+%Y-%m-%d %H:%M:%S' > /tmp/azazel_regression_artifacts/test_start_time.txt
+echo "  ✓ 開始時刻: $(cat /tmp/azazel_regression_artifacts/test_start_time.txt)"
 
 echo ""
 echo "================================================"
@@ -136,8 +136,8 @@ echo "  ✓ セットアップ完了 - テスト実施準備完了"
 echo "================================================"
 echo ""
 echo "📁 スナップショット保存先:"
-echo "   /tmp/phase3_artifacts/"
-ls -lh /tmp/phase3_artifacts/ 2>/dev/null | tail -n +2 | awk '{print "   - " $9 " (" $5 ")"}' || echo "   (ファイル一覧取得失敗)"
+echo "   /tmp/azazel_regression_artifacts/"
+ls -lh /tmp/azazel_regression_artifacts/ 2>/dev/null | tail -n +2 | awk '{print "   - " $9 " (" $5 ")"}' || echo "   (ファイル一覧取得失敗)"
 echo ""
 echo "次のコマンドでテスト開始:"
 echo "  cd $PROJECT_ROOT"
@@ -148,5 +148,5 @@ echo "  # ターミナル2: API監視"
 echo "  watch -n 2 'curl -s ${API_URL} | jq \".state, .suspicion\"'"
 echo ""
 echo "  # ターミナル3: テスト実行"
-echo "  ./scripts/phase3_test/run_test1_wifi.sh  # 不審AP検知テスト"
+echo "  ./scripts/tests/regression/run_test1_wifi.sh  # 不審AP検知テスト"
 echo ""

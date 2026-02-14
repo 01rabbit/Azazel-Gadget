@@ -1,9 +1,9 @@
 #!/bin/bash
 # テスト2: Suricata→CONTAIN遷移テスト実行スクリプト
-# 使用方法: ./scripts/phase3_test/run_test2_suricata.sh
+# 使用方法: ./scripts/tests/regression/run_test2_suricata.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 # API ホスト・ポート設定ファイルから取得
 API_HOST=$(grep -A 2 "status_api:" "$PROJECT_ROOT/configs/first_minute.yaml" | grep "host:" | awk '{print $NF}' || echo "10.55.0.10")
@@ -32,7 +32,7 @@ fi
 
 # Suricataアラート注入
 echo "[2/4] Suricataアラート注入..."
-"$SCRIPT_DIR/inject_suricata_alert.sh" 1 "Critical Attack - Test Phase 3" || exit 1
+"$SCRIPT_DIR/inject_suricata_alert.sh" 1 "Critical Attack - Test Regression" || exit 1
 echo ""
 
 # 遷移監視（15秒）
@@ -109,10 +109,10 @@ if [ "$PASS" = true ]; then
   echo ""
   echo "次のステップ:"
   echo "  - テスト3 (CONTAIN復帰) を実施"
-  echo "    ./scripts/phase3_test/measure_contain_recovery.sh"
+  echo "    ./scripts/tests/regression/measure_contain_recovery.sh"
   echo ""
   echo "  - テスト2B (Cooldown検証) を実施"
-  echo "    ./scripts/phase3_test/run_test2b_cooldown.sh"
+  echo "    ./scripts/tests/regression/run_test2b_cooldown.sh"
   exit 0
 else
   echo "✗✗✗ テスト2A: FAIL ✗✗✗"

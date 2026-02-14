@@ -1,6 +1,6 @@
 #!/bin/bash
 # テスト5: 管理通信（SSH/API）CONTAIN中の動作確認スクリプト
-# 使用方法: ./scripts/phase3_test/run_test5_mgmt_comms.sh
+# 使用方法: ./scripts/tests/regression/run_test5_mgmt_comms.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 

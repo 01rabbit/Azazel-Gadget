@@ -1,6 +1,6 @@
 #!/bin/bash
 # テスト3: CONTAIN リカバリータイミング検証スクリプト
-# 使用方法: ./scripts/phase3_test/run_test3_contain_recovery.sh
+# 使用方法: ./scripts/tests/regression/run_test3_contain_recovery.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 

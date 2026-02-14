@@ -1,10 +1,10 @@
 #!/bin/bash
 # Suricataアラート注入ヘルパースクリプト
-# 使用方法: ./scripts/phase3_test/inject_suricata_alert.sh [severity] [message]
+# 使用方法: ./scripts/tests/regression/inject_suricata_alert.sh [severity] [message]
 
 EVE_JSON="/var/log/suricata/eve.json"
 SEVERITY=${1:-1}  # デフォルト: 1 (Critical)
-MESSAGE=${2:-"Test Attack - Phase 3"}
+MESSAGE=${2:-"Test Attack - Regression"}
 
 echo "================================================"
 echo "  Suricata アラート注入"

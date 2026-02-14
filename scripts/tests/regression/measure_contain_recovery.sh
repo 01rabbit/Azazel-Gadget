@@ -1,6 +1,6 @@
 #!/bin/bash
 # CONTAIN状態復帰タイムライン測定スクリプト
-# 使用方法: ./scripts/phase3_test/measure_contain_recovery.sh
+# 使用方法: ./scripts/tests/regression/measure_contain_recovery.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUTPUT_FILE="/tmp/contain_recovery.log"

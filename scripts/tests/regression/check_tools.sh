@@ -1,9 +1,9 @@
 #!/bin/bash
-# Phase 3 テストツール確認スクリプト
-# 使用方法: ./scripts/phase3_test/check_tools.sh
+# 回帰テストツール確認スクリプト
+# 使用方法: ./scripts/tests/regression/check_tools.sh
 
 echo "================================================"
-echo "  Phase 3 テストツール確認"
+echo "  回帰テストツール確認"
 echo "================================================"
 echo ""
 
@@ -83,7 +83,7 @@ check_file "test_redesign_verification.py" || ((FAIL_COUNT++))
 check_file "azazel_test.py" || ((FAIL_COUNT++))
 check_file "py/azazel_epd.py" || ((FAIL_COUNT++))
 check_file "py/azazel_zero/cli_unified.py" || ((FAIL_COUNT++))
-check_file "scripts/phase3_test/run_test7_router_regression.sh" || ((FAIL_COUNT++))
+check_file "scripts/tests/regression/run_test7_router_regression.sh" || ((FAIL_COUNT++))
 
 echo ""
 echo "=== 設定ファイル ==="
@@ -129,7 +129,7 @@ if [ $FAIL_COUNT -eq 0 ]; then
   echo -e "${GREEN}✓ すべてのツール/設定が正常です${NC}"
   echo ""
   echo "テスト実施可能です。次のコマンドでセットアップ:"
-  echo "  ./scripts/phase3_test/setup_env.sh"
+  echo "  ./scripts/tests/regression/setup_env.sh"
   exit 0
 else
   echo -e "${RED}✗ $FAIL_COUNT 件の問題が見つかりました${NC}"

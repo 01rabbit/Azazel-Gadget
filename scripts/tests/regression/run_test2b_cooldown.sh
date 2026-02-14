@@ -1,6 +1,6 @@
 #!/bin/bash
 # テスト2B: Suricata Cooldown機構検証スクリプト
-# 使用方法: ./scripts/phase3_test/run_test2b_cooldown.sh
+# 使用方法: ./scripts/tests/regression/run_test2b_cooldown.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
