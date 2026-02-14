@@ -36,7 +36,7 @@ base-url: "http://${MGMT_IP}:${NTFY_PORT}"
 listen-http: ":${NTFY_PORT}"
 cache-file: "/var/cache/ntfy/cache.db"
 auth-file: "/var/lib/ntfy/user.db"
-auth-default-access: "read-only"
+auth-default-access: "read-write"
 behind-proxy: false
 web-root: "/"
 EOF
@@ -66,9 +66,9 @@ fi
 ntfy access "$NTFY_USER" "$TOPIC_ALERT" write-only >/dev/null 2>&1
 ntfy access "$NTFY_USER" "$TOPIC_INFO" write-only >/dev/null 2>&1
 
-# Allow anonymous clients to subscribe
-ntfy access everyone "$TOPIC_ALERT" read-only >/dev/null 2>&1
-ntfy access everyone "$TOPIC_INFO" read-only >/dev/null 2>&1
+# Allow anonymous clients to publish/subscribe on Azazel topics
+ntfy access everyone "$TOPIC_ALERT" read-write >/dev/null 2>&1
+ntfy access everyone "$TOPIC_INFO" read-write >/dev/null 2>&1
 
 # Create token used by first-minute controller
 token_output="$(ntfy token add "$NTFY_USER" 2>&1)"
