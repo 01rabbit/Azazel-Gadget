@@ -801,12 +801,19 @@ class FirstMinuteController:
         if not epd_script.exists():
             return
 
-        # SSIDを取得：実際に接続されているSSIDを優先
-        # link_meta は実際のシステム接続状態を反映している
-        ssid = str(link.get("ssid") or "No SSID")
-        
-        signal_dbm = self._parse_signal_dbm(link.get("signal"))
-        signal_bucket = self._epd_signal_bucket(signal_dbm)
+        # link_meta は接続状態を反映している。未接続時は EPD 入力を固定値にする。
+        # これにより、未接続中の iface IP 揺らぎで不要更新されるのを防ぐ。
+        connected = str(link.get("connected", "0")) == "1"
+        if connected:
+            ssid = str(link.get("ssid") or "No SSID")
+            signal_dbm = self._parse_signal_dbm(link.get("signal"))
+            signal_bucket = self._epd_signal_bucket(signal_dbm)
+            epd_ip = up_ip if up_ip and up_ip != "-" else "No IP"
+        else:
+            ssid = "No SSID"
+            signal_dbm = None
+            signal_bucket = "none"
+            epd_ip = "No IP"
         
         # EPD表示用に簡潔なメッセージを作成（文字数制限考慮）
         if stage == Stage.DEGRADED:
@@ -820,8 +827,6 @@ class FirstMinuteController:
         else:
             msg = (reason or stage.value)[:12]  # その他のステートも12文字制限
 
-        epd_ip = up_ip if up_ip and up_ip != "-" else "No IP"
-        
         # Get risk assessment (from suspicion score and stage)
         suspicion = int(summary.get("suspicion", 0))
         risk_status = self._get_risk_status(stage)
