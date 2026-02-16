@@ -304,6 +304,14 @@ body {
     color: #ff8a8a;
 }
 
+.cert-fingerprint {
+    margin-top: 8px;
+    font-family: "Courier New", monospace;
+    font-size: 0.72em;
+    color: var(--text-secondary);
+    word-break: break-all;
+}
+
 .evidence-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));

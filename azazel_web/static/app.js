@@ -9,6 +9,7 @@ let lastEventSourceErrorToastAt = 0;
 const eventDedupMap = new Map();
 const EVENT_DEDUP_WINDOW_MS = 12000;
 const EVENT_LOG_MAX_ITEMS = 50;
+let caCertificateDownloadUrl = '/api/certs/azazel-webui-local-ca.crt';
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -303,6 +304,8 @@ function initLiveNotifications() {
     updateUnreadBadge();
     updateBrowserNotificationStatus();
     setLiveBadge('ntfyStreamStatus', 'CONNECTING', 'degraded');
+    setLiveBadge('caCertStatus', 'CHECKING', 'degraded');
+    loadCACertificateMeta();
 
     const logEl = document.getElementById('ntfyEventLog');
     if (logEl) {
@@ -311,6 +314,46 @@ function initLiveNotifications() {
             updateUnreadBadge();
         });
     }
+}
+
+async function loadCACertificateMeta() {
+    try {
+        const res = await fetch('/api/certs/azazel-webui-local-ca/meta');
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+            setLiveBadge('caCertStatus', 'MISSING', 'blocked');
+            setCACertFingerprint('SHA256: not available');
+            toggleCACertificateButton(false);
+            return;
+        }
+
+        caCertificateDownloadUrl = data.download_url || '/api/certs/azazel-webui-local-ca.crt';
+        setLiveBadge('caCertStatus', 'AVAILABLE', 'on');
+        setCACertFingerprint(`SHA256: ${data.sha256 || '-'}`);
+        toggleCACertificateButton(true);
+    } catch (e) {
+        console.warn('Failed to load CA certificate metadata:', e);
+        setLiveBadge('caCertStatus', 'ERROR', 'blocked');
+        setCACertFingerprint('SHA256: lookup failed');
+        toggleCACertificateButton(false);
+    }
+}
+
+function toggleCACertificateButton(enabled) {
+    const btn = document.getElementById('downloadCaBtn');
+    if (!btn) return;
+    btn.disabled = !enabled;
+}
+
+function setCACertFingerprint(text) {
+    const el = document.getElementById('caCertFingerprint');
+    if (!el) return;
+    el.textContent = text;
+}
+
+function downloadCACertificate() {
+    window.location.href = caCertificateDownloadUrl;
+    showToast('📥 Downloading CA certificate...', 'info');
 }
 
 function startEventStream() {

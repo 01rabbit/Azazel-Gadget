@@ -146,6 +146,12 @@ ls -l /etc/azazel-zero/certs/azazel-webui-local-ca.crt
 - クライアント端末に `azazel-webui-local-ca.crt` を転送して信頼済み証明書として登録
 - 未登録でも `https://10.55.0.10` は開けますが、警告回避操作が必要になる場合があります
 
+Web UI から直接配布する場合：
+
+- メタ情報（SHA256 指紋）：`https://10.55.0.10/api/certs/azazel-webui-local-ca/meta`
+- 証明書ダウンロード：`https://10.55.0.10/api/certs/azazel-webui-local-ca.crt`
+- ダッシュボードの `Live Notifications` カードにも「CA証明書をダウンロード」ボタンを表示
+
 ## リアルタイム通知（SSEブリッジ）手動テスト
 
 ### 1. Web UI でストリーム接続を確認

@@ -8,12 +8,13 @@ Provides HTTP API for remote monitoring and control via USB gadget network.
 - Serves: HTML dashboard + JSON API endpoints
 """
 
-from flask import Flask, jsonify, request, render_template, send_from_directory, Response, stream_with_context
+from flask import Flask, jsonify, request, render_template, send_from_directory, send_file, Response, stream_with_context
 import json
 import os
 import socket
 import time
 import subprocess
+import hashlib
 import queue
 import threading
 from pathlib import Path
@@ -38,6 +39,9 @@ NTFY_CONFIG_PATHS = [
 NTFY_SSE_KEEPALIVE_SEC = int(os.environ.get("AZAZEL_SSE_KEEPALIVE_SEC", "20"))
 NTFY_SSE_READ_TIMEOUT_SEC = int(os.environ.get("AZAZEL_NTFY_READ_TIMEOUT_SEC", "35"))
 NTFY_SSE_MAX_BACKOFF_SEC = int(os.environ.get("AZAZEL_NTFY_MAX_BACKOFF_SEC", "30"))
+WEBUI_CA_CERT_PATH = Path(
+    os.environ.get("AZAZEL_WEBUI_CA_PATH", "/etc/azazel-zero/certs/azazel-webui-local-ca.crt")
+)
 
 # Allowed actions
 ALLOWED_ACTIONS = {
@@ -208,6 +212,15 @@ def _iter_ntfy_sse_events(
 def _sse_message(event_name: str, payload: Dict[str, Any]) -> str:
     data = json.dumps(payload, ensure_ascii=False)
     return f"event: {event_name}\ndata: {data}\n\n"
+
+
+def _sha256_file(path: Path) -> str:
+    """Return SHA-256 hex digest for a file."""
+    hasher = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
 
 
 def _queue_put_drop_oldest(out_q: queue.Queue, item: Dict[str, Any]) -> None:
@@ -774,6 +787,54 @@ def api_state():
     # Add local monitoring status
     state["monitoring"] = get_monitoring_state()
     return jsonify(state)
+
+
+@app.route("/api/certs/azazel-webui-local-ca/meta")
+def api_webui_ca_meta():
+    """GET certificate metadata for client-side trust onboarding."""
+    cert_path = WEBUI_CA_CERT_PATH
+    if not cert_path.exists():
+        return jsonify({
+            "ok": False,
+            "error": "CA certificate not found",
+            "path": str(cert_path),
+        }), 404
+
+    try:
+        stat = cert_path.stat()
+        return jsonify({
+            "ok": True,
+            "filename": cert_path.name,
+            "sha256": _sha256_file(cert_path),
+            "size_bytes": stat.st_size,
+            "updated_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            "download_url": "/api/certs/azazel-webui-local-ca.crt",
+        })
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": f"Failed to inspect CA certificate: {e}",
+        }), 500
+
+
+@app.route("/api/certs/azazel-webui-local-ca.crt")
+def api_webui_ca_download():
+    """Download local CA certificate used by Caddy internal TLS."""
+    cert_path = WEBUI_CA_CERT_PATH
+    if not cert_path.exists():
+        return jsonify({
+            "ok": False,
+            "error": "CA certificate not found",
+            "path": str(cert_path),
+        }), 404
+
+    return send_file(
+        cert_path,
+        mimetype="application/x-x509-ca-cert",
+        as_attachment=True,
+        download_name="azazel-webui-local-ca.crt",
+        conditional=True,
+    )
 
 
 @app.route("/api/events/stream")
