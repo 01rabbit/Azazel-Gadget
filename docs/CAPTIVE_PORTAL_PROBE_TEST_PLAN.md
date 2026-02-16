@@ -4,6 +4,7 @@
 
 - Deterministic `captive_probe_iface` resolution
 - `curl --interface` bound captive probe
+- Connect timing re-check (`0s + short retries`)
 - `NO|YES|SUSPECTED|NA` state updates
 - `azazel-epd-portal.service` health
 
@@ -34,6 +35,7 @@ Expected:
 Expected:
 - HTTP `30x` => `YES` (`HTTP_30X`)
 - HTTP `200` with body / other non-204 => `SUSPECTED`
+- If first attempt is `NO`, later retry can still flip to `YES/SUSPECTED`
 
 ### T3: ETH only
 

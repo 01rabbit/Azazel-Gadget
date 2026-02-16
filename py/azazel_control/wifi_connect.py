@@ -14,10 +14,12 @@ import logging
 import time
 import socket
 import tempfile
-from typing import Dict, Any, Optional
+import os
+from typing import Dict, Any, Optional, List
 from pathlib import Path
 
 logger = logging.getLogger("wifi_connect")
+DEFAULT_CAPTIVE_RETRY_SCHEDULE_SEC = [0, 3, 10]
 
 # Import wifi_scan helpers
 import sys
@@ -487,6 +489,118 @@ def detect_captive_portal(checks: Dict[str, Any]) -> Dict[str, str]:
     return {"status": "SUSPECTED", "reason": "HTTP_000"}
 
 
+def get_captive_retry_schedule() -> List[int]:
+    """
+    Retry schedule in seconds.
+    Override via env: AZAZEL_CAPTIVE_RETRY_SCHEDULE_SEC="0,3,10"
+    """
+    raw = os.environ.get("AZAZEL_CAPTIVE_RETRY_SCHEDULE_SEC", "")
+    if not raw.strip():
+        return DEFAULT_CAPTIVE_RETRY_SCHEDULE_SEC[:]
+
+    parsed: List[int] = []
+    for token in raw.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        try:
+            value = int(token)
+        except ValueError:
+            continue
+        if value < 0:
+            continue
+        parsed.append(value)
+
+    if not parsed:
+        return DEFAULT_CAPTIVE_RETRY_SCHEDULE_SEC[:]
+    if parsed[0] != 0:
+        parsed.insert(0, 0)
+    return parsed
+
+
+def evaluate_captive_portal_with_retries(iface: str, has_ip: bool) -> Dict[str, Any]:
+    """
+    Run captive-portal check at connect timing with short retries.
+    NO at first probe may still become YES/SUSPECTED shortly after association.
+    """
+    if not has_ip:
+        checks = {
+            "gateway_reachable": "FAIL",
+            "dns_resolution": "FAIL",
+            "http_check": "FAIL",
+            "http_code": "000",
+            "location": "",
+            "body_len": 0,
+            "effective_url": "",
+            "curl_error": "NO_IP",
+        }
+        return {
+            "status": "NA",
+            "reason": "NO_IP",
+            "checks": checks,
+            "attempts": [{
+                "attempt": 1,
+                "delay_sec": 0,
+                "status": "NA",
+                "reason": "NO_IP",
+                "http_code": "000",
+                "curl_error": "NO_IP",
+            }],
+        }
+
+    schedule = get_captive_retry_schedule()
+    attempts: List[Dict[str, Any]] = []
+    final_status = "NA"
+    final_reason = "NOT_CHECKED"
+    final_checks: Dict[str, Any] = {
+        "gateway_reachable": "UNKNOWN",
+        "dns_resolution": "UNKNOWN",
+        "http_check": "FAIL",
+        "http_code": "000",
+        "location": "",
+        "body_len": 0,
+        "effective_url": "",
+        "curl_error": "",
+    }
+
+    for idx, delay in enumerate(schedule):
+        if idx > 0 and delay > 0:
+            time.sleep(delay)
+        checks = check_connectivity(iface)
+        decision = detect_captive_portal(checks)
+        final_status = decision["status"]
+        final_reason = decision["reason"]
+        final_checks = checks
+        attempts.append(
+            {
+                "attempt": idx + 1,
+                "delay_sec": delay,
+                "status": final_status,
+                "reason": final_reason,
+                "http_code": str(checks.get("http_code", "000")),
+                "curl_error": str(checks.get("curl_error", "")),
+            }
+        )
+        logger.info(
+            "captive probe attempt %s/%s: status=%s reason=%s http_code=%s",
+            idx + 1,
+            len(schedule),
+            final_status,
+            final_reason,
+            checks.get("http_code", "000"),
+        )
+        # Positive or indeterminate result should be reported immediately.
+        if final_status in ("YES", "SUSPECTED", "NA"):
+            break
+
+    return {
+        "status": final_status,
+        "reason": final_reason,
+        "checks": final_checks,
+        "attempts": attempts,
+    }
+
+
 def detect_firewall_tool() -> Optional[str]:
     """Detect available firewall tool (prefer nftables)"""
     tools = ["nft", "iptables-nft", "iptables"]
@@ -598,6 +712,7 @@ def update_state_json(wifi_state: str, **kwargs):
             "gateway_ip": "",
             "bssid": "",
             "captive_probe_iface": "",
+            "captive_probe_attempts": [],
             "captive_portal": "NA",
             "captive_portal_reason": "NOT_CHECKED",
             "captive_checked_at": "",
@@ -615,6 +730,7 @@ def update_state_json(wifi_state: str, **kwargs):
                 merged[key] = ""
             merged["internet_check"] = "N/A"
             merged["usb_nat"] = "OFF"
+            merged["captive_probe_attempts"] = []
 
         merged["captive_portal_detail"] = {
             "status": merged.get("captive_portal", "NA"),
@@ -718,22 +834,10 @@ def connect_wifi(ssid: str, security: str = "UNKNOWN", passphrase: Optional[str]
     ip_usb = get_interface_ip(usb_iface) if usb_iface else None
     gateway_ip = get_gateway_ip(wlan_iface)
     
-    # Step 8: Connectivity checks (captive aware)
-    if not ip_wlan:
-        checks = {
-            "gateway_reachable": "FAIL",
-            "dns_resolution": "FAIL",
-            "http_check": "FAIL",
-            "http_code": "000",
-            "location": "",
-            "body_len": 0,
-            "effective_url": "",
-            "curl_error": "NO_IP",
-        }
-        captive_eval = {"status": "NA", "reason": "NO_IP"}
-    else:
-        checks = check_connectivity(wlan_iface)
-        captive_eval = detect_captive_portal(checks)
+    # Step 8: Connectivity checks (captive aware, with short retries)
+    captive_eval = evaluate_captive_portal_with_retries(wlan_iface, has_ip=bool(ip_wlan))
+    checks = captive_eval["checks"]
+    captive_attempts = captive_eval.get("attempts", [])
     captive_portal = captive_eval["status"]
     captive_reason = captive_eval["reason"]
     internet_check = "OK" if captive_portal == "NO" else "FAIL"
@@ -762,6 +866,7 @@ def connect_wifi(ssid: str, security: str = "UNKNOWN", passphrase: Optional[str]
         captive_portal=captive_portal,
         captive_portal_reason=captive_reason,
         captive_checked_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        captive_probe_attempts=captive_attempts,
     )
     
     return {
@@ -775,6 +880,7 @@ def connect_wifi(ssid: str, security: str = "UNKNOWN", passphrase: Optional[str]
         "captive_portal": captive_portal,
         "captive_portal_reason": captive_reason,
         "checks": checks,
+        "captive_probe_attempts": captive_attempts,
         "ts": time.time()
     }
 
