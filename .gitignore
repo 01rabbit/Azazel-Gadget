@@ -5,6 +5,6 @@ __pycache__/
 
 # Installer artifacts (secrets, logs, runtime data)
 installer/snapshot/*/
-installer/logs/*/
+installer/logs/
 installer/profiles/*.yaml
 !installer/profiles/.gitkeep
