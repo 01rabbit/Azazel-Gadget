@@ -137,6 +137,35 @@ ip addr show wlan0 | grep 'inet '
 http://<raspberry-pi-ip>:8084
 ```
 
+## リアルタイム通知（SSEブリッジ）手動テスト
+
+### 1. Web UI でストリーム接続を確認
+1. ブラウザで `http://10.55.0.10:8084/` を開く
+2. `Live Notifications` カードで `Event Stream` が `CONNECTED` になることを確認
+
+### 2. ntfy publish から Web UI 受信を確認
+別ターミナルで以下を実行：
+
+```bash
+export NTFY_TOKEN="$(sudo cat /etc/azazel/ntfy.token)"
+curl -H "Authorization: Bearer ${NTFY_TOKEN}" \
+     -H "Title: WebUI SSE Test" \
+     -H "Priority: 5" \
+     -H "Tags: test,webui" \
+     -d "SSE bridge notification test" \
+     http://10.55.0.10:8081/azg-alert-critical
+```
+
+期待結果：
+- Web UI にトースト通知が表示される
+- `Unread` バッジが増える
+- `Live Notifications` のログに1件追記される
+
+### 3. Browser Notification のベストエフォート確認
+1. `通知を有効化` ボタンをクリック
+2. 権限が `granted` かつ HTTPS/secure context 条件を満たす場合は OS 通知が表示される
+3. 拒否・未対応・HTTP 条件不足の場合は OS 通知なしで、画面内通知（トースト/ログ/バッジ）のみ継続する
+
 ## トラブルシューティング
 
 ### 問題 1: Port 8084 にアクセスできない
