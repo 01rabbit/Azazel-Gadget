@@ -98,7 +98,7 @@ Heavyweight ML remains a future research theme; the current deterministic stack 
 | First-Minute controller | `py/azazel-first-minute.py` | Core state machine (`PROBE/NORMAL/DEGRADED/CONTAIN/DECEPTION`) |
 | Status API | `py/azazel_zero/first_minute/controller.py` | JSON + actions on `10.55.0.10:8082` |
 | Control daemon | `py/azazel_control/daemon.py` | Unix socket `/run/azazel/control.sock`, executes action scripts and Wi-Fi scan/connect |
-| Web UI (optional) | `azazel_web/app.py` | Flask dashboard/API via `azazel-web.service` on `10.55.0.10:8084` |
+| Web UI (optional) | `azazel_web/app.py` | HTTPS dashboard via Caddy (`https://10.55.0.10`) + Flask backend (`127.0.0.1:8084`) |
 | TUI monitor | `py/azazel_zero/cli_unified.py` | Manual-refresh terminal monitor |
 | E-Paper tools | `py/azazel_epd.py`, `py/boot_splash_epd.py` | Status/alert rendering and boot/shutdown splash |
 
@@ -317,7 +317,7 @@ sudo ./install.sh --dry-run
 
 | Option | Description |
 |--------|-------------|
-| `--with-webui` | Enable Flask-based Web UI (port 8084) |
+| `--with-webui` | Enable Web UI with HTTPS (Caddy) and Flask backend |
 | `--with-canary` | Enable OpenCanary honeypot |
 | `--with-epd` | Install Waveshare E-Paper driver (enabled by default) |
 | `--with-ntfy` | Enable ntfy notifications |
@@ -346,7 +346,7 @@ Once complete:
 
 1. **Access Web UI** (from MacBook via usb0):
    ```
-   http://10.55.0.10:8084
+   https://10.55.0.10
    ```
 
 2. **Verify systemd services**:
@@ -359,7 +359,7 @@ Once complete:
 3. **Check APIs**:
    ```bash
    curl http://10.55.0.10:8082/
-   curl http://10.55.0.10:8084/health
+   curl -k https://10.55.0.10/health
    ```
 
 4. **Monitor logs** (real-time):

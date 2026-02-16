@@ -156,6 +156,37 @@
                         </button>
                     </div>
                 </div>
+
+                <!-- Live Notifications Card -->
+                <div class="card card-notifications">
+                    <h2>🔔 Live Notifications</h2>
+                    <div class="metric">
+                        <span class="metric-label">Event Stream</span>
+                        <span class="badge" id="ntfyStreamStatus">CONNECTING</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Browser Notification</span>
+                        <span class="badge" id="browserNotifyStatus">DEFAULT</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Unread</span>
+                        <span class="badge" id="ntfyUnreadBadge">0</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">CA Cert</span>
+                        <span class="badge" id="caCertStatus">CHECKING</span>
+                    </div>
+                    <button class="btn btn-primary" id="enableNotificationsBtn" onclick="enableBrowserNotifications()" style="margin-top: 8px; width: 100%; font-size: 0.9em; padding: 8px;">
+                        🔔 通知を有効化
+                    </button>
+                    <button class="btn btn-secondary" id="downloadCaBtn" onclick="downloadCACertificate()" style="margin-top: 8px; width: 100%; font-size: 0.9em; padding: 8px;">
+                        📥 CA証明書をダウンロード
+                    </button>
+                    <div class="cert-fingerprint" id="caCertFingerprint">SHA256: -</div>
+                    <div class="event-log-wrap">
+                        <ul class="event-log-list" id="ntfyEventLog"></ul>
+                    </div>
+                </div>
         </div>
 
         <!-- Evidence (Full Width) -->

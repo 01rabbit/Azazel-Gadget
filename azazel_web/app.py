@@ -8,16 +8,19 @@ Provides HTTP API for remote monitoring and control via USB gadget network.
 - Serves: HTML dashboard + JSON API endpoints
 """
 
-from flask import Flask, jsonify, request, render_template, send_from_directory
+from flask import Flask, jsonify, request, render_template, send_from_directory, send_file, Response, stream_with_context
 import json
 import os
 import socket
 import time
 import subprocess
+import hashlib
+import queue
+import threading
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any, Optional
-from urllib.request import urlopen
+from typing import Dict, Any, Optional, Iterator, Tuple, List
+from urllib.request import Request, urlopen
 
 app = Flask(__name__)
 
@@ -29,12 +32,281 @@ TOKEN_FILE = Path.home() / ".azazel-zero" / "web_token.txt"
 BIND_HOST = os.environ.get("AZAZEL_WEB_HOST", "0.0.0.0")
 BIND_PORT = int(os.environ.get("AZAZEL_WEB_PORT", "8084"))
 STATUS_API_HOSTS = ["10.55.0.10", "127.0.0.1"]
+NTFY_CONFIG_PATHS = [
+    Path(os.environ.get("AZAZEL_CONFIG_PATH", "/etc/azazel-zero/first_minute.yaml")),
+    Path("configs/first_minute.yaml"),
+]
+NTFY_SSE_KEEPALIVE_SEC = int(os.environ.get("AZAZEL_SSE_KEEPALIVE_SEC", "20"))
+NTFY_SSE_READ_TIMEOUT_SEC = int(os.environ.get("AZAZEL_NTFY_READ_TIMEOUT_SEC", "35"))
+NTFY_SSE_MAX_BACKOFF_SEC = int(os.environ.get("AZAZEL_NTFY_MAX_BACKOFF_SEC", "30"))
+WEBUI_CA_CERT_PATH = Path(
+    os.environ.get("AZAZEL_WEBUI_CA_PATH", "/etc/azazel-zero/certs/azazel-webui-local-ca.crt")
+)
 
 # Allowed actions
 ALLOWED_ACTIONS = {
     "refresh", "reprobe", "contain", "release", "details", "stage_open", "disconnect",
     "wifi_scan", "wifi_connect"  # Wi-Fi control actions
 }
+
+
+def _load_first_minute_config() -> Dict[str, Any]:
+    """Load first_minute.yaml if available, return empty dict on failure."""
+    for cfg_path in NTFY_CONFIG_PATHS:
+        try:
+            if not cfg_path.exists():
+                continue
+            try:
+                import yaml  # type: ignore
+            except Exception:
+                app.logger.warning("PyYAML not installed; using default ntfy bridge config")
+                return {}
+            data = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+            if isinstance(data, dict):
+                return data
+        except Exception as e:
+            app.logger.warning(f"Failed to load config {cfg_path}: {e}")
+    return {}
+
+
+def _load_ntfy_bridge_settings() -> Dict[str, Any]:
+    """Resolve ntfy settings from config + env with sane defaults."""
+    mgmt_ip = os.environ.get("MGMT_IP", "10.55.0.10")
+    ntfy_port = os.environ.get("NTFY_PORT", "8081")
+    default_base_url = f"http://{mgmt_ip}:{ntfy_port}"
+    default_topic_alert = "azg-alert-critical"
+    default_topic_info = "azg-info-status"
+    default_token_file = "/etc/azazel/ntfy.token"
+
+    cfg = _load_first_minute_config()
+    notify_cfg = cfg.get("notify", {}) if isinstance(cfg, dict) else {}
+    ntfy_cfg = notify_cfg.get("ntfy", {}) if isinstance(notify_cfg, dict) else {}
+
+    base_url = (
+        os.environ.get("NTFY_BASE_URL")
+        or ntfy_cfg.get("base_url")
+        or default_base_url
+    ).rstrip("/")
+    topic_alert = os.environ.get("NTFY_TOPIC_ALERT") or ntfy_cfg.get("topic_alert") or default_topic_alert
+    topic_info = os.environ.get("NTFY_TOPIC_INFO") or ntfy_cfg.get("topic_info") or default_topic_info
+    token_file = Path(
+        os.environ.get("NTFY_TOKEN_FILE")
+        or ntfy_cfg.get("token_file")
+        or default_token_file
+    )
+
+    token = ""
+    try:
+        if token_file.exists() and os.access(token_file, os.R_OK):
+            token = token_file.read_text(encoding="utf-8").strip()
+        elif token_file.exists():
+            # Subscription can work without token when topics are read-allowed.
+            # Avoid noisy warnings for expected permission boundaries.
+            app.logger.debug(f"ntfy token file exists but is not readable by webui user: {token_file}")
+    except PermissionError:
+        app.logger.debug(f"ntfy token file is not readable by webui user: {token_file}")
+    except Exception as e:
+        app.logger.warning(f"Failed to read ntfy token file {token_file}: {e}")
+
+    topics = [str(topic_alert).strip(), str(topic_info).strip()]
+    topics = [t for t in topics if t]
+    dedup_topics: List[str] = []
+    for topic in topics:
+        if topic not in dedup_topics:
+            dedup_topics.append(topic)
+
+    return {
+        "base_url": base_url,
+        "topics": dedup_topics or [default_topic_alert],
+        "token": token,
+    }
+
+
+def _build_ntfy_sse_url(base_url: str, topics: List[str]) -> str:
+    topic_path = ",".join(topics)
+    return f"{base_url}/{topic_path}/sse"
+
+
+def _to_iso_timestamp(raw_ts: Any) -> str:
+    """Convert ntfy timestamp to ISO-8601 if possible."""
+    try:
+        if isinstance(raw_ts, (int, float)):
+            return datetime.fromtimestamp(float(raw_ts)).isoformat()
+        if isinstance(raw_ts, str):
+            return datetime.fromtimestamp(float(raw_ts)).isoformat()
+    except Exception:
+        pass
+    return datetime.now().isoformat()
+
+
+def _normalize_ntfy_event(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Normalize ntfy payload for WebUI event consumers."""
+    payload_event = str(data.get("event") or "").lower()
+    if payload_event in {"open", "keepalive", "poll_request"}:
+        return None
+
+    topic = str(data.get("topic") or "unknown")
+    title = str(data.get("title") or "Azazel Notification")
+    message = str(data.get("message") or data.get("body") or "")
+    try:
+        priority = int(data.get("priority") or 2)
+    except Exception:
+        priority = 2
+    tags = data.get("tags") if isinstance(data.get("tags"), list) else []
+    event_id = str(data.get("id") or "")
+    dedup_key = f"ntfy:{event_id}" if event_id else f"ntfy:{topic}:{title}:{message}"
+
+    severity = "info"
+    if priority >= 5:
+        severity = "error"
+    elif priority >= 4:
+        severity = "warning"
+
+    return {
+        "source": "ntfy",
+        "id": event_id,
+        "topic": topic,
+        "title": title,
+        "message": message,
+        "priority": priority,
+        "tags": tags,
+        "timestamp": _to_iso_timestamp(data.get("time")),
+        "dedup_key": dedup_key,
+        "severity": severity,
+        "event": payload_event or "message",
+    }
+
+
+def _iter_ntfy_sse_events(
+    ntfy_url: str,
+    token: str,
+    stop_event: threading.Event,
+) -> Iterator[Tuple[str, str]]:
+    """Yield ntfy SSE event/data pairs."""
+    headers = {"Accept": "text/event-stream"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    req = Request(ntfy_url, headers=headers, method="GET")
+    with urlopen(req, timeout=NTFY_SSE_READ_TIMEOUT_SEC) as resp:
+        yield "__bridge_open__", ""
+        current_event = "message"
+        data_lines: List[str] = []
+
+        while not stop_event.is_set():
+            raw_line = resp.readline()
+            if not raw_line:
+                raise ConnectionError("ntfy SSE stream closed")
+
+            line = raw_line.decode("utf-8", errors="replace").rstrip("\r\n")
+            if line == "":
+                if data_lines:
+                    yield current_event, "\n".join(data_lines)
+                current_event = "message"
+                data_lines = []
+                continue
+
+            if line.startswith(":"):
+                continue
+            if line.startswith("event:"):
+                current_event = line.split(":", 1)[1].strip() or "message"
+                continue
+            if line.startswith("data:"):
+                data_lines.append(line.split(":", 1)[1].strip())
+
+
+def _sse_message(event_name: str, payload: Dict[str, Any]) -> str:
+    data = json.dumps(payload, ensure_ascii=False)
+    return f"event: {event_name}\ndata: {data}\n\n"
+
+
+def _sha256_file(path: Path) -> str:
+    """Return SHA-256 hex digest for a file."""
+    hasher = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def _queue_put_drop_oldest(out_q: queue.Queue, item: Dict[str, Any]) -> None:
+    """Try queue put; if full, drop oldest one and retry once."""
+    try:
+        out_q.put(item, timeout=0.2)
+        return
+    except queue.Full:
+        pass
+    try:
+        out_q.get_nowait()
+    except queue.Empty:
+        return
+    try:
+        out_q.put_nowait(item)
+    except queue.Full:
+        pass
+
+
+def _stream_ntfy_to_queue(out_q: queue.Queue, stop_event: threading.Event) -> None:
+    """Bridge ntfy SSE events into queue with reconnect/backoff."""
+    settings = _load_ntfy_bridge_settings()
+    ntfy_url = _build_ntfy_sse_url(settings["base_url"], settings["topics"])
+    token = settings["token"]
+    backoff = 1.0
+
+    while not stop_event.is_set():
+        try:
+            _queue_put_drop_oldest(out_q, {
+                "kind": "bridge_status",
+                "status": "UPSTREAM_CONNECTING",
+                "timestamp": datetime.now().isoformat(),
+                "source": "bridge",
+                "dedup_key": "bridge:upstream_connecting",
+                "severity": "info",
+            })
+            for event_name, raw_data in _iter_ntfy_sse_events(ntfy_url, token, stop_event):
+                if stop_event.is_set():
+                    break
+                if event_name == "__bridge_open__":
+                    _queue_put_drop_oldest(out_q, {
+                        "kind": "bridge_status",
+                        "status": "UPSTREAM_CONNECTED",
+                        "timestamp": datetime.now().isoformat(),
+                        "source": "bridge",
+                        "dedup_key": "bridge:upstream_connected",
+                        "severity": "info",
+                    })
+                    backoff = 1.0
+                    continue
+                try:
+                    parsed = json.loads(raw_data)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(parsed, dict):
+                    continue
+                normalized = _normalize_ntfy_event(parsed)
+                if normalized is None:
+                    continue
+                _queue_put_drop_oldest(out_q, normalized)
+        except Exception as e:
+            if stop_event.is_set():
+                break
+            app.logger.warning(f"ntfy bridge disconnected, retrying in {backoff:.1f}s: {e}")
+            try:
+                _queue_put_drop_oldest(out_q, {
+                    "kind": "bridge_status",
+                    "status": "UPSTREAM_RECONNECTING",
+                    "message": str(e),
+                    "retry_sec": round(backoff, 1),
+                    "timestamp": datetime.now().isoformat(),
+                    "source": "bridge",
+                    "dedup_key": f"bridge:{type(e).__name__}",
+                    "severity": "warning",
+                })
+            except Exception:
+                pass
+            if stop_event.wait(backoff):
+                break
+            backoff = min(backoff * 2.0, float(NTFY_SSE_MAX_BACKOFF_SEC))
 
 def load_token() -> Optional[str]:
     """Web UI 認証トークンをロード"""
@@ -521,6 +793,108 @@ def api_state():
     # Add local monitoring status
     state["monitoring"] = get_monitoring_state()
     return jsonify(state)
+
+
+@app.route("/api/certs/azazel-webui-local-ca/meta")
+def api_webui_ca_meta():
+    """GET certificate metadata for client-side trust onboarding."""
+    cert_path = WEBUI_CA_CERT_PATH
+    if not cert_path.exists():
+        return jsonify({
+            "ok": False,
+            "error": "CA certificate not found",
+            "path": str(cert_path),
+        }), 404
+
+    try:
+        stat = cert_path.stat()
+        return jsonify({
+            "ok": True,
+            "filename": cert_path.name,
+            "sha256": _sha256_file(cert_path),
+            "size_bytes": stat.st_size,
+            "updated_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            "download_url": "/api/certs/azazel-webui-local-ca.crt",
+        })
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": f"Failed to inspect CA certificate: {e}",
+        }), 500
+
+
+@app.route("/api/certs/azazel-webui-local-ca.crt")
+def api_webui_ca_download():
+    """Download local CA certificate used by Caddy internal TLS."""
+    cert_path = WEBUI_CA_CERT_PATH
+    if not cert_path.exists():
+        return jsonify({
+            "ok": False,
+            "error": "CA certificate not found",
+            "path": str(cert_path),
+        }), 404
+
+    return send_file(
+        cert_path,
+        mimetype="application/x-x509-ca-cert",
+        as_attachment=True,
+        download_name="azazel-webui-local-ca.crt",
+        conditional=True,
+    )
+
+
+@app.route("/api/events/stream")
+def api_events_stream():
+    """GET /api/events/stream - SSE bridge for ntfy topic events."""
+    if not verify_token():
+        return jsonify({"error": "Unauthorized"}), 403
+
+    def generate() -> Iterator[str]:
+        out_q: "queue.Queue[Dict[str, Any]]" = queue.Queue(maxsize=256)
+        stop_event = threading.Event()
+        worker = threading.Thread(
+            target=_stream_ntfy_to_queue,
+            args=(out_q, stop_event),
+            daemon=True,
+        )
+        worker.start()
+        last_keepalive = time.monotonic()
+
+        # Initial stream event for UI diagnostics
+        yield _sse_message("azazel", {
+            "kind": "bridge_status",
+            "status": "STREAM_CONNECTED",
+            "timestamp": datetime.now().isoformat(),
+            "source": "bridge",
+            "dedup_key": "bridge:stream_connected",
+            "severity": "info",
+        })
+
+        try:
+            while not stop_event.is_set():
+                try:
+                    item = out_q.get(timeout=1.0)
+                    yield _sse_message("azazel", item)
+                except queue.Empty:
+                    pass
+
+                now = time.monotonic()
+                if now - last_keepalive >= NTFY_SSE_KEEPALIVE_SEC:
+                    # Safari対策: 定期keepaliveを送る
+                    yield ": keepalive\n\n"
+                    last_keepalive = now
+        except GeneratorExit:
+            pass
+        finally:
+            stop_event.set()
+            worker.join(timeout=0.2)
+
+    headers = {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+    }
+    return Response(stream_with_context(generate()), headers=headers, mimetype="text/event-stream")
 
 
 @app.route("/api/action", methods=["POST"])
