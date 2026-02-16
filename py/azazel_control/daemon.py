@@ -13,6 +13,10 @@ import socket
 import subprocess
 import threading
 from pathlib import Path
+try:
+    import yaml
+except Exception:  # pragma: no cover
+    yaml = None
 
 # Import Wi-Fi modules
 sys.path.insert(0, str(Path(__file__).parent))
@@ -43,6 +47,33 @@ RATE_LIMITS = {
     'wifi_connect': 3.0,   # 3 seconds
 }
 
+
+def load_control_flags() -> dict:
+    flags = {"suppress_auto_wifi": True}
+    if yaml is None:
+        return flags
+
+    repo_cfg = Path(__file__).resolve().parents[2] / "configs" / "first_minute.yaml"
+    candidates = []
+    for env_key in ("AZAZEL_FIRST_MINUTE_CONFIG", "AZAZEL_CONFIG"):
+        env_path = os.environ.get(env_key)
+        if env_path:
+            candidates.append(Path(env_path))
+    candidates.extend([Path("/etc/azazel-zero/first_minute.yaml"), repo_cfg])
+
+    for path in candidates:
+        try:
+            if not path.exists():
+                continue
+            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            if isinstance(data, dict) and "suppress_auto_wifi" in data:
+                flags["suppress_auto_wifi"] = bool(data.get("suppress_auto_wifi"))
+                logger.info(f"Loaded control flag from {path}: suppress_auto_wifi={flags['suppress_auto_wifi']}")
+                return flags
+        except Exception as e:
+            logger.debug(f"Failed to read control config {path}: {e}")
+    return flags
+
 def ensure_socket_dir():
     """Create /run/azazel if needed"""
     SOCKET_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -53,8 +84,11 @@ def ensure_socket_dir():
     # Set directory permissions so any user can access
     os.chmod(str(SOCKET_PATH.parent), 0o777)
 
-def suppress_auto_wifi():
+def suppress_auto_wifi(enabled: bool = True):
     """Disable Wi-Fi auto-connect and disconnect existing session on startup."""
+    if not enabled:
+        logger.info("suppress_auto_wifi disabled by config; keeping existing Wi-Fi session")
+        return
     try:
         iface = get_wireless_interface()
         if not iface:
@@ -82,7 +116,7 @@ def suppress_auto_wifi():
                     capture_output=True,
                     timeout=5
                 )
-                logger.info("Disabled NetworkManager auto-connect and disconnected Wi-Fi")
+                logger.info("suppress_auto_wifi enabled: disconnected Wi-Fi and disabled autoconnect profiles")
             except Exception as e:
                 logger.debug(f"Failed to disable NetworkManager auto-connect: {e}")
         else:
@@ -92,9 +126,16 @@ def suppress_auto_wifi():
         update_state_json(
             "DISCONNECTED",
             wifi_error=None,
+            ssid="",
+            ip_wlan="",
+            gateway_ip="",
+            bssid="",
             usb_nat="OFF",
-            internet_check="UNKNOWN",
-            captive_portal="UNKNOWN"
+            internet_check="N/A",
+            captive_probe_iface="",
+            captive_portal="NA",
+            captive_portal_reason="SUPPRESSED_AT_BOOT",
+            captive_checked_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         )
     except Exception as e:
         logger.debug(f"suppress_auto_wifi failed: {e}")
@@ -202,8 +243,9 @@ def handle_client(conn, addr):
         conn.close()
 
 def main():
+    flags = load_control_flags()
     ensure_socket_dir()
-    suppress_auto_wifi()
+    suppress_auto_wifi(enabled=bool(flags.get("suppress_auto_wifi", True)))
     logger.info("Azazel-Zero Control Daemon started")
     
     # Create Unix socket

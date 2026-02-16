@@ -104,6 +104,26 @@ Heavyweight ML remains a future research theme; the current deterministic stack 
 
 ---
 
+## Captive Probe Roles
+
+`first_minute.yaml` now separates route role and captive-probe role:
+
+```yaml
+interfaces:
+  upstream: auto
+  captive_probe: auto
+  downstream: usb0
+
+captive_probe_policy: wifi_prefer  # wifi_prefer | upstream_same | any
+suppress_auto_wifi: true
+```
+
+- `upstream`: NAT/routing interface.
+- `captive_probe`: interface bound with `curl --interface` for captive check.
+- `wifi_state=DISCONNECTED` clears stale `ssid/ip_wlan/gateway_ip/bssid`.
+
+---
+
 ## How to Read the TUI (Integrated Monitoring)
 
 ### Launch
