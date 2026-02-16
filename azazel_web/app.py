@@ -97,8 +97,14 @@ def _load_ntfy_bridge_settings() -> Dict[str, Any]:
 
     token = ""
     try:
-        if token_file.exists():
+        if token_file.exists() and os.access(token_file, os.R_OK):
             token = token_file.read_text(encoding="utf-8").strip()
+        elif token_file.exists():
+            # Subscription can work without token when topics are read-allowed.
+            # Avoid noisy warnings for expected permission boundaries.
+            app.logger.debug(f"ntfy token file exists but is not readable by webui user: {token_file}")
+    except PermissionError:
+        app.logger.debug(f"ntfy token file is not readable by webui user: {token_file}")
     except Exception as e:
         app.logger.warning(f"Failed to read ntfy token file {token_file}: {e}")
 
