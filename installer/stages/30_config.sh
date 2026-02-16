@@ -93,11 +93,7 @@ EOF
         cat > /etc/caddy/Caddyfile <<EOF
 {
     admin off
-}
-
-# Redirect HTTP access to HTTPS
-http://${mgmt_ip} {
-    redir https://${mgmt_ip}{uri} permanent
+    auto_https disable_redirects
 }
 
 # Azazel Web UI (HTTPS endpoint)
