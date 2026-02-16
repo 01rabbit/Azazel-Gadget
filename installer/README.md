@@ -75,7 +75,7 @@ sudo ./install.sh [OPTIONS]
 |-----------|------|
 | `--with-canary` | OpenCanary（ハニーポット） |
 | `--with-epd` | Waveshare E-Paper（デフォルト有効） |
-| `--with-webui` | Web UI ダッシュボード |
+| `--with-webui` | Web UI ダッシュボード（HTTPS/Caddy 含む） |
 | `--with-ntfy` | ntfy.sh push notification |
 | `--all` | すべて有効化 |
 | `--dry-run` | プレビューのみ（変更なし） |
@@ -198,6 +198,7 @@ sudo systemctl restart azazel-first-minute.service
 sudo systemctl status usb0-static.service
 sudo systemctl status azazel-first-minute.service
 sudo systemctl status azazel-web.service
+sudo systemctl status caddy.service   # --with-webui の場合
 ```
 
 ### ネットワーク確認
@@ -277,4 +278,3 @@ sudo systemctl restart azazel-first-minute.service
 
 3. GitHub Issues で報告
    https://github.com/01rabbit/Azazel-Zero/issues
-

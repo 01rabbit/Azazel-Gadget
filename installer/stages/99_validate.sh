@@ -9,6 +9,7 @@ set -euo pipefail
 source "$(dirname "$0")/../_lib.sh"
 
 WITH_CANARY="${WITH_CANARY:-0}"
+WITH_WEBUI="${WITH_WEBUI:-0}"
 
 main() {
     log_info "════════════════════════════════════════════"
@@ -53,6 +54,9 @@ main() {
         "suri-epaper.service"
         "suricata.service"
     )
+    if [[ "$WITH_WEBUI" == "1" ]]; then
+        optional_services+=("caddy.service")
+    fi
     if [[ "$WITH_CANARY" == "1" ]]; then
         optional_services+=("opencanary.service")
     fi
@@ -77,6 +81,17 @@ main() {
             log_debug "  - $service (未有効化)"
         fi
     done
+
+    if [[ "$WITH_WEBUI" == "1" ]]; then
+        if ! systemctl is-active --quiet azazel-web.service; then
+            log_error "  ✗ --with-webui 指定時は azazel-web.service が必要です"
+            all_passed=false
+        fi
+        if ! systemctl is-active --quiet caddy.service; then
+            log_error "  ✗ --with-webui 指定時は caddy.service が必要です"
+            all_passed=false
+        fi
+    fi
 
     # 2.5 dnsmasq 競合チェック
     if systemctl is-active --quiet dnsmasq.service 2>/dev/null; then
@@ -142,6 +157,21 @@ main() {
     else
         log_error "  ✗ DNS (UDP/53) がリッスンしていません"
         all_passed=false
+    fi
+
+    if [[ "$WITH_WEBUI" == "1" ]]; then
+        if ss -ltnH 2>/dev/null | grep -Eq ':443[[:space:]]'; then
+            log_info "  ✓ Web UI HTTPS (TCP/443) がリッスン中"
+        else
+            log_error "  ✗ Web UI HTTPS (TCP/443) がリッスンしていません"
+            all_passed=false
+        fi
+
+        if curl -kfsS --max-time 3 "https://${mgmt_ip}/health" | grep -q '"status":"ok"'; then
+            log_info "  ✓ Web UI HTTPS ヘルスチェック応答 OK"
+        else
+            log_warn "  ⚠️  Web UI HTTPS ヘルスチェック応答を確認できません"
+        fi
     fi
 
     if systemctl is-enabled --quiet ntfy.service 2>/dev/null; then
@@ -239,7 +269,8 @@ main() {
         fi
         log_info ""
         log_info "4) Web UI へアクセス:"
-        log_info "   http://10.55.0.10:8084 (Web UI オプション有効時)"
+        log_info "   https://10.55.0.10 (Web UI オプション有効時)"
+        log_info "   ※ ローカルCA証明書: /etc/azazel-zero/certs/azazel-webui-local-ca.crt"
         if systemctl is-enabled --quiet ntfy.service 2>/dev/null; then
             log_info "   ntfy health: http://10.55.0.10:8081/v1/health"
         fi

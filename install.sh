@@ -45,7 +45,7 @@ Azazel-Zero Unified Installer
 オプション:
   --with-canary       OpenCanary（ハニーポット）をインストール
   --with-epd          Waveshare E-Paper (デフォルト有効)
-  --with-webui        Web UI ダッシュボードをインストール
+  --with-webui        Web UI ダッシュボードをインストール（HTTPS/Caddy 含む）
   --with-ntfy         ntfy サーバ (TCP/8081) と通知連携をインストール
   --all               --with-canary --with-epd --with-webui --with-ntfy を有効化
   --dry-run           プレビュー（変更を加えない）

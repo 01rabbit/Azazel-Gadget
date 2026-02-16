@@ -10,6 +10,7 @@ source "$(dirname "$0")/../_lib.sh"
 
 WITH_NTFY="${WITH_NTFY:-0}"
 WITH_CANARY="${WITH_CANARY:-0}"
+WITH_WEBUI="${WITH_WEBUI:-0}"
 
 main() {
     log_info "════════════════════════════════════════════"
@@ -126,6 +127,14 @@ main() {
         "azazel-epd-portal.timer"
     )
 
+    if [[ "$WITH_WEBUI" == "1" ]]; then
+        if systemctl list-unit-files | grep -q "^caddy.service"; then
+            primary_services+=("caddy.service")
+        else
+            log_warn "⚠️  caddy.service が見つかりません（HTTPS 無効の可能性）"
+        fi
+    fi
+
     if [[ "$WITH_NTFY" == "1" ]]; then
         primary_services+=("ntfy.service")
     fi
@@ -157,6 +166,30 @@ main() {
     systemctl restart azazel-first-minute.service >> "$LOG_FILE" 2>&1 || {
         log_warn "⚠️  azazel-first-minute 再起動失敗"
     }
+
+    if [[ "$WITH_WEBUI" == "1" ]]; then
+        log_info "  • azazel-web.service を再起動..."
+        systemctl restart azazel-web.service >> "$LOG_FILE" 2>&1 || {
+            log_warn "⚠️  azazel-web.service 再起動失敗"
+        }
+
+        if systemctl list-unit-files | grep -q "^caddy.service"; then
+            log_info "  • caddy.service を再起動..."
+            systemctl restart caddy.service >> "$LOG_FILE" 2>&1 || {
+                log_warn "⚠️  caddy.service 再起動失敗"
+            }
+
+            # Caddy internal CA を配布しやすい場所へコピー
+            local caddy_root_ca="/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt"
+            if [[ -f "$caddy_root_ca" ]]; then
+                mkdir -p /etc/azazel-zero/certs
+                install -m 0644 "$caddy_root_ca" "/etc/azazel-zero/certs/azazel-webui-local-ca.crt"
+                log_info "  ✓ Web UI ローカルCA: /etc/azazel-zero/certs/azazel-webui-local-ca.crt"
+            else
+                log_warn "⚠️  Caddy ローカルCAが見つかりません: $caddy_root_ca"
+            fi
+        fi
+    fi
 
     if [[ "$WITH_NTFY" == "1" ]]; then
         log_info "  • ntfy.service を再起動..."

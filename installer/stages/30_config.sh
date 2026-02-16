@@ -8,6 +8,8 @@
 set -euo pipefail
 source "$(dirname "$0")/../_lib.sh"
 
+WITH_WEBUI="${WITH_WEBUI:-0}"
+
 main() {
     log_info "════════════════════════════════════════════"
     log_info "Stage 30: Configuration Files"
@@ -47,6 +49,11 @@ main() {
     fi
     
     # 4. 環境ファイル作成 (/etc/default/azazel-zero)
+    local mgmt_ip="10.55.0.10"
+    local web_backend_host="127.0.0.1"
+    local web_backend_port="8084"
+    local web_https_port="443"
+
     log_info "環境ファイルを作成..."
     cat > /etc/default/azazel-zero <<EOF
 # Azazel-Zero 統合環境設定
@@ -63,14 +70,53 @@ EPD_LOCK=/run/azazel-epd.lock
 # ネットワークインターフェース
 WAN_IF=auto
 USB_IF=usb0
-MGMT_IP=10.55.0.10
+MGMT_IP=${mgmt_ip}
 MGMT_SUBNET=10.55.0.0/24
+
+# Web UI バックエンド (Flask)
+AZAZEL_WEB_HOST=${web_backend_host}
+AZAZEL_WEB_PORT=${web_backend_port}
+AZAZEL_WEB_PUBLIC_HOST=${mgmt_ip}
+AZAZEL_WEB_HTTPS_PORT=${web_https_port}
+AZAZEL_WEB_HTTPS_ENABLED=1
 
 # サブネット（deprecated）
 SUBNET=192.168.7.0/24
 OUTIF=\${WAN_IF}
 EOF
     log_info "✓ 環境ファイル作成: /etc/default/azazel-zero"
+
+    # 4.5 Web UI HTTPS (Caddy) 設定
+    if [[ "$WITH_WEBUI" == "1" ]]; then
+        log_info "Caddy HTTPS 設定を配置..."
+        mkdir -p /etc/caddy
+        cat > /etc/caddy/Caddyfile <<EOF
+{
+    admin off
+}
+
+# Redirect HTTP access to HTTPS
+http://${mgmt_ip} {
+    redir https://${mgmt_ip}{uri} permanent
+}
+
+# Azazel Web UI (HTTPS endpoint)
+https://${mgmt_ip} {
+    tls internal
+    encode zstd gzip
+    reverse_proxy ${web_backend_host}:${web_backend_port}
+}
+
+# Localhost HTTPS for on-device browser/debug
+https://localhost {
+    tls internal
+    encode zstd gzip
+    reverse_proxy ${web_backend_host}:${web_backend_port}
+}
+EOF
+        chmod 0644 /etc/caddy/Caddyfile
+        log_info "✓ Caddyfile 配置: /etc/caddy/Caddyfile"
+    fi
     
     # 5. OpenCanary 初期設定（optional）
     log_info "OpenCanary 初期設定を準備..."
