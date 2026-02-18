@@ -107,6 +107,24 @@ function updateUI(state) {
     } else {
         captiveWarning.style.display = 'none';
     }
+
+    const portalViewer = state.portal_viewer || {};
+    const portalViewerRow = document.getElementById('portalViewerRow');
+    const portalViewerBtn = document.getElementById('portalViewerBtn');
+    const shouldShowPortalButton = (
+        (captivePortal === 'SUSPECTED' || captivePortal === 'YES') &&
+        portalViewer.active &&
+        portalViewer.url
+    );
+    if (portalViewerRow && portalViewerBtn) {
+        if (shouldShowPortalButton) {
+            portalViewerRow.style.display = 'flex';
+            portalViewerBtn.dataset.url = portalViewer.url;
+        } else {
+            portalViewerRow.style.display = 'none';
+            delete portalViewerBtn.dataset.url;
+        }
+    }
     
     // Control & Safety
     const degrade = state.degrade || {};
@@ -219,6 +237,15 @@ function updateBadge(id, value) {
     } else if (valueLower === 'lockdown') {
         el.classList.add('lockdown');
     }
+}
+
+function openPortalViewer() {
+    const btn = document.getElementById('portalViewerBtn');
+    if (!btn || !btn.dataset.url) {
+        showToast('Portal viewer is not ready', 'error');
+        return;
+    }
+    window.open(btn.dataset.url, '_blank', 'noopener,noreferrer');
 }
 
 // Display error state when API unavailable

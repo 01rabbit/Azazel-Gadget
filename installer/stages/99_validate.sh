@@ -49,6 +49,7 @@ main() {
     local optional_services=(
         "azazel-control-daemon.service"
         "azazel-web.service"
+        "azazel-portal-viewer.service"
         "azazel-nat.service"
         "suri-epaper.service"
         "suricata.service"
@@ -240,6 +241,9 @@ main() {
         log_info ""
         log_info "4) Web UI へアクセス:"
         log_info "   http://10.55.0.10:8084 (Web UI オプション有効時)"
+        if systemctl is-enabled --quiet azazel-portal-viewer.service 2>/dev/null; then
+            log_info "   Captive Portal Viewer: http://10.55.0.10:6080/vnc.html"
+        fi
         if systemctl is-enabled --quiet ntfy.service 2>/dev/null; then
             log_info "   ntfy health: http://10.55.0.10:8081/v1/health"
         fi

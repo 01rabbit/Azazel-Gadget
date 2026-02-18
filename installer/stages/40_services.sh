@@ -10,6 +10,7 @@ source "$(dirname "$0")/../_lib.sh"
 
 WITH_NTFY="${WITH_NTFY:-0}"
 WITH_CANARY="${WITH_CANARY:-0}"
+WITH_PORTAL_VIEWER="${WITH_PORTAL_VIEWER:-0}"
 
 main() {
     log_info "════════════════════════════════════════════"
@@ -26,6 +27,7 @@ main() {
         "bin/suri_epaper.sh:/usr/local/bin/"
         "bin/portal_detect.sh:/usr/local/bin/"
         "scripts/opencanary-start.sh:/usr/local/bin/opencanary-start"
+        "scripts/azazel-portal-viewer.sh:/usr/local/bin/azazel-portal-viewer.sh"
     )
     
     for script_pair in "${scripts[@]}"; do
@@ -51,6 +53,7 @@ main() {
         "azazel-epd-portal.timer"
         "azazel-control-daemon.service"
         "azazel-web.service"
+        "azazel-portal-viewer.service"
         "usb0-static.service"
         "azazel-nat.service"
         "suri-epaper.service"
@@ -129,6 +132,9 @@ main() {
     if [[ "$WITH_NTFY" == "1" ]]; then
         primary_services+=("ntfy.service")
     fi
+    if [[ "$WITH_PORTAL_VIEWER" == "1" ]]; then
+        primary_services+=("azazel-portal-viewer.service")
+    fi
     
     for service in "${primary_services[@]}"; do
         log_info "  サービス: $service"
@@ -162,6 +168,12 @@ main() {
         log_info "  • ntfy.service を再起動..."
         systemctl restart ntfy.service >> "$LOG_FILE" 2>&1 || {
             log_warn "⚠️  ntfy.service 再起動失敗"
+        }
+    fi
+    if [[ "$WITH_PORTAL_VIEWER" == "1" ]]; then
+        log_info "  • azazel-portal-viewer.service を再起動..."
+        systemctl restart azazel-portal-viewer.service >> "$LOG_FILE" 2>&1 || {
+            log_warn "⚠️  azazel-portal-viewer.service 起動失敗"
         }
     fi
     

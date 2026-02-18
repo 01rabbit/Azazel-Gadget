@@ -1,0 +1,23 @@
+[Unit]
+Description=Azazel Captive Portal Viewer (Chromium + noVNC)
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/usr/local/bin/azazel-portal-viewer.sh
+
+[Service]
+Type=simple
+User=azazel
+Group=azazel
+WorkingDirectory=/home/azazel
+EnvironmentFile=-/etc/default/azazel-zero
+EnvironmentFile=-/etc/azazel-zero/portal-viewer.env
+ExecStart=/usr/local/bin/azazel-portal-viewer.sh
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=azazel-portal-viewer
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

@@ -8,7 +8,7 @@ Provides HTTP API for remote monitoring and control via USB gadget network.
 - Serves: HTML dashboard + JSON API endpoints
 """
 
-from flask import Flask, jsonify, request, render_template, send_from_directory
+from flask import Flask, jsonify, request, render_template, send_from_directory, has_request_context
 import json
 import os
 import socket
@@ -115,6 +115,27 @@ def get_monitoring_state() -> Dict[str, str]:
         "opencanary": "ON" if (opencanary_ok or _pid_running(opencanary_pid)) else "OFF",
         "suricata": "ON" if (suricata_ok or _pid_running(suricata_pid)) else "OFF",
         "ntfy": "ON" if ntfy_ok else "OFF",
+    }
+
+
+def get_portal_viewer_state() -> Dict[str, Any]:
+    """Return current noVNC portal viewer availability."""
+    active = _service_active("azazel-portal-viewer.service")
+    port = int(os.environ.get("PORTAL_NOVNC_PORT", "6080"))
+    if has_request_context():
+        scheme = request.scheme
+        host = request.host.split(":")[0] if request.host else "10.55.0.10"
+    else:
+        scheme = "http"
+        host = "10.55.0.10"
+    override_host = os.environ.get("PORTAL_VIEWER_HOST", "").strip()
+    if override_host:
+        host = override_host
+    url = f"{scheme}://{host}:{port}/vnc.html?autoconnect=true&resize=scale"
+    return {
+        "active": active,
+        "port": port,
+        "url": url,
     }
 
 
@@ -520,7 +541,16 @@ def api_state():
     state = read_state()
     # Add local monitoring status
     state["monitoring"] = get_monitoring_state()
+    state["portal_viewer"] = get_portal_viewer_state()
     return jsonify(state)
+
+
+@app.route("/api/portal-viewer")
+def api_portal_viewer():
+    """GET /api/portal-viewer - Return portal viewer status and URL."""
+    if not verify_token():
+        return jsonify({"error": "Unauthorized"}), 403
+    return jsonify(get_portal_viewer_state())
 
 
 @app.route("/api/action", methods=["POST"])

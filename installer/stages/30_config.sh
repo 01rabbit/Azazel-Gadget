@@ -71,6 +71,34 @@ SUBNET=192.168.7.0/24
 OUTIF=\${WAN_IF}
 EOF
     log_info "✓ 環境ファイル作成: /etc/default/azazel-zero"
+
+    # 4.5 Captive Portal Viewer 環境ファイル作成
+    local portal_env="/etc/azazel-zero/portal-viewer.env"
+    if [[ ! -f "$portal_env" ]]; then
+        log_info "Captive Portal Viewer 用環境ファイルを作成..."
+        local portal_password
+        portal_password="$(od -An -N12 -tx1 /dev/urandom | tr -d ' \n')"
+        cat > "$portal_env" <<EOF
+# Captive Portal Viewer (noVNC) 設定
+# PORTAL_VNC_PASSWORD は初期値です。運用前に変更してください。
+
+PORTAL_START_URL=http://neverssl.com
+PORTAL_DISPLAY=:99
+PORTAL_SCREEN=1366x768x24
+PORTAL_NOVNC_BIND=0.0.0.0
+PORTAL_NOVNC_PORT=6080
+PORTAL_VNC_PORT=5900
+PORTAL_VNC_PASSWORD=$portal_password
+PORTAL_BROWSER_CMD=auto
+PORTAL_BROWSER_PROFILE=/home/azazel/.config/azazel-portal-browser
+PORTAL_BROWSER_ARGS="--new-window --no-first-run --no-default-browser-check --disable-features=Translate,AutofillServerCommunication --start-maximized"
+EOF
+        chmod 0640 "$portal_env"
+        chown root:azazel "$portal_env" 2>/dev/null || true
+        log_info "✓ Portal Viewer 設定作成: $portal_env"
+    else
+        log_info "Portal Viewer 設定は既存ファイルを維持: $portal_env"
+    fi
     
     # 5. OpenCanary 初期設定（optional）
     log_info "OpenCanary 初期設定を準備..."
