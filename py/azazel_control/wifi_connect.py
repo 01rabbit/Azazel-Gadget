@@ -467,8 +467,9 @@ def detect_captive_portal(checks: Dict[str, Any]) -> Dict[str, str]:
     Captive portal decision table:
       - 204 => NO
       - 30x => YES
-      - 200(body>0) / other non-204 => SUSPECTED
-      - timeout/curl errors => SUSPECTED
+      - 200(body>0) => SUSPECTED
+      - other non-204 => NA
+      - timeout/curl errors => NA
     """
     code = str(checks.get("http_code", "000") or "000")
     body_len = int(checks.get("body_len", 0) or 0)
@@ -477,7 +478,7 @@ def detect_captive_portal(checks: Dict[str, Any]) -> Dict[str, str]:
     if curl_error in ("NO_IP", "LINK_DOWN", "NOT_FOUND"):
         return {"status": "NA", "reason": curl_error}
     if curl_error:
-        return {"status": "SUSPECTED", "reason": curl_error}
+        return {"status": "NA", "reason": curl_error}
     if code == "204":
         return {"status": "NO", "reason": "HTTP_204"}
     if code.startswith("30"):
@@ -485,8 +486,8 @@ def detect_captive_portal(checks: Dict[str, Any]) -> Dict[str, str]:
     if code == "200" and body_len > 0:
         return {"status": "SUSPECTED", "reason": "HTTP_200_BODY"}
     if code and code != "000":
-        return {"status": "SUSPECTED", "reason": f"HTTP_{code}"}
-    return {"status": "SUSPECTED", "reason": "HTTP_000"}
+        return {"status": "NA", "reason": f"HTTP_{code}"}
+    return {"status": "NA", "reason": "HTTP_000"}
 
 
 def get_captive_retry_schedule() -> List[int]:
@@ -589,8 +590,11 @@ def evaluate_captive_portal_with_retries(iface: str, has_ip: bool) -> Dict[str, 
             final_reason,
             checks.get("http_code", "000"),
         )
-        # Positive or indeterminate result should be reported immediately.
-        if final_status in ("YES", "SUSPECTED", "NA"):
+        # Portal-positive signal should be reported immediately.
+        if final_status in ("YES", "SUSPECTED"):
+            break
+        # Interface-level NA should not be retried.
+        if final_status == "NA" and final_reason in ("NO_IP", "LINK_DOWN", "NOT_FOUND", "INVALID_IFACE"):
             break
 
     return {

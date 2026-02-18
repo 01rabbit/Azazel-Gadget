@@ -13,7 +13,8 @@ RUN_DIR="/run/azazel"
 LOCK_FILE="$RUN_DIR/portal.lock"
 LOG_TAG="azazel-portal"
 STATE_PRIMARY="/run/azazel-zero/ui_snapshot.json"
-STATE_FALLBACK="${HOME}/.azazel-zero/run/ui_snapshot.json"
+USER_HOME="${HOME:-/home/azazel}"
+STATE_FALLBACK="${USER_HOME}/.azazel-zero/run/ui_snapshot.json"
 STATE_FALLBACK_AZAZEL="/home/azazel/.azazel-zero/run/ui_snapshot.json"
 
 log_info()  { logger -t "$LOG_TAG" "INFO: $*"  || echo "[INFO] $*"  >&2; }
@@ -71,6 +72,15 @@ print("")
 PY
 }
 
+extract_host() {
+  local value="${1:-}"
+  case "$value" in
+    *://*) ;;
+    *) printf ''; return 0 ;;
+  esac
+  printf '%s' "$value" | sed -E 's#^[a-zA-Z]+://([^/:]+).*#\1#'
+}
+
 OUTIF="${OUTIF:-}"
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -117,8 +127,8 @@ ENDPOINTS=(
   "http://captive.apple.com/hotspot-detect.html"
 )
 
-status="NO"
-reason="HTTP_204"
+status="NA"
+reason="NOT_CHECKED"
 location=""
 
 for url in "${ENDPOINTS[@]}"; do
@@ -126,8 +136,14 @@ for url in "${ENDPOINTS[@]}"; do
   hdr_file="$(mktemp "${RUN_DIR}/portal_hdr.XXXXXX")"
 
   if out=$(curl --interface "$OUTIF" -sS --max-time 7 -o "$body_file" -D "$hdr_file" -w "%{http_code} %{url_effective}" "$url" 2>&1); then
-    code="$(echo "$out" | awk '{print $1}')"
+    code="${out%% *}"
+    effective_url=""
+    if [ "$out" != "$code" ]; then
+      effective_url="${out#* }"
+    fi
+    requested_host="$(extract_host "$url")"
     location="$(awk -F': ' 'BEGIN{IGNORECASE=1}$1=="Location"{print $2;exit}' "$hdr_file" | tr -d '\r')"
+    redirect_host="$(extract_host "${location:-$effective_url}")"
     body_len="$(wc -c < "$body_file" 2>/dev/null || echo 0)"
     if [ "$code" = "204" ]; then
       status="NO"
@@ -135,20 +151,31 @@ for url in "${ENDPOINTS[@]}"; do
       rm -f "$body_file" "$hdr_file"
       break
     elif [[ "$code" =~ ^30[1278]$ ]]; then
-      status="YES"
-      reason="HTTP_30X"
-      rm -f "$body_file" "$hdr_file"
-      break
+      if [ -n "$redirect_host" ] && [ "$redirect_host" != "$requested_host" ]; then
+        status="YES"
+        reason="HTTP_30X"
+        rm -f "$body_file" "$hdr_file"
+        break
+      fi
+      status="NA"
+      reason="HTTP_30X_SAME_ORIGIN"
     elif [ "$code" = "200" ] && [ "${body_len:-0}" -gt 0 ]; then
+      if [ "$requested_host" = "captive.apple.com" ] && grep -qi 'success' "$body_file"; then
+        status="NO"
+        reason="HTTP_200_APPLE_SUCCESS"
+        rm -f "$body_file" "$hdr_file"
+        break
+      fi
       status="SUSPECTED"
       reason="HTTP_200_BODY"
     else
-      status="SUSPECTED"
+      status="NA"
       reason="HTTP_${code:-000}"
     fi
   else
-    status="SUSPECTED"
-    reason="CURL_ERR"
+    rc=$?
+    status="NA"
+    reason="CURL_ERR_${rc}"
   fi
   rm -f "$body_file" "$hdr_file"
 done

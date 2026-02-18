@@ -17,6 +17,7 @@ from urllib.parse import urlparse
 
 
 SAFE_TOKEN_RE = re.compile(r"^[a-zA-Z0-9_.:-]+$")
+APPLE_CAPTIVE_HOST = "captive.apple.com"
 
 
 @dataclass
@@ -120,7 +121,7 @@ def probe_captive_portal(
         return "NA", not_ready_reason, detail
 
     tries = max(1, retries + 1)
-    last_status = "SUSPECTED"
+    last_status = "NA"
     last_reason = "CURL_ERR"
     for _ in range(tries):
         body_path = ""
@@ -172,10 +173,17 @@ def probe_captive_portal(
 
             location = _parse_location(headers)
             body_len = 0
+            body_preview = ""
             try:
                 body_len = os.path.getsize(body_path)
             except OSError:
                 body_len = 0
+            if body_len > 0 and body_len <= 8192:
+                try:
+                    with open(body_path, "r", encoding="utf-8", errors="ignore") as bf:
+                        body_preview = bf.read(2048)
+                except Exception:
+                    body_preview = ""
 
             detail.update(
                 {
@@ -197,24 +205,31 @@ def probe_captive_portal(
                     last_reason = f"CURL_ERR_{proc.returncode}"
                 detail["curl_rc"] = proc.returncode
                 detail["stderr"] = (proc.stderr or "").strip()
-                last_status = "SUSPECTED"
+                last_status = "NA"
                 time.sleep(0.25)
                 continue
 
             if http_code == "204":
                 return "NO", "HTTP_204", detail
+            if (
+                parsed.hostname == APPLE_CAPTIVE_HOST
+                and http_code == "200"
+                and body_preview
+                and "success" in body_preview.lower()
+            ):
+                return "NO", "HTTP_200_APPLE_SUCCESS", detail
             if http_code.startswith("30"):
                 return "YES", "HTTP_30X", detail
             if http_code == "200" and body_len > 0:
                 return "SUSPECTED", "HTTP_200_BODY", detail
-            return "SUSPECTED", f"HTTP_{http_code}", detail
+            return "NA", f"HTTP_{http_code or '000'}", detail
         except subprocess.TimeoutExpired:
             detail["error"] = "subprocess timeout"
-            last_status = "SUSPECTED"
+            last_status = "NA"
             last_reason = "TIMEOUT"
         except Exception as exc:  # pragma: no cover - network dependent
             detail["error"] = str(exc)
-            last_status = "SUSPECTED"
+            last_status = "NA"
             last_reason = "CURL_ERR"
         finally:
             for p in (body_path, hdr_path):

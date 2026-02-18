@@ -6,5 +6,5 @@ ConditionPathExists=/usr/local/bin/portal_detect.sh
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/portal_detect.sh
+ExecStart=/bin/bash /usr/local/bin/portal_detect.sh
 Nice=10

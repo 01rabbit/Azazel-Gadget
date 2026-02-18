@@ -128,11 +128,18 @@ class ProbeCaptivePortalDecisionTests(unittest.TestCase):
         self.assertEqual(status, "SUSPECTED")
         self.assertEqual(reason, "HTTP_200_BODY")
 
-    def test_curl_timeout_means_suspected(self):
+    def test_apple_success_means_no(self):
+        with patch("azazel_zero.first_minute.probes._iface_ready_for_probe", return_value=(True, "READY", {})):
+            with patch("subprocess.run", side_effect=self._fake_curl_result(0, "200", "HTTP/1.1 200 OK\r\n", b"Success")):
+                status, reason, _ = probe_captive_portal("wlan0", "http://captive.apple.com/hotspot-detect.html", 3, 0)
+        self.assertEqual(status, "NO")
+        self.assertEqual(reason, "HTTP_200_APPLE_SUCCESS")
+
+    def test_curl_timeout_means_na(self):
         with patch("azazel_zero.first_minute.probes._iface_ready_for_probe", return_value=(True, "READY", {})):
             with patch("subprocess.run", side_effect=self._fake_curl_result(28, "000", "", b"")):
                 status, reason, _ = probe_captive_portal("wlan0", "http://connectivitycheck.gstatic.com/generate_204", 3, 0)
-        self.assertEqual(status, "SUSPECTED")
+        self.assertEqual(status, "NA")
         self.assertEqual(reason, "TIMEOUT")
 
 

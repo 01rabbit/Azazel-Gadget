@@ -13,6 +13,16 @@ from azazel_control import wifi_connect
 
 
 class CaptiveRetryTests(unittest.TestCase):
+    def test_detect_curl_error_returns_na(self):
+        decision = wifi_connect.detect_captive_portal({"http_code": "000", "body_len": 0, "curl_error": "TIMEOUT"})
+        self.assertEqual(decision["status"], "NA")
+        self.assertEqual(decision["reason"], "TIMEOUT")
+
+    def test_detect_non_204_http_returns_na(self):
+        decision = wifi_connect.detect_captive_portal({"http_code": "403", "body_len": 0, "curl_error": ""})
+        self.assertEqual(decision["status"], "NA")
+        self.assertEqual(decision["reason"], "HTTP_403")
+
     def test_schedule_default(self):
         with patch.dict(os.environ, {}, clear=False):
             if "AZAZEL_CAPTIVE_RETRY_SCHEDULE_SEC" in os.environ:
