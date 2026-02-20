@@ -264,6 +264,54 @@ body {
     grid-column: 1 / -1;
 }
 
+.card-notifications {
+    grid-column: 1 / -1;
+}
+
+.event-log-wrap {
+    margin-top: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.25);
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.event-log-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.event-log-item {
+    font-family: "Courier New", monospace;
+    font-size: 0.82em;
+    color: var(--text-primary);
+    padding: 6px 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    word-break: break-word;
+}
+
+.event-log-item:last-child {
+    border-bottom: none;
+}
+
+.event-log-item.warning {
+    color: #ffd166;
+}
+
+.event-log-item.error {
+    color: #ff8a8a;
+}
+
+.cert-fingerprint {
+    margin-top: 8px;
+    font-family: "Courier New", monospace;
+    font-size: 0.72em;
+    color: var(--text-secondary);
+    word-break: break-all;
+}
+
 .evidence-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));

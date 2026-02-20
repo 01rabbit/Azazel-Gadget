@@ -5,11 +5,27 @@ const AUTH_TOKEN = localStorage.getItem('azazel_token') || 'azazel-default-token
 let updateInterval;
 let portalViewerOpening = false;
 let portalReprobeRunning = false;
+let eventSource = null;
+let unreadEventCount = 0;
+let lastEventSourceErrorToastAt = 0;
+const eventDedupMap = new Map();
+const EVENT_DEDUP_WINDOW_MS = 12000;
+const EVENT_LOG_MAX_ITEMS = 50;
+let caCertificateDownloadUrl = '/api/certs/azazel-webui-local-ca.crt';
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     fetchState();
     updateInterval = setInterval(fetchState, 2000); // Poll every 2 seconds
+    initLiveNotifications();
+    startEventStream();
+});
+
+window.addEventListener('beforeunload', () => {
+    if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+    }
 });
 
 // Fetch state from API
@@ -413,6 +429,295 @@ function showToast(message, type = 'info') {
     setTimeout(() => {
         toast.className = 'toast';
     }, 3000);
+}
+
+function initLiveNotifications() {
+    unreadEventCount = 0;
+    updateUnreadBadge();
+    updateBrowserNotificationStatus();
+    setLiveBadge('ntfyStreamStatus', 'CONNECTING', 'degraded');
+    setLiveBadge('caCertStatus', 'CHECKING', 'degraded');
+    loadCACertificateMeta();
+
+    const logEl = document.getElementById('ntfyEventLog');
+    if (logEl) {
+        logEl.addEventListener('click', () => {
+            unreadEventCount = 0;
+            updateUnreadBadge();
+        });
+    }
+}
+
+async function loadCACertificateMeta() {
+    try {
+        const res = await fetch('/api/certs/azazel-webui-local-ca/meta');
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+            setLiveBadge('caCertStatus', 'MISSING', 'blocked');
+            setCACertFingerprint('SHA256: not available');
+            toggleCACertificateButton(false);
+            return;
+        }
+
+        caCertificateDownloadUrl = data.download_url || '/api/certs/azazel-webui-local-ca.crt';
+        setLiveBadge('caCertStatus', 'AVAILABLE', 'on');
+        setCACertFingerprint(`SHA256: ${data.sha256 || '-'}`);
+        toggleCACertificateButton(true);
+    } catch (e) {
+        console.warn('Failed to load CA certificate metadata:', e);
+        setLiveBadge('caCertStatus', 'ERROR', 'blocked');
+        setCACertFingerprint('SHA256: lookup failed');
+        toggleCACertificateButton(false);
+    }
+}
+
+function toggleCACertificateButton(enabled) {
+    const btn = document.getElementById('downloadCaBtn');
+    if (!btn) return;
+    btn.disabled = !enabled;
+}
+
+function setCACertFingerprint(text) {
+    const el = document.getElementById('caCertFingerprint');
+    if (!el) return;
+    el.textContent = text;
+}
+
+function downloadCACertificate() {
+    window.location.href = caCertificateDownloadUrl;
+    showToast('📥 Downloading CA certificate...', 'info');
+}
+
+function startEventStream() {
+    if (eventSource) {
+        eventSource.close();
+    }
+
+    const streamUrl = `/api/events/stream?token=${encodeURIComponent(AUTH_TOKEN)}`;
+    eventSource = new EventSource(streamUrl);
+    setLiveBadge('ntfyStreamStatus', 'CONNECTING', 'degraded');
+
+    eventSource.addEventListener('open', () => {
+        setLiveBadge('ntfyStreamStatus', 'CONNECTED', 'on');
+    });
+
+    eventSource.addEventListener('azazel', (event) => {
+        try {
+            const payload = JSON.parse(event.data);
+            handleLiveEvent(payload);
+        } catch (e) {
+            console.warn('Failed to parse SSE event payload:', e);
+        }
+    });
+
+    eventSource.addEventListener('error', () => {
+        setLiveBadge('ntfyStreamStatus', 'RECONNECTING', 'degraded');
+        const now = Date.now();
+        if (now - lastEventSourceErrorToastAt > 15000) {
+            showToast('⚠️ Event stream reconnecting...', 'info');
+            lastEventSourceErrorToastAt = now;
+        }
+    });
+}
+
+function handleLiveEvent(payload) {
+    if (!payload || typeof payload !== 'object') return;
+
+    if (payload.kind === 'bridge_status') {
+        handleBridgeStatus(payload);
+        return;
+    }
+
+    const dedupKey = payload.dedup_key
+        || `ntfy:${payload.id || ''}:${payload.topic || ''}:${payload.title || ''}:${payload.message || ''}`;
+    if (isDuplicateLiveEvent(dedupKey)) {
+        return;
+    }
+
+    unreadEventCount += 1;
+    updateUnreadBadge();
+    appendLiveEventLog(payload);
+
+    const title = payload.title || 'Azazel Notification';
+    const message = payload.message || '';
+    const toastType = payload.severity === 'error' ? 'error' : 'info';
+    const toastMessage = message ? `🔔 ${title}: ${message}` : `🔔 ${title}`;
+    showToast(toastMessage, toastType);
+
+    const shown = showBrowserNotification(payload);
+    if (!shown) {
+        // UI toast/log are already shown; this keeps behavior explicit on fallback path.
+        return;
+    }
+}
+
+function handleBridgeStatus(payload) {
+    const status = (payload.status || '').toUpperCase();
+    if (status.includes('CONNECTED')) {
+        setLiveBadge('ntfyStreamStatus', 'CONNECTED', 'on');
+        return;
+    }
+    if (status.includes('RECONNECT')) {
+        setLiveBadge('ntfyStreamStatus', 'RECONNECTING', 'degraded');
+        return;
+    }
+    if (status.includes('CONNECTING')) {
+        setLiveBadge('ntfyStreamStatus', 'CONNECTING', 'degraded');
+    }
+}
+
+function isDuplicateLiveEvent(dedupKey) {
+    const now = Date.now();
+    for (const [key, ts] of eventDedupMap.entries()) {
+        if (now - ts > EVENT_DEDUP_WINDOW_MS) {
+            eventDedupMap.delete(key);
+        }
+    }
+
+    const lastSeen = eventDedupMap.get(dedupKey);
+    if (lastSeen && (now - lastSeen) < EVENT_DEDUP_WINDOW_MS) {
+        return true;
+    }
+    eventDedupMap.set(dedupKey, now);
+    return false;
+}
+
+function appendLiveEventLog(payload) {
+    const logEl = document.getElementById('ntfyEventLog');
+    if (!logEl) return;
+
+    const li = document.createElement('li');
+    li.className = 'event-log-item';
+
+    const ts = payload.timestamp ? String(payload.timestamp).replace('T', ' ').slice(0, 19) : '--:--:--';
+    const topic = payload.topic || 'unknown';
+    const title = payload.title || 'Azazel Notification';
+    const message = payload.message || '';
+    li.textContent = `[${ts}] [${topic}] ${title}${message ? ` - ${message}` : ''}`;
+
+    if (payload.severity === 'error') {
+        li.classList.add('error');
+    } else if (payload.severity === 'warning') {
+        li.classList.add('warning');
+    }
+
+    logEl.prepend(li);
+    while (logEl.children.length > EVENT_LOG_MAX_ITEMS) {
+        logEl.removeChild(logEl.lastChild);
+    }
+}
+
+function updateUnreadBadge() {
+    const countLabel = unreadEventCount > 99 ? '99+' : String(unreadEventCount);
+    const style = unreadEventCount > 0 ? 'contained' : 'off';
+    setLiveBadge('ntfyUnreadBadge', countLabel, style);
+}
+
+function setLiveBadge(id, label, styleClass) {
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    el.textContent = label;
+    el.classList.remove('allowed', 'blocked', 'on', 'off', 'normal', 'degraded', 'contained', 'lockdown');
+    if (styleClass) {
+        el.classList.add(styleClass);
+    }
+}
+
+function isBrowserNotificationSupported() {
+    return typeof window !== 'undefined' && 'Notification' in window;
+}
+
+function isBrowserNotificationContextAllowed() {
+    // Notification API generally requires secure context (HTTPS or localhost)
+    return window.isSecureContext === true;
+}
+
+function updateBrowserNotificationStatus() {
+    const btn = document.getElementById('enableNotificationsBtn');
+    if (!btn) return;
+
+    if (!isBrowserNotificationSupported()) {
+        setLiveBadge('browserNotifyStatus', 'UNSUPPORTED', 'off');
+        btn.disabled = true;
+        btn.textContent = '🔕 未対応ブラウザ';
+        return;
+    }
+
+    if (!isBrowserNotificationContextAllowed()) {
+        setLiveBadge('browserNotifyStatus', 'HTTP_ONLY', 'degraded');
+        btn.disabled = false;
+        btn.textContent = '🔔 通知を有効化';
+        return;
+    }
+
+    const permission = Notification.permission;
+    if (permission === 'granted') {
+        setLiveBadge('browserNotifyStatus', 'GRANTED', 'on');
+        btn.disabled = true;
+        btn.textContent = '✅ 通知は有効です';
+    } else if (permission === 'denied') {
+        setLiveBadge('browserNotifyStatus', 'DENIED', 'blocked');
+        btn.disabled = false;
+        btn.textContent = '🔔 通知を有効化';
+    } else {
+        setLiveBadge('browserNotifyStatus', 'DEFAULT', 'degraded');
+        btn.disabled = false;
+        btn.textContent = '🔔 通知を有効化';
+    }
+}
+
+async function enableBrowserNotifications() {
+    if (!isBrowserNotificationSupported()) {
+        showToast('ℹ️ Browser notifications are not supported on this browser', 'info');
+        updateBrowserNotificationStatus();
+        return;
+    }
+
+    if (!isBrowserNotificationContextAllowed()) {
+        showToast('ℹ️ OS通知は HTTPS/localhost でのみ利用できます。画面内通知で継続します。', 'info');
+        updateBrowserNotificationStatus();
+        return;
+    }
+
+    try {
+        const permission = await Notification.requestPermission();
+        updateBrowserNotificationStatus();
+        if (permission === 'granted') {
+            showToast('✅ Browser notifications enabled', 'success');
+        } else {
+            showToast('ℹ️ Browser notifications not granted. Using in-app notifications only.', 'info');
+        }
+    } catch (e) {
+        console.warn('Notification permission request failed:', e);
+        showToast('ℹ️ Browser notifications unavailable. Using in-app notifications only.', 'info');
+        updateBrowserNotificationStatus();
+    }
+}
+
+function showBrowserNotification(payload) {
+    if (!isBrowserNotificationSupported()) return false;
+    if (!isBrowserNotificationContextAllowed()) return false;
+    if (Notification.permission !== 'granted') return false;
+
+    try {
+        const title = payload.title || 'Azazel Notification';
+        const message = payload.message || '';
+        const topic = payload.topic ? `[${payload.topic}] ` : '';
+        const notification = new Notification(title, {
+            body: `${topic}${message}`.trim(),
+            tag: payload.dedup_key || payload.id || undefined,
+            renotify: false,
+        });
+        notification.onclick = () => {
+            window.focus();
+            notification.close();
+        };
+        return true;
+    } catch (e) {
+        console.warn('Failed to show browser notification:', e);
+        return false;
+    }
 }
 
 // Show more menu (mobile)

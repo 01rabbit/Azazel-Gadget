@@ -209,7 +209,7 @@ The installer does **not** hardcode SSID/PSK.
 Shortest path:
 
 1. Run `./install.sh --with-webui` to completion (enables Web UI)
-2. Open `http://10.55.0.10:8084`
+2. Open `https://10.55.0.10` (Web UI is served via HTTPS/Caddy)
 3. Scan Wi‑Fi → connect (save if needed)
 
 If you want captive portal operation from downstream devices, install portal viewer too:

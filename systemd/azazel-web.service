@@ -1,5 +1,5 @@
 [Unit]
-Description=Azazel-Gadget Web UI (Flask Dashboard)
+Description=Azazel-Gadget Web UI Backend (Flask)
 Documentation=file:///home/azazel/Azazel-Zero/docs/WEB_UI.md
 After=network.target azazel-first-minute.service
 Wants=azazel-first-minute.service
@@ -8,7 +8,7 @@ Wants=azazel-first-minute.service
 Type=simple
 User=azazel
 WorkingDirectory=/home/azazel/Azazel-Zero
-Environment="AZAZEL_WEB_HOST=10.55.0.10"
+Environment="AZAZEL_WEB_HOST=127.0.0.1"
 Environment="AZAZEL_WEB_PORT=8084"
 Environment="AZAZEL_WEBUI_VENV=/home/azazel/azazel-webui-venv"
 EnvironmentFile=-/etc/default/azazel-zero

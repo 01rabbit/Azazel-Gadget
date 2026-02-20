@@ -87,6 +87,9 @@ main() {
     # 7. オプション: Web UI
     if [[ "$WITH_WEBUI" == "1" ]]; then
         log_info "Web UI 環境を準備..."
+        log_info "HTTPS リバースプロキシ (Caddy) をインストール..."
+        apt-get install -y caddy >> "$LOG_FILE" 2>&1 || die "caddy インストール失敗"
+
         if [[ ! -d /home/azazel/azazel-webui-venv ]]; then
             sudo -u azazel python3 -m venv /home/azazel/azazel-webui-venv >> "$LOG_FILE" 2>&1 || die "webui-venv 作成失敗"
             sudo -u azazel /home/azazel/azazel-webui-venv/bin/pip install --upgrade pip wheel >> "$LOG_FILE" 2>&1 || true
