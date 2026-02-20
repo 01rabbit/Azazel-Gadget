@@ -8,6 +8,7 @@ Requires=usb0-static.service
 Type=simple
 WorkingDirectory=/home/azazel/Azazel-Zero
 Environment="AZAZEL_DEBUG=1"
+ExecStartPre=-/usr/bin/systemctl stop dnsmasq.service
 # usb0 インターフェースが UP するまで待機
 ExecStartPre=/bin/bash -c 'for i in {1..30}; do ip link show usb0 | grep -q UP && exit 0; sleep 0.5; done; exit 1'
 ExecStart=/usr/bin/python3 /home/azazel/Azazel-Zero/py/azazel-first-minute.py start --config /etc/azazel-zero/first_minute.yaml --foreground

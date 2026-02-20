@@ -3,6 +3,7 @@
 
 const AUTH_TOKEN = localStorage.getItem('azazel_token') || 'azazel-default-token-change-me';
 let updateInterval;
+let portalViewerOpening = false;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -113,16 +114,32 @@ function updateUI(state) {
     const portalViewerBtn = document.getElementById('portalViewerBtn');
     const shouldShowPortalButton = (
         (captivePortal === 'SUSPECTED' || captivePortal === 'YES') &&
-        portalViewer.active &&
         portalViewer.url
     );
     if (portalViewerRow && portalViewerBtn) {
         if (shouldShowPortalButton) {
             portalViewerRow.style.display = 'flex';
             portalViewerBtn.dataset.url = portalViewer.url;
+            if (!portalViewerOpening) {
+                portalViewerBtn.disabled = false;
+                if (portalViewer.ready) {
+                    portalViewerBtn.textContent = '🧭 Open Portal';
+                    portalViewerBtn.title = '';
+                } else if (portalViewer.active) {
+                    portalViewerBtn.textContent = '⏳ Preparing Portal';
+                    portalViewerBtn.title = 'Portal viewer is starting';
+                } else {
+                    portalViewerBtn.textContent = '▶ Start & Open Portal';
+                    portalViewerBtn.title = 'Start azazel-portal-viewer.service and open noVNC';
+                }
+            }
         } else {
             portalViewerRow.style.display = 'none';
             delete portalViewerBtn.dataset.url;
+            portalViewerOpening = false;
+            portalViewerBtn.disabled = false;
+            portalViewerBtn.textContent = '🧭 Open Portal';
+            portalViewerBtn.title = '';
         }
     }
     
@@ -239,13 +256,55 @@ function updateBadge(id, value) {
     }
 }
 
-function openPortalViewer() {
+async function openPortalViewer() {
     const btn = document.getElementById('portalViewerBtn');
     if (!btn || !btn.dataset.url) {
         showToast('Portal viewer is not ready', 'error');
         return;
     }
-    window.open(btn.dataset.url, '_blank', 'noopener,noreferrer');
+
+    if (portalViewerOpening) {
+        return;
+    }
+
+    portalViewerOpening = true;
+    btn.disabled = true;
+    btn.textContent = '⏳ Starting Portal...';
+
+    // Keep user gesture context to reduce popup blocking.
+    const popup = window.open('', '_blank');
+
+    try {
+        const res = await fetch('/api/portal-viewer/open', {
+            method: 'POST',
+            headers: {
+                'X-Auth-Token': AUTH_TOKEN,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ timeout_sec: 18 })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok || !data.url) {
+            if (popup && !popup.closed) popup.close();
+            showToast(`Portal open failed: ${data.error || 'unknown error'}`, 'error');
+            return;
+        }
+
+        if (popup && !popup.closed) {
+            popup.opener = null;
+            popup.location.href = data.url;
+        } else {
+            window.open(data.url, '_blank', 'noopener,noreferrer');
+        }
+        showToast('Portal viewer ready', 'success');
+    } catch (e) {
+        if (popup && !popup.closed) popup.close();
+        showToast(`Portal open failed: ${e.message}`, 'error');
+    } finally {
+        portalViewerOpening = false;
+        btn.disabled = false;
+        setTimeout(fetchState, 400);
+    }
 }
 
 // Display error state when API unavailable

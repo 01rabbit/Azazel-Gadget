@@ -29,11 +29,12 @@ TOKEN_FILE = Path.home() / ".azazel-zero" / "web_token.txt"
 BIND_HOST = os.environ.get("AZAZEL_WEB_HOST", "0.0.0.0")
 BIND_PORT = int(os.environ.get("AZAZEL_WEB_PORT", "8084"))
 STATUS_API_HOSTS = ["10.55.0.10", "127.0.0.1"]
+PORTAL_VIEWER_ENV_PATH = Path("/etc/azazel-zero/portal-viewer.env")
 
 # Allowed actions
 ALLOWED_ACTIONS = {
     "refresh", "reprobe", "contain", "release", "details", "stage_open", "disconnect",
-    "wifi_scan", "wifi_connect"  # Wi-Fi control actions
+    "wifi_scan", "wifi_connect", "portal_viewer_open"  # Wi-Fi + portal viewer actions
 }
 
 def load_token() -> Optional[str]:
@@ -88,6 +89,34 @@ def _service_active(service: str) -> bool:
         return False
 
 
+def _portal_viewer_port() -> int:
+    """Resolve portal viewer noVNC port from env file (fallback: 6080)."""
+    default_port = int(os.environ.get("PORTAL_NOVNC_PORT", "6080"))
+    try:
+        if not PORTAL_VIEWER_ENV_PATH.exists():
+            return default_port
+        for raw in PORTAL_VIEWER_ENV_PATH.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            if key.strip() != "PORTAL_NOVNC_PORT":
+                continue
+            return int(value.strip().strip('"').strip("'"))
+    except Exception:
+        return default_port
+    return default_port
+
+
+def _tcp_open_local(port: int, timeout_sec: float = 0.2) -> bool:
+    """Check localhost port status."""
+    try:
+        with socket.create_connection(("127.0.0.1", int(port)), timeout=timeout_sec):
+            return True
+    except Exception:
+        return False
+
+
 def _ntfy_health_ok() -> bool:
     """Check ntfy HTTP health endpoint."""
     mgmt_ip = os.environ.get("MGMT_IP", "10.55.0.10")
@@ -121,7 +150,8 @@ def get_monitoring_state() -> Dict[str, str]:
 def get_portal_viewer_state() -> Dict[str, Any]:
     """Return current noVNC portal viewer availability."""
     active = _service_active("azazel-portal-viewer.service")
-    port = int(os.environ.get("PORTAL_NOVNC_PORT", "6080"))
+    port = _portal_viewer_port()
+    ready = active and _tcp_open_local(port)
     if has_request_context():
         scheme = request.scheme
         host = request.host.split(":")[0] if request.host else "10.55.0.10"
@@ -134,6 +164,7 @@ def get_portal_viewer_state() -> Dict[str, Any]:
     url = f"{scheme}://{host}:{port}/vnc.html?autoconnect=true&resize=scale"
     return {
         "active": active,
+        "ready": ready,
         "port": port,
         "url": url,
     }
@@ -403,6 +434,8 @@ def send_control_command(action: str) -> Dict[str, Any]:
         return execute_details_action()
     if action == "stage_open":
         return execute_stage_open_action()
+    if action == "portal_viewer_open":
+        return send_control_command_with_params("portal_viewer_open", {"timeout_sec": 15})
     
     if not CONTROL_SOCKET.exists():
         return {
@@ -551,6 +584,44 @@ def api_portal_viewer():
     if not verify_token():
         return jsonify({"error": "Unauthorized"}), 403
     return jsonify(get_portal_viewer_state())
+
+
+@app.route("/api/portal-viewer/open", methods=["POST"])
+def api_portal_viewer_open():
+    """POST /api/portal-viewer/open - Ensure noVNC is up then return URL."""
+    if not verify_token():
+        return jsonify({"ok": False, "error": "Unauthorized"}), 403
+
+    request_body = request.get_json(silent=True) or {}
+    timeout_sec = request_body.get("timeout_sec", 15)
+    daemon_result = send_control_command_with_params(
+        "portal_viewer_open",
+        {"timeout_sec": timeout_sec},
+    )
+
+    if not daemon_result.get("ok"):
+        return jsonify({
+            "ok": False,
+            "error": daemon_result.get("error", "Failed to start portal viewer"),
+            "portal_viewer": get_portal_viewer_state(),
+            "daemon": daemon_result,
+        }), 500
+
+    portal_state = get_portal_viewer_state()
+    if not portal_state.get("ready"):
+        return jsonify({
+            "ok": False,
+            "error": "Portal viewer service started, but noVNC is not reachable on localhost",
+            "portal_viewer": portal_state,
+            "daemon": daemon_result,
+        }), 500
+
+    return jsonify({
+        "ok": True,
+        "url": portal_state.get("url"),
+        "portal_viewer": portal_state,
+        "daemon": daemon_result,
+    }), 200
 
 
 @app.route("/api/action", methods=["POST"])

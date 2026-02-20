@@ -11,6 +11,9 @@ Group=azazel
 WorkingDirectory=/home/azazel
 EnvironmentFile=-/etc/default/azazel-zero
 EnvironmentFile=-/etc/azazel-zero/portal-viewer.env
+Environment="PORTAL_RUNTIME_DIR=/run/azazel-portal-viewer"
+RuntimeDirectory=azazel-portal-viewer
+RuntimeDirectoryMode=0750
 ExecStart=/usr/local/bin/azazel-portal-viewer.sh
 Restart=always
 RestartSec=3

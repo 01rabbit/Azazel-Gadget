@@ -228,6 +228,7 @@ class FirstMinuteController:
         self.web_server: Optional[object] = None
         self.processes: Dict[str, subprocess.Popen] = {}
         self._last_dnsmasq_restart: float = 0.0
+        self._legacy_dnsmasq_warned = False
         self.last_console = 0.0
         self.snapshot_path = cfg.runtime_dir / "ui_snapshot.json"
         self.snapshot_path.parent.mkdir(parents=True, exist_ok=True)
@@ -237,6 +238,10 @@ class FirstMinuteController:
         self.epd_last_fp: Optional[tuple] = None
         # Track signal strength separately to skip updates when only signal changes
         self.epd_last_signal_bucket: Optional[str] = None
+        # Failed update retry guards (avoid immediate re-run of same EPD payload).
+        self.epd_last_failed_fp: Optional[tuple] = None
+        self.epd_retry_after = 0.0
+        self.epd_fail_count = 0
         self._eve_offset = 0
         self._eve_inode: Optional[int] = None
         self._eve_partial = ""
@@ -247,6 +252,21 @@ class FirstMinuteController:
             self.epd_min_interval = float(os.environ.get("AZAZEL_EPD_MIN_INTERVAL", "30"))
         except ValueError:
             self.epd_min_interval = 8.0
+        try:
+            # 3色パネル向けに長めの既定値（秒）
+            self.epd_timeout_sec = float(os.environ.get("AZAZEL_EPD_TIMEOUT", "120"))
+        except ValueError:
+            self.epd_timeout_sec = 120.0
+        try:
+            self.epd_fail_backoff_base_sec = float(
+                os.environ.get("AZAZEL_EPD_FAIL_BACKOFF_BASE", str(max(30.0, self.epd_min_interval)))
+            )
+        except ValueError:
+            self.epd_fail_backoff_base_sec = max(30.0, self.epd_min_interval)
+        try:
+            self.epd_fail_backoff_max_sec = float(os.environ.get("AZAZEL_EPD_FAIL_BACKOFF_MAX", "300"))
+        except ValueError:
+            self.epd_fail_backoff_max_sec = 300.0
         self.epd_enabled = os.environ.get("AZAZEL_EPD", "1").strip().lower() not in ("0", "false", "no", "off")
         self.health_last_update = 0.0
         self.health_last_fp: Optional[tuple] = None
@@ -603,6 +623,8 @@ class FirstMinuteController:
             self.logger.info("dnsmasq start skipped (--no-dns-start or disabled in config)")
             return
 
+        self._stop_conflicting_dnsmasq_service()
+
         existing = self.processes.get("dnsmasq")
         if existing and existing.poll() is None:
             self.logger.debug("dnsmasq already running (pid=%s)", existing.pid)
@@ -682,6 +704,42 @@ class FirstMinuteController:
             self.logger.error("dnsmasq binary not found. Install with: apt-get install dnsmasq")
         except Exception as e:
             self.logger.error(f"Failed to start dnsmasq: {e}")
+
+    def _stop_conflicting_dnsmasq_service(self) -> None:
+        # Avoid port conflicts with the distro-managed dnsmasq.service.
+        if self.dry_run or not shutil.which("systemctl"):
+            return
+
+        try:
+            active = subprocess.run(
+                ["systemctl", "is-active", "--quiet", "dnsmasq.service"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            ).returncode == 0
+            if not active:
+                return
+
+            if not self._legacy_dnsmasq_warned:
+                self.logger.warning(
+                    "dnsmasq.service is active; stopping/disabling it to avoid first-minute DNS/DHCP conflicts"
+                )
+                self._legacy_dnsmasq_warned = True
+
+            subprocess.run(
+                ["systemctl", "stop", "dnsmasq.service"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+            subprocess.run(
+                ["systemctl", "disable", "dnsmasq.service"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+        except Exception as exc:
+            self.logger.debug("failed to stop conflicting dnsmasq.service: %s", exc)
 
     def ensure_dnsmasq_running(self) -> None:
         if self.dry_run or self.no_dns_start or not self.cfg.dnsmasq.get("enable", True):
@@ -1147,18 +1205,56 @@ class FirstMinuteController:
             self.logger.debug(f"EPD: Unknown stage {stage}, skipping update")
             return
 
+        if not force and fp == self.epd_last_failed_fp and now < self.epd_retry_after:
+            remaining = self.epd_retry_after - now
+            self.logger.debug(f"EPD: Skipping retry - previous attempt failed, retry in {remaining:.1f}s")
+            return
+
         # Execute EPD update command
         self.logger.info(f"EPD: Updating display - mode={mode}, stage={stage.value}, forced={force}")
         try:
-            subprocess.run(cmd, timeout=30, check=False)
+            result = subprocess.run(cmd, timeout=self.epd_timeout_sec, check=False)
+            if result.returncode != 0:
+                raise subprocess.CalledProcessError(result.returncode, cmd)
             self.epd_last_update = now
             self.epd_last_fp = fp
             # 信号強度も更新 (NORMAL状態時)
             if stage in (Stage.INIT, Stage.PROBE, Stage.NORMAL):
                 self.epd_last_signal_bucket = signal_bucket
+            # Clear failure retry guards on success.
+            self.epd_last_failed_fp = None
+            self.epd_retry_after = 0.0
+            self.epd_fail_count = 0
             self.logger.info(f"EPD: Update successful")
+        except subprocess.TimeoutExpired:
+            self.epd_fail_count += 1
+            backoff = min(
+                self.epd_fail_backoff_max_sec,
+                self.epd_fail_backoff_base_sec * (2 ** max(0, self.epd_fail_count - 1)),
+            )
+            backoff = max(backoff, self.epd_min_interval)
+            self.epd_last_failed_fp = fp
+            self.epd_retry_after = now + backoff
+            # Treat failed attempt as a recent try to avoid hot-loop retries.
+            self.epd_last_update = now
+            self.logger.warning(
+                f"EPD: Update timed out after {self.epd_timeout_sec:.0f}s; "
+                f"retrying in {backoff:.0f}s (fail_count={self.epd_fail_count})"
+            )
+            return
         except Exception as e:
-            self.logger.warning(f"EPD: Update failed: {e}")
+            self.epd_fail_count += 1
+            backoff = min(
+                self.epd_fail_backoff_max_sec,
+                self.epd_fail_backoff_base_sec * (2 ** max(0, self.epd_fail_count - 1)),
+            )
+            backoff = max(backoff, self.epd_min_interval)
+            self.epd_last_failed_fp = fp
+            self.epd_retry_after = now + backoff
+            self.epd_last_update = now
+            self.logger.warning(
+                f"EPD: Update failed: {e}; retrying in {backoff:.0f}s (fail_count={self.epd_fail_count})"
+            )
             return
 
     def _maybe_write_wifi_health(self, link_meta: Dict[str, object]) -> None:

@@ -16,6 +16,7 @@ main() {
     log_info "════════════════════════════════════════════"
     
     local all_passed=true
+    local fm_dnsmasq_detected=false
     
     # 1. インターフェース確認
     log_info ""
@@ -80,9 +81,16 @@ main() {
     done
 
     # 2.5 dnsmasq 競合チェック
+    if pgrep -af "dnsmasq.*dnsmasq-first_minute.conf" >/dev/null 2>&1; then
+        fm_dnsmasq_detected=true
+    fi
     if systemctl is-active --quiet dnsmasq.service 2>/dev/null; then
-        log_error "  ✗ 既定 dnsmasq.service が起動中（first-minute 管理 dnsmasq と競合）"
-        all_passed=false
+        if [[ "$fm_dnsmasq_detected" == "true" ]]; then
+            log_error "  ✗ 既定 dnsmasq.service と first-minute 管理 dnsmasq が同時起動（競合）"
+            all_passed=false
+        else
+            log_warn "  ⚠️  既定 dnsmasq.service が起動中（legacy 構成の可能性）"
+        fi
     else
         log_info "  ✓ 既定 dnsmasq.service は停止済み"
     fi
@@ -124,8 +132,10 @@ main() {
         fi
     fi
 
-    if pgrep -af "dnsmasq.*dnsmasq-first_minute.conf" >/dev/null 2>&1; then
+    if [[ "$fm_dnsmasq_detected" == "true" ]]; then
         log_info "  ✓ first-minute 管理 dnsmasq プロセスを確認"
+    elif systemctl is-active --quiet dnsmasq.service 2>/dev/null; then
+        log_warn "  ⚠️  first-minute 管理 dnsmasq は未検出（dnsmasq.service で代替稼働）"
     else
         log_error "  ✗ first-minute 管理 dnsmasq プロセスが見つかりません"
         all_passed=false
@@ -163,6 +173,29 @@ main() {
             all_passed=false
         fi
     fi
+
+    if systemctl is-enabled --quiet azazel-portal-viewer.service 2>/dev/null; then
+        local portal_port="6080"
+        if [[ -f /etc/azazel-zero/portal-viewer.env ]]; then
+            local parsed_port
+            parsed_port="$(awk -F= '/^[[:space:]]*PORTAL_NOVNC_PORT[[:space:]]*=/{gsub(/[[:space:]"\047]/, "", $2); print $2; exit}' /etc/azazel-zero/portal-viewer.env || true)"
+            if [[ -n "$parsed_port" ]]; then
+                portal_port="$parsed_port"
+            fi
+        fi
+
+        if check_service "azazel-portal-viewer.service"; then
+            if ss -ltnH 2>/dev/null | awk '{print $4}' | grep -Eq ":${portal_port}$"; then
+                log_info "  ✓ Captive Portal Viewer (TCP/${portal_port}) がリッスン中"
+            else
+                log_error "  ✗ azazel-portal-viewer.service は起動中だが TCP/${portal_port} が未リッスン"
+                all_passed=false
+            fi
+        else
+            log_error "  ✗ azazel-portal-viewer.service が起動していません"
+            all_passed=false
+        fi
+    fi
     
     # 4. ファイアウォール確認
     log_info ""
@@ -172,6 +205,15 @@ main() {
         log_info "  ✓ nftables テーブル azazel_fmc が存在"
     else
         log_warn "  ⚠️  nftables テーブル azazel_fmc が見つかりません（後で設定可能）"
+    fi
+
+    if [[ -f /etc/azazel-zero/nftables/first_minute.nft ]]; then
+        if grep -Eq 'elements = \{[^}]*6080' /etc/azazel-zero/nftables/first_minute.nft; then
+            log_info "  ✓ nftables 管理ポートに 6080(noVNC) を確認"
+        else
+            log_error "  ✗ nftables 管理ポートに 6080(noVNC) が含まれていません"
+            all_passed=false
+        fi
     fi
     
     # 5. ログ確認
