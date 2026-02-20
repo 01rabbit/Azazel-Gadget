@@ -1,6 +1,6 @@
 [Unit]
 Description=Azazel-Gadget Web UI Backend (Flask)
-Documentation=file:///home/azazel/Azazel-Zero/docs/WEB_UI.md
+Documentation=file:///home/azazel/Azazel-Zero/README.md
 After=network.target azazel-first-minute.service
 Wants=azazel-first-minute.service
 

@@ -133,30 +133,40 @@ suppress_auto_wifi: true
 sudo python3 py/azazel_zero/cli_unified.py
 ```
 
+If your terminal has color-init issues:
+
+```bash
+TERM=xterm-256color python3 py/azazel_zero/cli_unified.py
+```
+
 ### Layout
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Azazel-Zero | 📶 SSID: MyWiFi | ⬇️ usb0 | ⬆️ wlan0 | 🕐 12:34:56 │  ← Status bar
-│ View: SNAPSHOT (manual)  Age: 🟢 00:00:15                   │  ← Data freshness
+│ Azazel-Zero | 📶 SSID: Wired:eth0 | ⬇️ usb0 | ⬆️ eth0 | 🕐 12:34:56 │
+│ CPU 4.1% | Mem 1173/7820MB (15%) | View: SNAPSHOT (manual) Age:🟢00:00:01 │
 ├─────────────────────────────────────────────────────────────┤
-│ ✅ SAFE        Recommendation: keep as-is                   │  ← State badge (inverted)
-│ Reason: probe ok / DNS ok                                  │
-│ Threat: [🟢🟢⚪⚪⚪] Low                                     │  ← Threat level
-│ Next: waiting for re-eval                                  │
+│ Suspicion: 0 | Risk Score: 🟢 0/100                         │
+│ ✅ SAFE        Recommendation: ...                          │
+│ Reason: ...                                                 │
+│ Threat: [⚪⚪⚪⚪⚪] LOW                                       │
+│ Next: ...                                                   │
+│ Monitoring: Suricata=ON  OpenCanary=ON  ntfy=ON            │
 ├──────────────────────┬──────────────────────────────────────┤
 │ Connection           │ Control / Safety                     │
-│ BSSID: aa:bb:cc:...  │ QUIC(UDP/443): ⛔ BLOCKED           │
-│ Channel: 🟢 Ch124    │ DoH(TCP/443): ⛔ BLOCKED            │
-│    - Low (31 APs)    │ Degrade: ✓ OFF                      │
-│ Signal: 🟩🟩🟩 -55dBm │ Probe: ✓ 5/5 ALL OK                │
-│ Gateway: 🏠 192.168… │ Stats: DNS: ✅ 45 ⚠️ 3 🔴 2         │
+│ SSID: ...            │ QUIC: ⛔ BLOCKED / ✓ ALLOWED        │
+│ BSSID: ...           │ DoH:  ⛔ BLOCKED / ✓ ALLOWED        │
+│ Signal: ... dBm      │ Degrade: ON / OFF                    │
+│ Gateway: ...         │ Down/Up: X.Y / X.Y Mbps              │
+│ State: ...           │ Probe: tls_ok/tls_total (...blocked) │
+│ Internet: ...        │ IDS: C/W/I                            │
+│ Captive: ...         │ DNS: OK/WARN/BLK, Traffic: ↓/↑       │
 ├──────────────────────┴──────────────────────────────────────┤
-│ Evidence (last 90s)                                         │
-│ 🟢 Normal probe completed                                   │
-│ 🟡 DNS query to suspicious domain                          │
-│ 💠 action: reprobe command sent                             │
-│ ↳ decision: state=NORMAL suspicion=5 decay=0.9             │
+│ Evidence & State                                             │
+│ State: SAFE  Suspicion: 0  CPU Temp: 37.0C  CPU: 4.1%  Memory: 15% │
+│ Scan Results: 31 APs (low)                                  │
+│ 🟢 / 🟡 / 🔴 evidence lines ...                              │
+│ Decision: State: SAFE, Suspicion: 0                         │
 ├─────────────────────────────────────────────────────────────┤
 │ Flow: PROBE → DEGRADED → NORMAL → ✅ SAFE                   │
 │ [U] Refresh  [A] Stage-Open  [R] Re-Probe  [C] Contain  [L] Details  [Q] Quit │
@@ -164,90 +174,27 @@ sudo python3 py/azazel_zero/cli_unified.py
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Icons and Colors
+### Main Interpretation Rules
 
-#### 🎯 State badge (main status)
-
-| Icon | State | Color | Meaning |
-|------|-------|-------|---------|
-| ⟳ | Checking | Cyan (inverted) | Initial scan |
-| ✅ | **Safe** | **Green (inverted, bold)** | Network is safe |
-| ⚠️ | Limited | Yellow (inverted) | Restrictions like bandwidth limits |
-| ⛔ | Contained | Red (inverted) | Danger detected, containment mode |
-| 👁 | Deception | Purple (inverted) | Decoy mode |
-
-#### 🎯 Threat level indicator
-
-```
-Threat: [🟢🟢⚪⚪⚪] Low      ← Safe
-Threat: [🟡🟡🟡⚪⚪] Med      ← Caution
-Threat: [🔴🔴🔴🔴🔴] Critical ← Dangerous
-```
-
-#### 🎯 Age (freshness)
-
-- 🟢 **0–30s**: freshest, trustworthy
-- 🟡 **30s–2m**: slightly old, verify
-- 🔴 **2m+**: stale, press [U] to refresh
-
-#### 🎯 Signal strength
-
-| Display | Strength | Meaning |
-|---------|----------|---------|
-| 🟩🟩🟩🟩 | >= -50dBm | Excellent |
-| 🟩🟩🟩 | -50 to -60dBm | Good |
-| 🟨🟨 | -60 to -70dBm | Fair |
-| 🟧 | -70 to -80dBm | Weak |
-| 🟥 | <= -80dBm | Very weak |
-
-#### 🎯 Channel congestion (measured)
-
-| Display | Congestion | APs | Meaning |
-|---------|------------|-----|---------|
-| 🟢 Clear/Low | Low | 0–2 | Open (comfortable) |
-| 🟡 Medium | Medium | 3–5 | Normal |
-| 🟧 High | High | 6–10 | Crowded |
-| 🔴 Critical | Very high | 11+ | Extremely crowded |
-
-※ APs around you are scanned when you press [U].
-
-#### 🎯 Gateway IP
-
-- 🏠 **Green**: private IP (normal)
-- ⚠️ **Yellow**: public IP (check)
-
-#### 🎯 Control rules
-
-| Item | Icon | Color | Meaning |
-|------|------|-------|---------|
-| QUIC | ⛔ | Red | Blocked |
-| QUIC | ✓ | Green | Allowed |
-| Degrade | ⚡ | Yellow | Bandwidth limited |
-| Degrade | ✓ | Green | No limit |
-| Probe | ⚠ | Red | Probe detected problems |
-| Probe | ✓ | Green | All good |
-
-#### 🎯 DNS stats
-
-- ✅ Normal queries
-- ⚠️ Suspicious queries
-- 🔴 Blocked queries
-
-#### 🎯 Evidence log
-
-| Icon | Color | Meaning |
-|------|-------|---------|
-| 🔴 | Red (bold) | Anomaly / error (blocked, fail, hijack, etc.) |
-| 🟡 | Yellow | Warning / caution (portal, dns, probe, etc.) |
-| 🟢 | Green | Normal / success (ok, safe, normal, etc.) |
-| 💠 | Cyan | Action (command, transition, etc.) |
-| ⚪ | White | Other |
+- State badge: `CHECKING / SAFE / LIMITED / CONTAINED / DECEPTION`
+- Threat level uses `internal.suspicion`:
+  - `0-14`: `LOW`
+  - `15-29`: `MEDIUM`
+  - `30-49`: `HIGH`
+  - `50+`: `CRITICAL`
+- Age indicator:
+  - `0-30s`: green
+  - `31-120s`: yellow
+  - `121s+`: red
+- Signal is rendered as bars from `signal_dbm` when available
+- Captive line reflects `connection.captive_portal` and reason
+- `Scan Results` is based on channel scan summary (`ap_count`, congestion)
 
 ### Key bindings
 
 | Key | Function | Description |
 |-----|----------|-------------|
-| **[U]** | Refresh | Manually update data (runs Wi-Fi scan) |
+| **[U]** | Refresh | Manually update snapshot (also runs channel scan) |
 | **[A]** | Stage-Open | Move from restricted to normal mode |
 | **[R]** | Re-Probe | Run probe test again |
 | **[C]** | Contain | Enter containment mode |
@@ -263,17 +210,6 @@ Threat: [🔴🔴🔴🔴🔴] Critical ← Dangerous
   - `Decay`: decay value
   - `Rules`: control rule details
 - Press **[B]** to return to main screen
-
-### Color rules
-
-| Color | Meaning | Where used |
-|-------|---------|-----------|
-| 🟢 Green | Good / normal / safe | SAFE, strong signal, clear channel, normal logs |
-| 🟡 Yellow | Caution / warning / medium | LIMITED, weak signal, congestion, warning logs |
-| 🔴 Red | Danger / error / abnormal | CONTAINED, very weak signal, severe congestion, error logs |
-| 🟣 Purple | Special | DECEPTION |
-| 🔵 Cyan | Info / technical | CHECKING, action logs, technical info |
-| ⚪ White | Neutral / unknown | Other logs, unknown states |
 
 ---
 
@@ -394,5 +330,38 @@ Once complete:
    ```
 
 For advanced configuration changes and troubleshooting, see [installer/README.md](installer/README.md).
+
+---
+
+## Post-install Troubleshooting (Minimal)
+
+If `install.sh` completed but behavior looks wrong, check only these first:
+
+```bash
+# 1) Core services
+sudo systemctl status azazel-first-minute.service azazel-control-daemon.service usb0-static.service
+
+# 2) Recent logs
+sudo journalctl -u azazel-first-minute.service -n 80 --no-pager
+
+# 3) Snapshot/API health
+ls -l /run/azazel-zero/ui_snapshot.json
+curl -s http://10.55.0.10:8082/ | jq .
+```
+
+When `--with-webui` is enabled:
+
+```bash
+sudo systemctl status azazel-web.service caddy.service
+curl -k https://10.55.0.10/health
+```
+
+If DHCP/DNS over `usb0` is unstable:
+
+```bash
+sudo bash bin/diagnose_dhcp.sh
+```
+
+For deeper details, see `installer/README.md` and `docs/dev-archive/`.
 
 ---

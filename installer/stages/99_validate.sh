@@ -376,7 +376,7 @@ main() {
         log_error "  • サービスステータス: systemctl status azazel-first-minute.service"
         log_error ""
         log_error "詳細は以下を参照:"
-        log_error "  /home/azazel/Azazel-Zero/docs/DHCP_DNS_TROUBLESHOOTING.md"
+        log_error "  /home/azazel/Azazel-Zero/installer/README.md"
         log_error ""
         return 1
     fi

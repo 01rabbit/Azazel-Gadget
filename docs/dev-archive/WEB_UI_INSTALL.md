@@ -304,8 +304,8 @@ sudo systemctl restart caddy
 
 ## 参考資料
 
-- [Web UI アーキテクチャ](../docs/WEB_UI.md)
-- [Azazel-Zero セットアップガイド](../docs/setup-zero.md)
+- [Web UI アーキテクチャ](./WEB_UI.md)
+- [Azazel-Zero セットアップガイド](./setup-zero.md)
 - [README](../README.md)
 
 ## 更新履歴

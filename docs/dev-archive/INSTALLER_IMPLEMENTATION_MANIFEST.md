@@ -22,8 +22,8 @@
 | `installer/stages/99_validate.sh` | Stage 99: 検証＆完了 |
 | `installer/defaults/` | 設定テンプレート（configs/ から統合） |
 | `installer/README.md` | インストール手順（updated） |
-| `docs/INSTALLER_UNIFIED_DESIGN.md` | インストーラ設計ドキュメント |
-| `docs/INSTALLER_DEPRECATION_SCHEDULE.md` | 廃止スケジュール＆移行ガイド |
+| `docs/dev-archive/INSTALLER_UNIFIED_DESIGN.md` | インストーラ設計ドキュメント |
+| `docs/dev-archive/INSTALLER_DEPRECATION_SCHEDULE.md` | 廃止スケジュール＆移行ガイド |
 
 ### ✅ 削除完了
 
@@ -129,7 +129,7 @@ sudo ./install.sh --with-webui --with-canary --with-ntfy
 ```
 
 ✅ 移行ドキュメント提供：
-- `docs/INSTALLER_DEPRECATION_SCHEDULE.md`
+- `docs/dev-archive/INSTALLER_DEPRECATION_SCHEDULE.md`
 
 ---
 
@@ -156,7 +156,7 @@ sudo ./install.sh --with-webui --with-canary --with-ntfy
 - usb0-static.service との順序保証
 
 ### ② プロファイルシステム廃止分析
-- [docs/INSTALLER_REDESIGN.md](docs/INSTALLER_REDESIGN.md) で分析
+- [INSTALLER_REDESIGN.md](./INSTALLER_REDESIGN.md) で分析
 - プロファイル層が冗長なことを指摘
 
 ### ③ 統合インストーラ実装 ← **本実装**
@@ -198,12 +198,12 @@ sudo ./install.sh --all  # すべて有効化
 
 ### ユーザー向け
 - **[installer/README.md](installer/README.md)** - クイックスタート＆トラブル
-- **[docs/DHCP_DNS_TROUBLESHOOTING.md](docs/DHCP_DNS_TROUBLESHOOTING.md)** - ネットワーク問題対応
-- **[docs/INSTALLER_DEPRECATION_SCHEDULE.md](docs/INSTALLER_DEPRECATION_SCHEDULE.md)** - 廃止予定について
+- **[DHCP_DNS_TROUBLESHOOTING.md](./DHCP_DNS_TROUBLESHOOTING.md)** - ネットワーク問題対応
+- **[INSTALLER_DEPRECATION_SCHEDULE.md](./INSTALLER_DEPRECATION_SCHEDULE.md)** - 廃止予定について
 
 ### 技術者向け
-- **[docs/INSTALLER_UNIFIED_DESIGN.md](docs/INSTALLER_UNIFIED_DESIGN.md)** - インストーラ全体設計
-- **[docs/INSTALLER_REDESIGN.md](docs/INSTALLER_REDESIGN.md)** - なぜプロファイル不要か
+- **[INSTALLER_UNIFIED_DESIGN.md](./INSTALLER_UNIFIED_DESIGN.md)** - インストーラ全体設計
+- **[INSTALLER_REDESIGN.md](./INSTALLER_REDESIGN.md)** - なぜプロファイル不要か
 - **[SYSTEM_SPECIFICATION.md](SYSTEM_SPECIFICATION.md)** - システム全体仕様
 
 ---
@@ -270,4 +270,3 @@ Stage 20 実行時：
 **実装日**: 2026年2月11日  
 **バージョン**: 1.0  
 **ステータス**: ✅ **完成・デプロイ可能**
-

@@ -1,6 +1,6 @@
 # Azazel-Zero Boot Splash
 
-[English](/docs/Boot_E-Paper_Splash.md) | [日本語](/docs/Boot_E-Paper_Splash_ja.md)
+[English](/docs/dev-archive/Boot_E-Paper_Splash.md) | [日本語](/docs/dev-archive/Boot_E-Paper_Splash_ja.md)
 
 ## Overview
 

@@ -1,6 +1,6 @@
 # Azazel-Zero セットアップガイド（Raspberry Pi OS Lite Trixie / 64bit）
 
-[English](/docs/setup-zero.md) | 日本語
+[English](/docs/dev-archive/setup-zero.md) | 日本語
 
 ## 目的と想定構成
 
