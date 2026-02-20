@@ -2,6 +2,16 @@
 set -euo pipefail
 
 pick_best_uplink_iface() {
+  # Prefer Wi-Fi when available so honeypot exposure matches wlan0 policy.
+  if ip link show wlan0 >/dev/null 2>&1; then
+    local wlan_ip
+    wlan_ip="$(ip -4 -o addr show dev wlan0 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -n1)"
+    if [[ -n "$wlan_ip" ]]; then
+      echo "wlan0"
+      return 0
+    fi
+  fi
+
   local route_if
   route_if="$(ip -4 route show default 2>/dev/null | awk '{for (i=1; i<=NF; i++) if ($i == "dev") {print $(i+1); exit}}')"
   if [[ -n "$route_if" ]] && [[ "$route_if" != "usb0" ]] && ip link show "$route_if" >/dev/null 2>&1; then

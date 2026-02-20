@@ -237,7 +237,22 @@ install_config() {
 install_script() {
     local src="$1"
     local dest="$2"
-    install_config "$src" "$dest" "0755"
+    if [[ ! -f "$src" ]]; then
+        die "ソースファイルが見つかりません: $src"
+    fi
+
+    log_info "スクリプトを配置: $dest"
+    mkdir -p "$(dirname "$dest")"
+
+    local tmp
+    tmp="$(mktemp)"
+    # Keep scripts executable by normalizing UTF-8 BOM and CRLF line endings.
+    awk 'NR==1{sub(/^\xef\xbb\xbf/,"")} {sub(/\r$/,"")} {print}' "$src" > "$tmp"
+    install -m 0755 "$tmp" "$dest" || {
+        rm -f "$tmp"
+        die "ファイル配置失敗: $dest"
+    }
+    rm -f "$tmp"
 }
 
 # ============================================================================

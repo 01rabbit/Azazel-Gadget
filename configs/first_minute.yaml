@@ -2,10 +2,14 @@
 # Copy to /etc/azazel-zero/first_minute.yaml and adjust for your environment.
 
 interfaces:
-  upstream: auto            # Auto-select best default-route uplink (wlan0/eth0)
+  upstream: auto            # Auto-select uplink (prefer Wi-Fi when available)
+  captive_probe: auto       # Captive判定専用IF（upstreamと独立）
   downstream: usb0          # OTG gadget interface presented to the user device
   mgmt_ip: 10.55.0.10       # IP bound on downstream for management/API/DNS (fixed)
   mgmt_subnet: 10.55.0.0/24
+
+captive_probe_policy: wifi_prefer  # wifi_prefer | upstream_same | any
+suppress_auto_wifi: true           # 起動時にdaemonがWi-Fi自動接続を抑止
 
 paths:
   runtime_dir: /run/azazel-zero

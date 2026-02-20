@@ -17,6 +17,7 @@ main() {
     log_info "════════════════════════════════════════════"
     
     local all_passed=true
+    local fm_dnsmasq_detected=false
     
     # 1. インターフェース確認
     log_info ""
@@ -50,6 +51,7 @@ main() {
     local optional_services=(
         "azazel-control-daemon.service"
         "azazel-web.service"
+        "azazel-portal-viewer.service"
         "azazel-nat.service"
         "suri-epaper.service"
         "suricata.service"
@@ -94,9 +96,16 @@ main() {
     fi
 
     # 2.5 dnsmasq 競合チェック
+    if pgrep -af "dnsmasq.*dnsmasq-first_minute.conf" >/dev/null 2>&1; then
+        fm_dnsmasq_detected=true
+    fi
     if systemctl is-active --quiet dnsmasq.service 2>/dev/null; then
-        log_error "  ✗ 既定 dnsmasq.service が起動中（first-minute 管理 dnsmasq と競合）"
-        all_passed=false
+        if [[ "$fm_dnsmasq_detected" == "true" ]]; then
+            log_error "  ✗ 既定 dnsmasq.service と first-minute 管理 dnsmasq が同時起動（競合）"
+            all_passed=false
+        else
+            log_warn "  ⚠️  既定 dnsmasq.service が起動中（legacy 構成の可能性）"
+        fi
     else
         log_info "  ✓ 既定 dnsmasq.service は停止済み"
     fi
@@ -138,8 +147,10 @@ main() {
         fi
     fi
 
-    if pgrep -af "dnsmasq.*dnsmasq-first_minute.conf" >/dev/null 2>&1; then
+    if [[ "$fm_dnsmasq_detected" == "true" ]]; then
         log_info "  ✓ first-minute 管理 dnsmasq プロセスを確認"
+    elif systemctl is-active --quiet dnsmasq.service 2>/dev/null; then
+        log_warn "  ⚠️  first-minute 管理 dnsmasq は未検出（dnsmasq.service で代替稼働）"
     else
         log_error "  ✗ first-minute 管理 dnsmasq プロセスが見つかりません"
         all_passed=false
@@ -192,6 +203,46 @@ main() {
             all_passed=false
         fi
     fi
+
+    if systemctl is-enabled --quiet azazel-portal-viewer.service 2>/dev/null; then
+        local portal_port="6080"
+        local portal_bind=""
+        if [[ -f /etc/azazel-zero/portal-viewer.env ]]; then
+            local parsed_port
+            parsed_port="$(awk -F= '/^[[:space:]]*PORTAL_NOVNC_PORT[[:space:]]*=/{gsub(/[[:space:]"\047]/, "", $2); print $2; exit}' /etc/azazel-zero/portal-viewer.env || true)"
+            if [[ -n "$parsed_port" ]]; then
+                portal_port="$parsed_port"
+            fi
+            portal_bind="$(awk -F= '/^[[:space:]]*PORTAL_NOVNC_BIND[[:space:]]*=/{gsub(/[[:space:]"\047]/, "", $2); print $2; exit}' /etc/azazel-zero/portal-viewer.env || true)"
+        fi
+
+        if check_service "azazel-portal-viewer.service"; then
+            if ss -ltnH 2>/dev/null | awk '{print $4}' | grep -Eq ":${portal_port}$"; then
+                log_info "  ✓ Captive Portal Viewer (TCP/${portal_port}) がリッスン中"
+            else
+                log_error "  ✗ azazel-portal-viewer.service は起動中だが TCP/${portal_port} が未リッスン"
+                all_passed=false
+            fi
+        else
+            log_error "  ✗ azazel-portal-viewer.service が起動していません"
+            all_passed=false
+        fi
+
+        if [[ -n "$portal_bind" ]] && [[ "$portal_bind" != "10.55.0.10" ]]; then
+            log_warn "  ⚠️  PORTAL_NOVNC_BIND=${portal_bind}（推奨: 10.55.0.10）"
+        else
+            log_info "  ✓ noVNC bind 制限を確認 (${portal_bind:-10.55.0.10})"
+        fi
+    fi
+
+    # 3.1 OpenCanary 利用時の SSH 公開面チェック
+    if [[ "$WITH_CANARY" == "1" ]]; then
+        if ss -ltnH 2>/dev/null | awk '{print $4}' | grep -Eq '(^|[[:space:]])0\.0\.0\.0:22$|(^|[[:space:]])\[::\]:22$'; then
+            log_warn "  ⚠️  sshd が全IF(22/tcp)で待受しています（OpenCanary 22と競合する可能性）"
+        else
+            log_info "  ✓ sshd の 22/tcp 待受は全IF公開されていません"
+        fi
+    fi
     
     # 4. ファイアウォール確認
     log_info ""
@@ -201,6 +252,15 @@ main() {
         log_info "  ✓ nftables テーブル azazel_fmc が存在"
     else
         log_warn "  ⚠️  nftables テーブル azazel_fmc が見つかりません（後で設定可能）"
+    fi
+
+    if [[ -f /etc/azazel-zero/nftables/first_minute.nft ]]; then
+        if grep -Eq 'elements = \{[^}]*6080' /etc/azazel-zero/nftables/first_minute.nft; then
+            log_info "  ✓ nftables 管理ポートに 6080(noVNC) を確認"
+        else
+            log_error "  ✗ nftables 管理ポートに 6080(noVNC) が含まれていません"
+            all_passed=false
+        fi
     fi
     
     # 5. ログ確認
@@ -271,6 +331,9 @@ main() {
         log_info "4) Web UI へアクセス:"
         log_info "   https://10.55.0.10 (Web UI オプション有効時)"
         log_info "   ※ ローカルCA証明書: /etc/azazel-zero/certs/azazel-webui-local-ca.crt"
+        if systemctl is-enabled --quiet azazel-portal-viewer.service 2>/dev/null; then
+            log_info "   Captive Portal Viewer: http://10.55.0.10:6080/vnc.html"
+        fi
         if systemctl is-enabled --quiet ntfy.service 2>/dev/null; then
             log_info "   ntfy health: http://10.55.0.10:8081/v1/health"
         fi

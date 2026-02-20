@@ -8,7 +8,17 @@ Provides HTTP API for remote monitoring and control via USB gadget network.
 - Serves: HTML dashboard + JSON API endpoints
 """
 
-from flask import Flask, jsonify, request, render_template, send_from_directory, send_file, Response, stream_with_context
+from flask import (
+    Flask,
+    jsonify,
+    request,
+    render_template,
+    send_from_directory,
+    send_file,
+    Response,
+    stream_with_context,
+    has_request_context,
+)
 import json
 import os
 import socket
@@ -21,6 +31,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional, Iterator, Tuple, List
 from urllib.request import Request, urlopen
+from urllib.parse import urlparse
 
 app = Flask(__name__)
 
@@ -32,6 +43,7 @@ TOKEN_FILE = Path.home() / ".azazel-zero" / "web_token.txt"
 BIND_HOST = os.environ.get("AZAZEL_WEB_HOST", "0.0.0.0")
 BIND_PORT = int(os.environ.get("AZAZEL_WEB_PORT", "8084"))
 STATUS_API_HOSTS = ["10.55.0.10", "127.0.0.1"]
+PORTAL_VIEWER_ENV_PATH = Path("/etc/azazel-zero/portal-viewer.env")
 NTFY_CONFIG_PATHS = [
     Path(os.environ.get("AZAZEL_CONFIG_PATH", "/etc/azazel-zero/first_minute.yaml")),
     Path("configs/first_minute.yaml"),
@@ -46,7 +58,7 @@ WEBUI_CA_CERT_PATH = Path(
 # Allowed actions
 ALLOWED_ACTIONS = {
     "refresh", "reprobe", "contain", "release", "details", "stage_open", "disconnect",
-    "wifi_scan", "wifi_connect"  # Wi-Fi control actions
+    "wifi_scan", "wifi_connect", "portal_viewer_open"  # Wi-Fi + portal viewer actions
 }
 
 
@@ -360,6 +372,163 @@ def _service_active(service: str) -> bool:
         return False
 
 
+def _portal_viewer_config() -> Dict[str, Any]:
+    """Resolve portal viewer bind/port from env file."""
+    default_bind = os.environ.get("PORTAL_NOVNC_BIND", os.environ.get("MGMT_IP", "10.55.0.10"))
+    default_port = int(os.environ.get("PORTAL_NOVNC_PORT", "6080"))
+    config = {
+        "bind": default_bind,
+        "port": default_port,
+    }
+    try:
+        if not PORTAL_VIEWER_ENV_PATH.exists():
+            return config
+        for raw in PORTAL_VIEWER_ENV_PATH.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            if line.startswith("export "):
+                line = line[7:].strip()
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key == "PORTAL_NOVNC_PORT":
+                config["port"] = int(value)
+            elif key == "PORTAL_NOVNC_BIND":
+                config["bind"] = value
+    except Exception:
+        return config
+    return config
+
+
+def _probe_hosts_for_bind(bind_host: str) -> list:
+    """Build probe host candidates from bind address."""
+    host = str(bind_host or "").strip()
+    if host.startswith("[") and host.endswith("]"):
+        host = host[1:-1]
+    if host in {"", "0.0.0.0", "::", "*"}:
+        return ["127.0.0.1", "::1"]
+    if host in {"localhost", "127.0.0.1", "::1"}:
+        return [host]
+    return [host, "127.0.0.1"]
+
+
+def _tcp_open(port: int, hosts: list, timeout_sec: float = 0.2) -> bool:
+    """Check TCP availability on any candidate host."""
+    seen = set()
+    for host in hosts:
+        if host in seen:
+            continue
+        seen.add(host)
+        try:
+            with socket.create_connection((host, int(port)), timeout=timeout_sec):
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _url_host(host: str) -> str:
+    """Format host part for URL (wrap IPv6 if needed)."""
+    formatted = str(host or "").strip()
+    if ":" in formatted and not (formatted.startswith("[") and formatted.endswith("]")):
+        return f"[{formatted}]"
+    return formatted
+
+
+def _is_wildcard_bind(host: str) -> bool:
+    host = str(host or "").strip()
+    return host in {"", "0.0.0.0", "::", "*"}
+
+
+def _request_host_or_default() -> str:
+    if has_request_context():
+        return request.host.split(":")[0] if request.host else "10.55.0.10"
+    return "10.55.0.10"
+
+
+def _request_scheme_or_default() -> str:
+    if has_request_context():
+        return request.scheme
+    return "http"
+
+
+def _normalize_http_url(candidate: Any) -> str:
+    """Return normalized http(s) URL or empty string."""
+    text = str(candidate or "").strip()
+    if not text or any(ch in text for ch in ("\r", "\n")):
+        return ""
+    parsed = urlparse(text)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return ""
+    return text
+
+
+def _portal_start_url_from_state(state: Dict[str, Any]) -> str:
+    """Infer the best portal start URL from latest captive probe state."""
+    if not isinstance(state, dict):
+        return ""
+    conn = state.get("connection")
+    if not isinstance(conn, dict):
+        return ""
+
+    status = str(conn.get("captive_portal", "") or "").upper()
+    detail = conn.get("captive_portal_detail") if isinstance(conn.get("captive_portal_detail"), dict) else {}
+    candidates = [
+        detail.get("portal_url"),
+        conn.get("captive_portal_url"),
+        detail.get("location"),
+        detail.get("effective_url"),
+        conn.get("captive_location"),
+        conn.get("captive_effective_url"),
+        detail.get("probe_url"),
+        conn.get("captive_probe_url"),
+    ]
+    for candidate in candidates:
+        normalized = _normalize_http_url(candidate)
+        if normalized:
+            return normalized
+
+    if status in {"YES", "SUSPECTED"}:
+        return "http://connectivitycheck.gstatic.com/generate_204"
+    return ""
+
+
+def _portal_viewer_url_host(config_bind: str) -> str:
+    """Choose host advertised to clients for noVNC URL."""
+    override_host = os.environ.get("PORTAL_VIEWER_HOST", "").strip()
+    if override_host:
+        return override_host
+    if not _is_wildcard_bind(config_bind):
+        return config_bind
+    return _request_host_or_default()
+
+
+def _portal_viewer_state_from_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Build portal viewer state from resolved config + runtime checks."""
+    bind_host = str(config.get("bind", "")).strip() or os.environ.get("MGMT_IP", "10.55.0.10")
+    port = int(config.get("port", 6080))
+    probe_hosts = _probe_hosts_for_bind(bind_host)
+    active = _service_active("azazel-portal-viewer.service")
+    ready = active and _tcp_open(port, probe_hosts)
+    scheme = _request_scheme_or_default()
+    host = _url_host(_portal_viewer_url_host(bind_host))
+    url = f"{scheme}://{host}:{port}/vnc.html?autoconnect=true&resize=scale"
+    return {
+        "active": active,
+        "ready": ready,
+        "bind": bind_host,
+        "probe_hosts": probe_hosts,
+        "port": port,
+        "url": url,
+    }
+
+
+def get_portal_viewer_state() -> Dict[str, Any]:
+    """Return current noVNC portal viewer availability."""
+    return _portal_viewer_state_from_config(_portal_viewer_config())
+
+
 def _ntfy_health_ok() -> bool:
     """Check ntfy HTTP health endpoint."""
     mgmt_ip = os.environ.get("MGMT_IP", "10.55.0.10")
@@ -654,6 +823,8 @@ def send_control_command(action: str) -> Dict[str, Any]:
         return execute_details_action()
     if action == "stage_open":
         return execute_stage_open_action()
+    if action == "portal_viewer_open":
+        return send_control_command_with_params("portal_viewer_open", {"timeout_sec": 15})
     
     if not CONTROL_SOCKET.exists():
         return {
@@ -792,7 +963,68 @@ def api_state():
     state = read_state()
     # Add local monitoring status
     state["monitoring"] = get_monitoring_state()
+    state["portal_viewer"] = get_portal_viewer_state()
     return jsonify(state)
+
+
+@app.route("/api/portal-viewer")
+def api_portal_viewer():
+    """GET /api/portal-viewer - Return portal viewer status and URL."""
+    if not verify_token():
+        return jsonify({"error": "Unauthorized"}), 403
+    return jsonify(get_portal_viewer_state())
+
+
+@app.route("/api/portal-viewer/open", methods=["POST"])
+def api_portal_viewer_open():
+    """POST /api/portal-viewer/open - Ensure noVNC is up then return URL."""
+    if not verify_token():
+        return jsonify({"ok": False, "error": "Unauthorized"}), 403
+
+    request_body = request.get_json(silent=True) or {}
+    timeout_sec = request_body.get("timeout_sec", 15)
+    start_url = _normalize_http_url(request_body.get("start_url", ""))
+    if not start_url:
+        state = read_state()
+        if state.get("ok"):
+            start_url = _portal_start_url_from_state(state)
+
+    params = {"timeout_sec": timeout_sec}
+    if start_url:
+        params["start_url"] = start_url
+    daemon_result = send_control_command_with_params(
+        "portal_viewer_open",
+        params,
+    )
+
+    if not daemon_result.get("ok"):
+        return jsonify({
+            "ok": False,
+            "error": daemon_result.get("error", "Failed to start portal viewer"),
+            "portal_viewer": get_portal_viewer_state(),
+            "daemon": daemon_result,
+        }), 500
+
+    portal_state = get_portal_viewer_state()
+    if not portal_state.get("ready"):
+        return jsonify({
+            "ok": False,
+            "error": (
+                "Portal viewer service started, but noVNC is not reachable "
+                f"(bind={portal_state.get('bind')}, probe={portal_state.get('probe_hosts')})"
+            ),
+            "portal_viewer": portal_state,
+            "daemon": daemon_result,
+        }), 500
+
+    resolved_start_url = start_url or str(daemon_result.get("start_url", "") or "")
+    return jsonify({
+        "ok": True,
+        "url": portal_state.get("url"),
+        "start_url": resolved_start_url,
+        "portal_viewer": portal_state,
+        "daemon": daemon_result,
+    }), 200
 
 
 @app.route("/api/certs/azazel-webui-local-ca/meta")

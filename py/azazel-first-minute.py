@@ -128,7 +128,10 @@ def cmd_status(cfg: FirstMinuteConfig) -> None:
 
 
 def cmd_probe_now(cfg: FirstMinuteConfig) -> None:
-    out = run_all(cfg.probes, cfg.interfaces["upstream"])
+    captive_iface = str(cfg.interfaces.get("captive_probe", "auto") or "auto").strip()
+    if captive_iface.lower() in ("", "auto"):
+        captive_iface = str(cfg.interfaces.get("upstream", "") or "").strip()
+    out = run_all(cfg.probes, cfg.interfaces["upstream"], captive_iface=captive_iface or None)
     print(json.dumps(out.details, indent=2))
 
 

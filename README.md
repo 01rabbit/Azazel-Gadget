@@ -99,8 +99,29 @@ Heavyweight ML remains a future research theme; the current deterministic stack 
 | Status API | `py/azazel_zero/first_minute/controller.py` | JSON + actions on `10.55.0.10:8082` |
 | Control daemon | `py/azazel_control/daemon.py` | Unix socket `/run/azazel/control.sock`, executes action scripts and Wi-Fi scan/connect |
 | Web UI (optional) | `azazel_web/app.py` | HTTPS dashboard via Caddy (`https://10.55.0.10`) + Flask backend (`127.0.0.1:8084`) |
+| Captive Portal Viewer (optional) | `scripts/azazel-portal-viewer.sh` | Chromium on virtual display + noVNC via `azazel-portal-viewer.service` (`:6080/vnc.html`) |
 | TUI monitor | `py/azazel_zero/cli_unified.py` | Manual-refresh terminal monitor |
 | E-Paper tools | `py/azazel_epd.py`, `py/boot_splash_epd.py` | Status/alert rendering and boot/shutdown splash |
+
+---
+
+## Captive Probe Roles
+
+`first_minute.yaml` now separates route role and captive-probe role:
+
+```yaml
+interfaces:
+  upstream: auto
+  captive_probe: auto
+  downstream: usb0
+
+captive_probe_policy: wifi_prefer  # wifi_prefer | upstream_same | any
+suppress_auto_wifi: true
+```
+
+- `upstream`: NAT/routing interface.
+- `captive_probe`: interface bound with `curl --interface` for captive check.
+- `wifi_state=DISCONNECTED` clears stale `ssid/ip_wlan/gateway_ip/bssid`.
 
 ---
 
@@ -302,9 +323,9 @@ If wlan0 IP changes during installation (e.g., DHCP reassignment):
 ### Enable Optional Features
 
 ```bash
-# Include Web UI + OpenCanary + ntfy
+# Include Web UI + OpenCanary + ntfy + Portal Viewer
 # (E-Paper is enabled by default in the installer)
-sudo ./install.sh --with-webui --with-canary --with-ntfy
+sudo ./install.sh --with-webui --with-canary --with-ntfy --with-portal-viewer
 
 # Enable all optional features
 sudo ./install.sh --all
@@ -321,6 +342,7 @@ sudo ./install.sh --dry-run
 | `--with-canary` | Enable OpenCanary honeypot |
 | `--with-epd` | Install Waveshare E-Paper driver (enabled by default) |
 | `--with-ntfy` | Enable ntfy notifications |
+| `--with-portal-viewer` | Enable noVNC portal assist viewer (port 6080) |
 | `--all` | Enable all options |
 | `--dry-run` | Print actions only (no changes) |
 | `--resume` | Resume from interrupted installation |
@@ -348,21 +370,25 @@ Once complete:
    ```
    https://10.55.0.10
    ```
+2. **Open Captive Portal Viewer** (if installed):
+   ```
+   http://10.55.0.10:6080/vnc.html
+   ```
 
-2. **Verify systemd services**:
+3. **Verify systemd services**:
    ```bash
    systemctl status azazel-first-minute.service
    systemctl status azazel-control-daemon.service
    systemctl status usb0-static.service
    ```
 
-3. **Check APIs**:
+4. **Check APIs**:
    ```bash
    curl http://10.55.0.10:8082/
    curl -k https://10.55.0.10/health
    ```
 
-4. **Monitor logs** (real-time):
+5. **Monitor logs** (real-time):
    ```bash
    journalctl -u azazel-first-minute.service -f
    ```

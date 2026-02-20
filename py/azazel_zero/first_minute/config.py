@@ -22,6 +22,8 @@ class FirstMinuteConfig:
     status_api: Dict[str, Any]
     suricata: Dict[str, Any]
     deception: Dict[str, Any]
+    captive_probe_policy: str = "wifi_prefer"
+    suppress_auto_wifi: bool = True
     notify: Dict[str, Any] = field(default_factory=dict)  # ★ ntfy 通知設定
     yaml_path: str | Path = ""  # Track the config file path for reproducibility
 
@@ -33,12 +35,20 @@ class FirstMinuteConfig:
         data = yaml.safe_load(p.read_text()) or {}
         # Provide minimal defaults for keys that may be missing to avoid KeyErrors
         defaults = {
-            "interfaces": {"upstream": "auto", "downstream": "usb0", "mgmt_ip": "192.168.7.1", "mgmt_subnet": "192.168.7.0/24"},
+            "interfaces": {
+                "upstream": "auto",
+                "captive_probe": "auto",
+                "downstream": "usb0",
+                "mgmt_ip": "192.168.7.1",
+                "mgmt_subnet": "192.168.7.0/24",
+            },
             "paths": {},
             "dnsmasq": {"enable": True},
             "state_machine": {},
             "probes": {},
             "policy": {},
+            "captive_probe_policy": "wifi_prefer",
+            "suppress_auto_wifi": True,
             "status_api": {
                 "host": "127.0.0.1",
                 "port": 8082
@@ -61,7 +71,16 @@ class FirstMinuteConfig:
             },
         }
         for key, val in defaults.items():
-            data.setdefault(key, val)
+            if isinstance(val, dict):
+                existing = data.get(key)
+                if not isinstance(existing, dict):
+                    data[key] = val.copy()
+                    continue
+                merged = val.copy()
+                merged.update(existing)
+                data[key] = merged
+            else:
+                data.setdefault(key, val)
         cfg = FirstMinuteConfig(**data)
         cfg.yaml_path = p  # Set the path after construction
         return cfg

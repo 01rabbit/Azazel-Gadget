@@ -3,6 +3,8 @@
 
 const AUTH_TOKEN = localStorage.getItem('azazel_token') || 'azazel-default-token-change-me';
 let updateInterval;
+let portalViewerOpening = false;
+let portalReprobeRunning = false;
 let eventSource = null;
 let unreadEventCount = 0;
 let lastEventSourceErrorToastAt = 0;
@@ -123,6 +125,58 @@ function updateUI(state) {
     } else {
         captiveWarning.style.display = 'none';
     }
+
+    const portalViewer = state.portal_viewer || {};
+    const portalViewerRow = document.getElementById('portalViewerRow');
+    const portalViewerBtn = document.getElementById('portalViewerBtn');
+    const portalReprobeRow = document.getElementById('portalReprobeRow');
+    const portalReprobeBtn = document.getElementById('portalReprobeBtn');
+    const shouldShowPortalButton = (
+        (captivePortal === 'SUSPECTED' || captivePortal === 'YES') &&
+        portalViewer.url
+    );
+    if (portalViewerRow && portalViewerBtn) {
+        if (shouldShowPortalButton) {
+            portalViewerRow.style.display = 'flex';
+            portalViewerBtn.dataset.url = portalViewer.url;
+            if (!portalViewerOpening) {
+                portalViewerBtn.disabled = false;
+                if (portalViewer.ready) {
+                    portalViewerBtn.textContent = '🧭 Open Portal';
+                    portalViewerBtn.title = '';
+                } else if (portalViewer.active) {
+                    portalViewerBtn.textContent = '⏳ Preparing Portal';
+                    portalViewerBtn.title = 'Portal viewer is starting';
+                } else {
+                    portalViewerBtn.textContent = '▶ Start & Open Portal';
+                    portalViewerBtn.title = 'Start azazel-portal-viewer.service and open noVNC';
+                }
+            }
+        } else {
+            portalViewerRow.style.display = 'none';
+            delete portalViewerBtn.dataset.url;
+            portalViewerOpening = false;
+            portalViewerBtn.disabled = false;
+            portalViewerBtn.textContent = '🧭 Open Portal';
+            portalViewerBtn.title = '';
+        }
+    }
+    if (portalReprobeRow && portalReprobeBtn) {
+        if (captivePortal === 'SUSPECTED' || captivePortal === 'YES') {
+            portalReprobeRow.style.display = 'flex';
+            if (!portalReprobeRunning) {
+                portalReprobeBtn.disabled = false;
+                portalReprobeBtn.textContent = '✅ Auth Done & Re-Probe';
+                portalReprobeBtn.title = 'Run Re-Probe after portal login';
+            }
+        } else {
+            portalReprobeRow.style.display = 'none';
+            portalReprobeRunning = false;
+            portalReprobeBtn.disabled = false;
+            portalReprobeBtn.textContent = '✅ Auth Done & Re-Probe';
+            portalReprobeBtn.title = '';
+        }
+    }
     
     // Control & Safety
     const degrade = state.degrade || {};
@@ -234,6 +288,84 @@ function updateBadge(id, value) {
         el.classList.add('contained');
     } else if (valueLower === 'lockdown') {
         el.classList.add('lockdown');
+    }
+}
+
+async function openPortalViewer() {
+    const btn = document.getElementById('portalViewerBtn');
+    if (!btn || !btn.dataset.url) {
+        showToast('Portal viewer is not ready', 'error');
+        return;
+    }
+
+    if (portalViewerOpening) {
+        return;
+    }
+
+    portalViewerOpening = true;
+    btn.disabled = true;
+    btn.textContent = '⏳ Starting Portal...';
+
+    // Keep user gesture context to reduce popup blocking.
+    const popup = window.open('', '_blank');
+
+    try {
+        const res = await fetch('/api/portal-viewer/open', {
+            method: 'POST',
+            headers: {
+                'X-Auth-Token': AUTH_TOKEN,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ timeout_sec: 18 })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok || !data.url) {
+            if (popup && !popup.closed) popup.close();
+            showToast(`Portal open failed: ${data.error || 'unknown error'}`, 'error');
+            return;
+        }
+
+        if (popup && !popup.closed) {
+            popup.opener = null;
+            popup.location.href = data.url;
+        } else {
+            window.open(data.url, '_blank', 'noopener,noreferrer');
+        }
+        showToast('Portal viewer ready', 'success');
+    } catch (e) {
+        if (popup && !popup.closed) popup.close();
+        showToast(`Portal open failed: ${e.message}`, 'error');
+    } finally {
+        portalViewerOpening = false;
+        btn.disabled = false;
+        setTimeout(fetchState, 400);
+    }
+}
+
+async function completePortalAuthReprobe() {
+    const btn = document.getElementById('portalReprobeBtn');
+    if (!btn || portalReprobeRunning) {
+        return;
+    }
+
+    portalReprobeRunning = true;
+    btn.disabled = true;
+    btn.textContent = '⏳ Re-Probing...';
+
+    try {
+        const data = await postAction('reprobe');
+        if (data.ok) {
+            showToast('🔍 Re-Probe started', 'success');
+        } else {
+            showToast(`❌ Re-Probe failed: ${data.error || 'unknown error'}`, 'error');
+        }
+    } catch (e) {
+        showToast(`❌ Re-Probe failed: ${e.message}`, 'error');
+    } finally {
+        portalReprobeRunning = false;
+        btn.disabled = false;
+        btn.textContent = '✅ Auth Done & Re-Probe';
+        setTimeout(fetchState, 600);
     }
 }
 

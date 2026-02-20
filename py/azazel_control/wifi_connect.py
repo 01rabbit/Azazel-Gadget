@@ -13,10 +13,14 @@ import json
 import logging
 import time
 import socket
-from typing import Dict, Any, Optional
+import tempfile
+import os
+from typing import Dict, Any, Optional, List
 from pathlib import Path
+from urllib.parse import urlparse
 
 logger = logging.getLogger("wifi_connect")
+DEFAULT_CAPTIVE_RETRY_SCHEDULE_SEC = [0, 3, 10]
 
 # Import wifi_scan helpers
 import sys
@@ -338,19 +342,61 @@ def get_gateway_ip(iface: str) -> Optional[str]:
         return None
 
 
-def check_connectivity() -> Dict[str, str]:
+def _parse_location(headers: str) -> str:
+    for line in headers.splitlines():
+        if line.lower().startswith("location:"):
+            return line.split(":", 1)[1].strip()
+    return ""
+
+
+def _normalize_http_url(candidate: Any) -> str:
+    """Return normalized http(s) URL or empty string."""
+    text = str(candidate or "").strip()
+    if not text or any(ch in text for ch in ("\r", "\n")):
+        return ""
+    parsed = urlparse(text)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return ""
+    return text
+
+
+def _choose_portal_url_from_checks(checks: Dict[str, Any], status: str) -> str:
+    """Pick best portal URL candidate from captive probe checks."""
+    if status not in ("YES", "SUSPECTED"):
+        return ""
+    for key in ("location", "effective_url", "probe_url"):
+        normalized = _normalize_http_url(checks.get(key, ""))
+        if normalized:
+            return normalized
+    return ""
+
+
+def check_connectivity(iface: Optional[str]) -> Dict[str, Any]:
     """
-    Fast connectivity checks:
-    - gateway_reachable: OK/FAIL
-    - dns_resolution: OK/FAIL
-    - http_check: OK/FAIL
+    Connectivity checks with captive-portal aware HTTP probe.
+
+    Returns:
+        gateway_reachable: OK|FAIL
+        dns_resolution: OK|FAIL
+        http_code: str
+        http_check: OK|FAIL
+        location: str
+        body_len: int
+        effective_url: str
+        curl_error: str
     """
-    checks = {
+    checks: Dict[str, Any] = {
         "gateway_reachable": "UNKNOWN",
         "dns_resolution": "UNKNOWN",
-        "http_check": "UNKNOWN"
+        "http_check": "FAIL",
+        "http_code": "000",
+        "location": "",
+        "body_len": 0,
+        "effective_url": "",
+        "probe_url": "http://connectivitycheck.gstatic.com/generate_204",
+        "curl_error": "",
     }
-    
+
     # Gateway ping
     try:
         result = subprocess.run(
@@ -359,48 +405,228 @@ def check_connectivity() -> Dict[str, str]:
             timeout=3
         )
         checks["gateway_reachable"] = "OK" if result.returncode == 0 else "FAIL"
-    except:
+    except Exception:
         checks["gateway_reachable"] = "FAIL"
-    
+
     # DNS resolution
     try:
-        socket.gethostbyname("www.google.com")
+        socket.gethostbyname("connectivitycheck.gstatic.com")
         checks["dns_resolution"] = "OK"
-    except:
+    except Exception:
         checks["dns_resolution"] = "FAIL"
-    
-    # HTTP check
+
+    body_path = ""
+    hdr_path = ""
     try:
+        with tempfile.NamedTemporaryFile(prefix="azazel_wifi_body_", delete=False, dir="/tmp") as bf:
+            body_path = bf.name
+        with tempfile.NamedTemporaryFile(prefix="azazel_wifi_hdr_", delete=False, dir="/tmp") as hf:
+            hdr_path = hf.name
+
+        cmd = [
+            "curl",
+            "-sS",
+            "--max-time",
+            "4",
+            "-o",
+            body_path,
+            "-D",
+            hdr_path,
+            "-w",
+            "%{http_code} %{url_effective}",
+            "http://connectivitycheck.gstatic.com/generate_204",
+        ]
+        if iface:
+            cmd[1:1] = ["--interface", iface]
+
         result = subprocess.run(
-            ["curl", "-s", "-m", "3", "-o", "/dev/null", "-w", "%{http_code}", "http://www.google.com"],
+            cmd,
             capture_output=True,
             text=True,
-            timeout=5
+            timeout=6
         )
-        if result.stdout.strip() in ["200", "301", "302"]:
-            checks["http_check"] = "OK"
-        else:
+        checks["http_check"] = "OK" if result.returncode == 0 else "FAIL"
+        if result.returncode != 0:
+            if result.returncode == 28:
+                checks["curl_error"] = "TIMEOUT"
+            elif result.returncode == 6:
+                checks["curl_error"] = "DNS_FAIL"
+            elif result.returncode in (35, 51, 58, 60):
+                checks["curl_error"] = "CERT_FAIL"
+            else:
+                checks["curl_error"] = f"CURL_ERR_{result.returncode}"
             checks["http_check"] = "FAIL"
-    except:
+        else:
+            payload = (result.stdout or "").strip().split(maxsplit=1)
+            checks["http_code"] = payload[0] if payload else "000"
+            checks["effective_url"] = payload[1] if len(payload) > 1 else ""
+            try:
+                checks["body_len"] = Path(body_path).stat().st_size
+            except Exception:
+                checks["body_len"] = 0
+            try:
+                headers = Path(hdr_path).read_text(encoding="utf-8", errors="ignore")
+                checks["location"] = _parse_location(headers)
+            except Exception:
+                checks["location"] = ""
+    except subprocess.TimeoutExpired:
+        checks["curl_error"] = "TIMEOUT"
         checks["http_check"] = "FAIL"
-    
+    except Exception as exc:
+        checks["curl_error"] = f"CURL_ERR:{exc}"
+        checks["http_check"] = "FAIL"
+    finally:
+        for p in (body_path, hdr_path):
+            if p:
+                try:
+                    Path(p).unlink(missing_ok=True)
+                except Exception:
+                    pass
+
     return checks
 
 
-def detect_captive_portal(checks: Dict[str, str]) -> str:
+def detect_captive_portal(checks: Dict[str, Any]) -> Dict[str, str]:
     """
-    Detect captive portal (heuristic):
-    - Gateway reachable but HTTP/HTTPS fails -> SUSPECTED
-    - All OK -> NO
-    - Gateway unreachable -> UNKNOWN
+    Captive portal decision table:
+      - 204 => NO
+      - 30x => YES
+      - 200(body>0) => SUSPECTED
+      - other non-204 => NA
+      - timeout/curl errors => NA
     """
-    if checks["gateway_reachable"] == "OK":
-        if checks["http_check"] == "FAIL" or checks["dns_resolution"] == "FAIL":
-            return "SUSPECTED"
-        elif checks["http_check"] == "OK" and checks["dns_resolution"] == "OK":
-            return "NO"
-    
-    return "UNKNOWN"
+    code = str(checks.get("http_code", "000") or "000")
+    body_len = int(checks.get("body_len", 0) or 0)
+    curl_error = str(checks.get("curl_error", "") or "")
+
+    if curl_error in ("NO_IP", "LINK_DOWN", "NOT_FOUND"):
+        return {"status": "NA", "reason": curl_error}
+    if curl_error:
+        return {"status": "NA", "reason": curl_error}
+    if code == "204":
+        return {"status": "NO", "reason": "HTTP_204"}
+    if code.startswith("30"):
+        return {"status": "YES", "reason": "HTTP_30X"}
+    if code == "200" and body_len > 0:
+        return {"status": "SUSPECTED", "reason": "HTTP_200_BODY"}
+    if code and code != "000":
+        return {"status": "NA", "reason": f"HTTP_{code}"}
+    return {"status": "NA", "reason": "HTTP_000"}
+
+
+def get_captive_retry_schedule() -> List[int]:
+    """
+    Retry schedule in seconds.
+    Override via env: AZAZEL_CAPTIVE_RETRY_SCHEDULE_SEC="0,3,10"
+    """
+    raw = os.environ.get("AZAZEL_CAPTIVE_RETRY_SCHEDULE_SEC", "")
+    if not raw.strip():
+        return DEFAULT_CAPTIVE_RETRY_SCHEDULE_SEC[:]
+
+    parsed: List[int] = []
+    for token in raw.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        try:
+            value = int(token)
+        except ValueError:
+            continue
+        if value < 0:
+            continue
+        parsed.append(value)
+
+    if not parsed:
+        return DEFAULT_CAPTIVE_RETRY_SCHEDULE_SEC[:]
+    if parsed[0] != 0:
+        parsed.insert(0, 0)
+    return parsed
+
+
+def evaluate_captive_portal_with_retries(iface: str, has_ip: bool) -> Dict[str, Any]:
+    """
+    Run captive-portal check at connect timing with short retries.
+    NO at first probe may still become YES/SUSPECTED shortly after association.
+    """
+    if not has_ip:
+        checks = {
+            "gateway_reachable": "FAIL",
+            "dns_resolution": "FAIL",
+            "http_check": "FAIL",
+            "http_code": "000",
+            "location": "",
+            "body_len": 0,
+            "effective_url": "",
+            "curl_error": "NO_IP",
+        }
+        return {
+            "status": "NA",
+            "reason": "NO_IP",
+            "checks": checks,
+            "attempts": [{
+                "attempt": 1,
+                "delay_sec": 0,
+                "status": "NA",
+                "reason": "NO_IP",
+                "http_code": "000",
+                "curl_error": "NO_IP",
+            }],
+        }
+
+    schedule = get_captive_retry_schedule()
+    attempts: List[Dict[str, Any]] = []
+    final_status = "NA"
+    final_reason = "NOT_CHECKED"
+    final_checks: Dict[str, Any] = {
+        "gateway_reachable": "UNKNOWN",
+        "dns_resolution": "UNKNOWN",
+        "http_check": "FAIL",
+        "http_code": "000",
+        "location": "",
+        "body_len": 0,
+        "effective_url": "",
+        "curl_error": "",
+    }
+
+    for idx, delay in enumerate(schedule):
+        if idx > 0 and delay > 0:
+            time.sleep(delay)
+        checks = check_connectivity(iface)
+        decision = detect_captive_portal(checks)
+        final_status = decision["status"]
+        final_reason = decision["reason"]
+        final_checks = checks
+        attempts.append(
+            {
+                "attempt": idx + 1,
+                "delay_sec": delay,
+                "status": final_status,
+                "reason": final_reason,
+                "http_code": str(checks.get("http_code", "000")),
+                "curl_error": str(checks.get("curl_error", "")),
+            }
+        )
+        logger.info(
+            "captive probe attempt %s/%s: status=%s reason=%s http_code=%s",
+            idx + 1,
+            len(schedule),
+            final_status,
+            final_reason,
+            checks.get("http_code", "000"),
+        )
+        # Portal-positive signal should be reported immediately.
+        if final_status in ("YES", "SUSPECTED"):
+            break
+        # Interface-level NA should not be retried.
+        if final_status == "NA" and final_reason in ("NO_IP", "LINK_DOWN", "NOT_FOUND", "INVALID_IFACE"):
+            break
+
+    return {
+        "status": final_status,
+        "reason": final_reason,
+        "checks": final_checks,
+        "attempts": attempts,
+    }
 
 
 def detect_firewall_tool() -> Optional[str]:
@@ -504,13 +730,54 @@ def update_state_json(wifi_state: str, **kwargs):
             except Exception as e:
                 logger.debug(f"Failed to read {fallback_path}: {e}")
         
-        # Ensure connection section exists
-        if "connection" not in data:
-            data["connection"] = {}
-        
-        # Update Wi-Fi connection state
-        data["connection"]["wifi_state"] = wifi_state
-        data["connection"].update(kwargs)
+        default_conn = {
+            "wifi_state": "DISCONNECTED",
+            "usb_nat": "OFF",
+            "internet_check": "N/A",
+            "ssid": "",
+            "ip_wlan": "",
+            "ip_usb": "",
+            "gateway_ip": "",
+            "bssid": "",
+            "captive_probe_iface": "",
+            "captive_probe_attempts": [],
+            "captive_portal": "NA",
+            "captive_portal_reason": "NOT_CHECKED",
+            "captive_checked_at": "",
+            "captive_portal_url": "",
+            "captive_probe_url": "",
+            "captive_effective_url": "",
+            "captive_location": "",
+        }
+        conn = {}
+        if isinstance(data.get("connection"), dict):
+            conn = data["connection"].copy()
+        merged = default_conn.copy()
+        merged.update(conn)
+        merged["wifi_state"] = wifi_state
+        merged.update(kwargs)
+
+        if wifi_state == "DISCONNECTED":
+            for key in ("ssid", "ip_wlan", "gateway_ip", "bssid"):
+                merged[key] = ""
+            merged["internet_check"] = "N/A"
+            merged["usb_nat"] = "OFF"
+            merged["captive_probe_attempts"] = []
+            merged["captive_portal_url"] = ""
+            merged["captive_probe_url"] = ""
+            merged["captive_effective_url"] = ""
+            merged["captive_location"] = ""
+
+        merged["captive_portal_detail"] = {
+            "status": merged.get("captive_portal", "NA"),
+            "reason": merged.get("captive_portal_reason", "NOT_CHECKED"),
+            "checked_at": merged.get("captive_checked_at", ""),
+            "portal_url": merged.get("captive_portal_url", ""),
+            "probe_url": merged.get("captive_probe_url", ""),
+            "effective_url": merged.get("captive_effective_url", ""),
+            "location": merged.get("captive_location", ""),
+        }
+        data["connection"] = merged
         
         # Write to BOTH paths to ensure synchronization
         # Primary path (if accessible)
@@ -552,7 +819,8 @@ def connect_wifi(ssid: str, security: str = "UNKNOWN", passphrase: Optional[str]
             "gateway_ip": str,
             "usb_nat": "ON|OFF",
             "internet_check": "OK|FAIL",
-            "captive_portal": "YES|NO|SUSPECTED",
+            "captive_portal": "YES|NO|SUSPECTED|NA",
+            "captive_portal_reason": str,
             "error": str (if failed)
         }
     """
@@ -606,10 +874,14 @@ def connect_wifi(ssid: str, security: str = "UNKNOWN", passphrase: Optional[str]
     ip_usb = get_interface_ip(usb_iface) if usb_iface else None
     gateway_ip = get_gateway_ip(wlan_iface)
     
-    # Step 8: Connectivity checks
-    checks = check_connectivity()
-    captive_portal = detect_captive_portal(checks)
-    internet_check = "OK" if checks["http_check"] == "OK" else "FAIL"
+    # Step 8: Connectivity checks (captive aware, with short retries)
+    captive_eval = evaluate_captive_portal_with_retries(wlan_iface, has_ip=bool(ip_wlan))
+    checks = captive_eval["checks"]
+    captive_attempts = captive_eval.get("attempts", [])
+    captive_portal = captive_eval["status"]
+    captive_reason = captive_eval["reason"]
+    captive_portal_url = _choose_portal_url_from_checks(checks, captive_portal)
+    internet_check = "OK" if captive_portal == "NO" else "FAIL"
     
     # Step 9: Apply NAT
     usb_nat = "OFF"
@@ -624,12 +896,22 @@ def connect_wifi(ssid: str, security: str = "UNKNOWN", passphrase: Optional[str]
     update_state_json(
         "CONNECTED",
         wifi_error=None,
+        ssid=ssid,
         ip_wlan=ip_wlan,
         ip_usb=ip_usb,
         gateway_ip=gateway_ip,
+        bssid="",
         usb_nat=usb_nat,
         internet_check=internet_check,
-        captive_portal=captive_portal
+        captive_probe_iface=wlan_iface,
+        captive_portal=captive_portal,
+        captive_portal_reason=captive_reason,
+        captive_checked_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        captive_probe_attempts=captive_attempts,
+        captive_portal_url=captive_portal_url,
+        captive_probe_url=str(checks.get("probe_url", "") or ""),
+        captive_effective_url=str(checks.get("effective_url", "") or ""),
+        captive_location=str(checks.get("location", "") or ""),
     )
     
     return {
@@ -641,6 +923,9 @@ def connect_wifi(ssid: str, security: str = "UNKNOWN", passphrase: Optional[str]
         "usb_nat": usb_nat,
         "internet_check": internet_check,
         "captive_portal": captive_portal,
+        "captive_portal_reason": captive_reason,
+        "checks": checks,
+        "captive_probe_attempts": captive_attempts,
         "ts": time.time()
     }
 

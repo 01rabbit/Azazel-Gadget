@@ -148,7 +148,9 @@ def _captive_portal() -> Optional[bool]:
                     return False
                 try:
                     code = int(parts[1])
-                    return True if 300 <= code < 400 else True
+                    if 300 <= code < 400:
+                        return True
+                    return None
                 except Exception:
                     return None
         return None

@@ -22,7 +22,7 @@ sudo ./install.sh --resume
 ### オプション機能を含める
 
 ```bash
-sudo ./install.sh --with-webui --with-canary --with-ntfy
+sudo ./install.sh --with-webui --with-canary --with-ntfy --with-portal-viewer
 ```
 
 ---
@@ -77,6 +77,7 @@ sudo ./install.sh [OPTIONS]
 | `--with-epd` | Waveshare E-Paper（デフォルト有効） |
 | `--with-webui` | Web UI ダッシュボード（HTTPS/Caddy 含む） |
 | `--with-ntfy` | ntfy.sh push notification |
+| `--with-portal-viewer` | noVNC ベースの Captive Portal Viewer（ポート 6080） |
 | `--all` | すべて有効化 |
 | `--dry-run` | プレビューのみ（変更なし） |
 | `--resume` | 再起動後の再開 |

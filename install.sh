@@ -26,6 +26,7 @@ WITH_CANARY=0
 WITH_EPD=1  # デフォルトで E-Paper 有効
 WITH_WEBUI=0
 WITH_NTFY=0
+WITH_PORTAL_VIEWER=0
 DRY_RUN=0
 RESUME=0
 AUTO_REBOOT=0
@@ -47,7 +48,8 @@ Azazel-Zero Unified Installer
   --with-epd          Waveshare E-Paper (デフォルト有効)
   --with-webui        Web UI ダッシュボードをインストール（HTTPS/Caddy 含む）
   --with-ntfy         ntfy サーバ (TCP/8081) と通知連携をインストール
-  --all               --with-canary --with-epd --with-webui --with-ntfy を有効化
+  --with-portal-viewer  Captive Portal 操作用 noVNC ビューアをインストール
+  --all               --with-canary --with-epd --with-webui --with-ntfy --with-portal-viewer を有効化
   --dry-run           プレビュー（変更を加えない）
   --resume            前回の中断から再開（再起動後用）
   --auto-reboot       Stage 20 後に必要なら自動再起動
@@ -83,7 +85,8 @@ while [[ $# -gt 0 ]]; do
         --with-epd)     WITH_EPD=1; shift ;;
         --with-webui)   WITH_WEBUI=1; shift ;;
         --with-ntfy)    WITH_NTFY=1; shift ;;
-        --all)          WITH_CANARY=1; WITH_EPD=1; WITH_WEBUI=1; WITH_NTFY=1; shift ;;
+        --with-portal-viewer) WITH_PORTAL_VIEWER=1; shift ;;
+        --all)          WITH_CANARY=1; WITH_EPD=1; WITH_WEBUI=1; WITH_NTFY=1; WITH_PORTAL_VIEWER=1; shift ;;
         --dry-run)      DRY_RUN=1; shift ;;
         --resume)       RESUME=1; shift ;;
         --auto-reboot)  AUTO_REBOOT=1; shift ;;
@@ -103,7 +106,7 @@ if [[ ! -f "$INSTALLER_ROOT/_lib.sh" ]]; then
 fi
 
 # 環境変数をエクスポート
-export WITH_CANARY WITH_EPD WITH_WEBUI WITH_NTFY DRY_RUN RESUME AUTO_REBOOT DEBUG
+export WITH_CANARY WITH_EPD WITH_WEBUI WITH_NTFY WITH_PORTAL_VIEWER DRY_RUN RESUME AUTO_REBOOT DEBUG
 export INSTALLER_ROOT PROJECT_ROOT
 
 # ライブラリをロード
@@ -122,6 +125,7 @@ main() {
     echo "  E-Paper:     $([[ $WITH_EPD -eq 1 ]] && echo "有効" || echo "無効")"
     echo "  Web UI:      $([[ $WITH_WEBUI -eq 1 ]] && echo "有効" || echo "無効")"
     echo "  ntfy:        $([[ $WITH_NTFY -eq 1 ]] && echo "有効" || echo "無効")"
+    echo "  PortalView:  $([[ $WITH_PORTAL_VIEWER -eq 1 ]] && echo "有効" || echo "無効")"
     echo "  Dry-Run:     $([[ $DRY_RUN -eq 1 ]] && echo "有効" || echo "無効")"
     echo "  Resume:      $([[ $RESUME -eq 1 ]] && echo "有効" || echo "無効")"
     echo "  Auto-reboot: $([[ $AUTO_REBOOT -eq 1 ]] && echo "有効" || echo "無効")"

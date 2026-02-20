@@ -15,7 +15,7 @@ import sys
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from azazel_zero.sensors.wifi_safety import evaluate_wifi_safety
 from azazel_zero.tactics_engine import ConfigHash, DecisionLogger
@@ -35,6 +35,16 @@ from .web_api import add_history_event
 
 # Global lock for status_ctx to ensure thread-safe access
 _status_ctx_lock = threading.Lock()
+EXCLUDED_IFACE_PREFIXES = (
+    "lo",
+    "docker",
+    "veth",
+    "br",
+    "tun",
+    "tap",
+    "wg",
+    "virbr",
+)
 
 
 class StatusHandler(BaseHTTPRequestHandler):
@@ -147,10 +157,17 @@ class FirstMinuteController:
         self.state_machine = FirstMinuteStateMachine(cfg.state_machine)
         self.current_stage: Stage = Stage.INIT
         self.last_probe: Optional[ProbeOutcome] = None
-        initial_upstream = str(cfg.interfaces.get("upstream", "wlan0") or "wlan0")
-        if initial_upstream.lower() == "auto":
-            initial_upstream = "wlan0"
+        self.cfg.interfaces.setdefault("upstream", "auto")
+        self.cfg.interfaces.setdefault("captive_probe", "auto")
+        initial_upstream = self._detect_best_upstream()
+        if not initial_upstream:
+            initial_upstream = str(self.cfg.interfaces.get("upstream", "") or "").strip()
+        if not initial_upstream or initial_upstream.lower() == "auto":
+            initial_upstream = "lo"
+        if initial_upstream:
             cfg.interfaces["upstream"] = initial_upstream
+        self._resolved_captive_probe_iface = ""
+        self._resolved_captive_probe_reason = "NOT_FOUND"
         self.nft = NftManager(
             cfg.nft_template_path,
             initial_upstream,
@@ -186,6 +203,7 @@ class FirstMinuteController:
             "last_decision_id": self.last_decision_id,
             "start_time": self._start_time,
             "upstream_if": initial_upstream,
+            "captive_probe_iface": "",
         }
         # Manual action flags to force and maintain state
         self.forced_contain_until: float = 0.0  # Timestamp until which to maintain temporary CONTAIN
@@ -210,6 +228,7 @@ class FirstMinuteController:
         self.web_server: Optional[object] = None
         self.processes: Dict[str, subprocess.Popen] = {}
         self._last_dnsmasq_restart: float = 0.0
+        self._legacy_dnsmasq_warned = False
         self.last_console = 0.0
         self.snapshot_path = cfg.runtime_dir / "ui_snapshot.json"
         self.snapshot_path.parent.mkdir(parents=True, exist_ok=True)
@@ -219,6 +238,10 @@ class FirstMinuteController:
         self.epd_last_fp: Optional[tuple] = None
         # Track signal strength separately to skip updates when only signal changes
         self.epd_last_signal_bucket: Optional[str] = None
+        # Failed update retry guards (avoid immediate re-run of same EPD payload).
+        self.epd_last_failed_fp: Optional[tuple] = None
+        self.epd_retry_after = 0.0
+        self.epd_fail_count = 0
         self._eve_offset = 0
         self._eve_inode: Optional[int] = None
         self._eve_partial = ""
@@ -229,6 +252,21 @@ class FirstMinuteController:
             self.epd_min_interval = float(os.environ.get("AZAZEL_EPD_MIN_INTERVAL", "30"))
         except ValueError:
             self.epd_min_interval = 8.0
+        try:
+            # 3色パネル向けに長めの既定値（秒）
+            self.epd_timeout_sec = float(os.environ.get("AZAZEL_EPD_TIMEOUT", "120"))
+        except ValueError:
+            self.epd_timeout_sec = 120.0
+        try:
+            self.epd_fail_backoff_base_sec = float(
+                os.environ.get("AZAZEL_EPD_FAIL_BACKOFF_BASE", str(max(30.0, self.epd_min_interval)))
+            )
+        except ValueError:
+            self.epd_fail_backoff_base_sec = max(30.0, self.epd_min_interval)
+        try:
+            self.epd_fail_backoff_max_sec = float(os.environ.get("AZAZEL_EPD_FAIL_BACKOFF_MAX", "300"))
+        except ValueError:
+            self.epd_fail_backoff_max_sec = 300.0
         self.epd_enabled = os.environ.get("AZAZEL_EPD", "1").strip().lower() not in ("0", "false", "no", "off")
         self.health_last_update = 0.0
         self.health_last_fp: Optional[tuple] = None
@@ -268,36 +306,116 @@ class FirstMinuteController:
     def _is_wireless_iface(self, iface: str) -> bool:
         return bool(iface) and Path(f"/sys/class/net/{iface}/wireless").exists()
 
+    def _iface_excluded(self, iface: str) -> bool:
+        if not iface:
+            return True
+        for prefix in EXCLUDED_IFACE_PREFIXES:
+            if iface == prefix or iface.startswith(prefix):
+                return True
+        return False
+
     def _default_routes(self) -> list[Dict[str, object]]:
         routes: list[Dict[str, object]] = []
         try:
-            out = subprocess.check_output(["ip", "-4", "route", "show", "default"], text=True, timeout=2)
+            out = subprocess.check_output(["ip", "-j", "-4", "route", "show", "default"], text=True, timeout=2)
+            raw = json.loads(out) or []
         except Exception:
             return routes
-        for line in out.splitlines():
-            parts = line.split()
-            if "dev" not in parts:
+        for entry in raw:
+            dev = str(entry.get("dev") or "")
+            if not dev:
                 continue
-            dev_idx = parts.index("dev")
-            if dev_idx + 1 >= len(parts):
-                continue
-            dev = parts[dev_idx + 1]
-            via = ""
-            metric = 0
-            if "via" in parts:
-                via_idx = parts.index("via")
-                if via_idx + 1 < len(parts):
-                    via = parts[via_idx + 1]
-            if "metric" in parts:
-                metric_idx = parts.index("metric")
-                if metric_idx + 1 < len(parts):
-                    try:
-                        metric = int(parts[metric_idx + 1])
-                    except ValueError:
-                        metric = 0
-            routes.append({"dev": dev, "via": via, "metric": metric, "line": line.strip()})
-        routes.sort(key=lambda item: int(item.get("metric", 0)))
+            try:
+                metric = int(entry.get("metric", 0) or 0)
+            except (TypeError, ValueError):
+                metric = 0
+            routes.append(
+                {
+                    "dev": dev,
+                    "via": str(entry.get("gateway") or ""),
+                    "metric": metric,
+                    "line": str(entry),
+                }
+            )
+        routes.sort(key=lambda item: (int(item.get("metric", 0)), str(item.get("dev", ""))))
         return routes
+
+    def _collect_iface_inventory(self, exclude: Optional[set[str]] = None) -> Dict[str, Dict[str, Any]]:
+        exclude = exclude or set()
+        inventory: Dict[str, Dict[str, Any]] = {}
+        try:
+            link_raw = subprocess.check_output(["ip", "-j", "link"], text=True, timeout=2)
+            link_data = json.loads(link_raw) or []
+        except Exception:
+            link_data = []
+        try:
+            addr_raw = subprocess.check_output(["ip", "-j", "-4", "addr"], text=True, timeout=2)
+            addr_data = json.loads(addr_raw) or []
+        except Exception:
+            addr_data = []
+
+        addr_map: Dict[str, list[str]] = {}
+        for entry in addr_data:
+            ifname = str(entry.get("ifname") or "")
+            if not ifname:
+                continue
+            addrs: list[str] = []
+            for info in entry.get("addr_info", []) or []:
+                if info.get("family") != "inet":
+                    continue
+                if info.get("scope") == "host":
+                    continue
+                local = str(info.get("local") or "")
+                if local:
+                    addrs.append(local)
+            addr_map[ifname] = addrs
+
+        default_routes = self._default_routes()
+        route_by_dev: Dict[str, int] = {}
+        for route in default_routes:
+            dev = str(route.get("dev") or "")
+            if not dev:
+                continue
+            metric = int(route.get("metric", 0) or 0)
+            if dev not in route_by_dev or metric < route_by_dev[dev]:
+                route_by_dev[dev] = metric
+
+        for entry in link_data:
+            ifname = str(entry.get("ifname") or "")
+            if not ifname or ifname in exclude or self._iface_excluded(ifname):
+                continue
+            operstate = str(entry.get("operstate") or "").upper()
+            is_up = operstate == "UP"
+            ips = addr_map.get(ifname, [])
+            has_ipv4 = bool(ips)
+            is_wireless = self._is_wireless_iface(ifname)
+            has_default_route = ifname in route_by_dev
+            inventory[ifname] = {
+                "is_up": is_up,
+                "has_ipv4": has_ipv4,
+                "ipv4": ips[0] if ips else "",
+                "has_default_route": has_default_route,
+                "default_metric": route_by_dev.get(ifname, 10**9),
+                "is_wireless": is_wireless,
+            }
+        return inventory
+
+    def _sort_any_iface(self, iface: str, meta: Dict[str, Any]) -> tuple:
+        return (int(meta.get("default_metric", 10**9)), iface)
+
+    def _sort_wireless_iface(self, iface: str) -> tuple:
+        return (0 if iface.startswith("wlan") else 1, iface)
+
+    def _na_reason(self, inventory: Dict[str, Dict[str, Any]]) -> str:
+        if not inventory:
+            return "NOT_FOUND"
+        has_up = any(bool(m.get("is_up")) for m in inventory.values())
+        has_ip_ready = any(bool(m.get("is_up")) and bool(m.get("has_ipv4")) for m in inventory.values())
+        if has_ip_ready:
+            return "NOT_FOUND"
+        if has_up:
+            return "NO_IP"
+        return "LINK_DOWN"
 
     def _default_gateway_for_iface(self, iface: str) -> str:
         for route in self._default_routes():
@@ -306,37 +424,170 @@ class FirstMinuteController:
         return ""
 
     def _detect_best_upstream(self) -> str:
-        downstream = self.cfg.interfaces.get("downstream", "usb0")
+        downstream = str(self.cfg.interfaces.get("downstream", "usb0") or "usb0")
         configured = str(self.cfg.interfaces.get("upstream", "") or "").strip()
         auto_mode = configured.lower() in ("", "auto")
+        inventory = self._collect_iface_inventory(exclude={downstream})
 
-        # Respect explicit upstream settings unless unavailable.
-        if not auto_mode:
-            if configured not in ("", "lo", downstream) and self._iface_exists(configured):
-                if self._get_interface_ip(configured) != "-":
-                    return configured
+        if not auto_mode and configured in inventory:
+            meta = inventory.get(configured, {})
+            if bool(meta.get("is_up")) and bool(meta.get("has_ipv4")):
+                return configured
 
-        for route in self._default_routes():
-            dev = str(route.get("dev") or "")
-            if dev in ("", "lo", downstream):
-                continue
-            if not self._iface_exists(dev):
-                continue
-            if self._get_interface_ip(dev) == "-":
-                continue
-            return dev
+        route_ready: list[tuple[str, Dict[str, Any]]] = []
+        for iface, meta in inventory.items():
+            if bool(meta.get("is_up")) and bool(meta.get("has_ipv4")) and bool(meta.get("has_default_route")):
+                route_ready.append((iface, meta))
+        if route_ready:
+            # In auto mode, prefer wireless uplink when both wired/wireless routes exist.
+            wireless_route_ready = [(iface, meta) for iface, meta in route_ready if bool(meta.get("is_wireless"))]
+            if wireless_route_ready:
+                wireless_route_ready.sort(
+                    key=lambda item: (
+                        self._sort_wireless_iface(item[0]),
+                        int(item[1].get("default_metric", 10**9)),
+                        item[0],
+                    )
+                )
+                return wireless_route_ready[0][0]
+            route_ready.sort(key=lambda item: self._sort_any_iface(item[0], item[1]))
+            return route_ready[0][0]
 
-        if not auto_mode and configured not in ("", downstream) and self._iface_exists(configured):
+        if not auto_mode and configured in inventory:
             return configured
 
-        for candidate in ("wlan0", "eth0"):
-            if candidate != downstream and self._iface_exists(candidate):
-                return candidate
+        ip_ready: list[tuple[str, Dict[str, Any]]] = []
+        for iface, meta in inventory.items():
+            if bool(meta.get("is_up")) and bool(meta.get("has_ipv4")):
+                ip_ready.append((iface, meta))
+        if ip_ready:
+            ip_ready.sort(key=lambda item: self._sort_any_iface(item[0], item[1]))
+            return ip_ready[0][0]
 
-        return configured or "wlan0"
+        if not auto_mode and configured and self._iface_exists(configured):
+            return configured
+
+        if inventory:
+            return sorted(inventory.keys())[0]
+
+        if configured and configured.lower() != "auto":
+            return configured
+        return ""
+
+    def resolve_captive_probe_iface(self) -> Dict[str, str]:
+        configured = str(self.cfg.interfaces.get("captive_probe", "auto") or "auto").strip()
+        upstream = str(self.cfg.interfaces.get("upstream", "") or "").strip()
+        downstream = str(self.cfg.interfaces.get("downstream", "usb0") or "usb0")
+        policy_raw = str(getattr(self.cfg, "captive_probe_policy", "wifi_prefer") or "wifi_prefer").strip().lower()
+        policy = policy_raw if policy_raw in ("wifi_prefer", "upstream_same", "any") else "wifi_prefer"
+        inventory = self._collect_iface_inventory(exclude={downstream})
+        source = "config" if configured.lower() not in ("", "auto") else "auto"
+
+        if source == "config":
+            meta = inventory.get(configured)
+            if meta and bool(meta.get("is_up")) and bool(meta.get("has_ipv4")):
+                return {"iface": configured, "reason": "OK", "src": source, "policy": policy}
+            if not meta:
+                return {"iface": "", "reason": "NOT_FOUND", "src": source, "policy": policy}
+            return {
+                "iface": "",
+                "reason": "LINK_DOWN" if not bool(meta.get("is_up")) else "NO_IP",
+                "src": source,
+                "policy": policy,
+            }
+
+        candidates: list[tuple[str, Dict[str, Any]]] = []
+        if policy == "upstream_same":
+            meta = inventory.get(upstream)
+            if meta and bool(meta.get("is_up")) and bool(meta.get("has_ipv4")):
+                return {"iface": upstream, "reason": "OK", "src": source, "policy": policy}
+            if not meta:
+                return {"iface": "", "reason": "NOT_FOUND", "src": source, "policy": policy}
+            return {
+                "iface": "",
+                "reason": "LINK_DOWN" if not bool(meta.get("is_up")) else "NO_IP",
+                "src": source,
+                "policy": policy,
+            }
+
+        if policy == "wifi_prefer":
+            for iface, meta in inventory.items():
+                if bool(meta.get("is_wireless")) and bool(meta.get("is_up")) and bool(meta.get("has_ipv4")):
+                    candidates.append((iface, meta))
+            if candidates:
+                candidates.sort(key=lambda item: self._sort_wireless_iface(item[0]))
+                return {"iface": candidates[0][0], "reason": "OK", "src": source, "policy": policy}
+
+            fallback_route: list[tuple[str, Dict[str, Any]]] = []
+            for iface, meta in inventory.items():
+                if bool(meta.get("is_up")) and bool(meta.get("has_ipv4")) and bool(meta.get("has_default_route")):
+                    fallback_route.append((iface, meta))
+            if fallback_route:
+                fallback_route.sort(key=lambda item: self._sort_any_iface(item[0], item[1]))
+                selected = fallback_route[0][0]
+                return {
+                    "iface": selected,
+                    "reason": f"fallback_to_{selected}",
+                    "src": source,
+                    "policy": policy,
+                }
+
+            fallback_up_ip: list[tuple[str, Dict[str, Any]]] = []
+            for iface, meta in inventory.items():
+                if bool(meta.get("is_up")) and bool(meta.get("has_ipv4")):
+                    fallback_up_ip.append((iface, meta))
+            if fallback_up_ip:
+                fallback_up_ip.sort(key=lambda item: self._sort_any_iface(item[0], item[1]))
+                selected = fallback_up_ip[0][0]
+                return {
+                    "iface": selected,
+                    "reason": f"fallback_to_{selected}",
+                    "src": source,
+                    "policy": policy,
+                }
+            return {"iface": "", "reason": self._na_reason(inventory), "src": source, "policy": policy}
+
+        for iface, meta in inventory.items():
+            if bool(meta.get("is_up")) and bool(meta.get("has_ipv4")) and bool(meta.get("has_default_route")):
+                candidates.append((iface, meta))
+        if candidates:
+            candidates.sort(key=lambda item: self._sort_any_iface(item[0], item[1]))
+            return {"iface": candidates[0][0], "reason": "OK", "src": source, "policy": policy}
+        candidates = []
+        for iface, meta in inventory.items():
+            if bool(meta.get("is_up")) and bool(meta.get("has_ipv4")):
+                candidates.append((iface, meta))
+        if candidates:
+            candidates.sort(key=lambda item: self._sort_any_iface(item[0], item[1]))
+            return {"iface": candidates[0][0], "reason": "OK", "src": source, "policy": policy}
+        return {"iface": "", "reason": self._na_reason(inventory), "src": source, "policy": policy}
+
+    def _refresh_captive_probe_iface(self) -> Dict[str, str]:
+        resolved = self.resolve_captive_probe_iface()
+        iface = resolved.get("iface", "")
+        reason = resolved.get("reason", "NOT_FOUND")
+        policy = resolved.get("policy", "wifi_prefer")
+        source = resolved.get("src", "auto")
+
+        prev_iface = getattr(self, "_resolved_captive_probe_iface", "")
+        prev_reason = getattr(self, "_resolved_captive_probe_reason", "")
+        changed = (iface != prev_iface) or (reason != prev_reason)
+
+        self._resolved_captive_probe_iface = iface
+        self._resolved_captive_probe_reason = reason
+        if changed:
+            if iface:
+                self.logger.info("captive_probe_iface resolved: %s (policy=%s, src=%s)", iface, policy, source)
+            else:
+                self.logger.info("skip captive probe: reason=%s", reason)
+
+        if hasattr(self, "status_ctx_lock"):
+            with self.status_ctx_lock:
+                self.status_ctx["captive_probe_iface"] = iface or ""
+        return resolved
 
     def _rebuild_network_managers(self) -> None:
-        upstream = self.cfg.interfaces.get("upstream", "wlan0")
+        upstream = self.cfg.interfaces.get("upstream", "")
         downstream = self.cfg.interfaces["downstream"]
         self.nft = NftManager(
             self.cfg.nft_template_path,
@@ -382,6 +633,8 @@ class FirstMinuteController:
         if self.no_dns_start or not self.cfg.dnsmasq.get("enable", True):
             self.logger.info("dnsmasq start skipped (--no-dns-start or disabled in config)")
             return
+
+        self._stop_conflicting_dnsmasq_service()
 
         existing = self.processes.get("dnsmasq")
         if existing and existing.poll() is None:
@@ -463,6 +716,42 @@ class FirstMinuteController:
         except Exception as e:
             self.logger.error(f"Failed to start dnsmasq: {e}")
 
+    def _stop_conflicting_dnsmasq_service(self) -> None:
+        # Avoid port conflicts with the distro-managed dnsmasq.service.
+        if self.dry_run or not shutil.which("systemctl"):
+            return
+
+        try:
+            active = subprocess.run(
+                ["systemctl", "is-active", "--quiet", "dnsmasq.service"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            ).returncode == 0
+            if not active:
+                return
+
+            if not self._legacy_dnsmasq_warned:
+                self.logger.warning(
+                    "dnsmasq.service is active; stopping/disabling it to avoid first-minute DNS/DHCP conflicts"
+                )
+                self._legacy_dnsmasq_warned = True
+
+            subprocess.run(
+                ["systemctl", "stop", "dnsmasq.service"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+            subprocess.run(
+                ["systemctl", "disable", "dnsmasq.service"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+        except Exception as exc:
+            self.logger.debug("failed to stop conflicting dnsmasq.service: %s", exc)
+
     def ensure_dnsmasq_running(self) -> None:
         if self.dry_run or self.no_dns_start or not self.cfg.dnsmasq.get("enable", True):
             return
@@ -509,6 +798,137 @@ class FirstMinuteController:
         thread.start()
         self.logger.info(f"Status API started on {host}:{port}")
 
+    def _default_connection_state(self) -> Dict[str, object]:
+        return {
+            "wifi_state": "DISCONNECTED",
+            "usb_nat": "OFF",
+            "internet_check": "N/A",
+            "ssid": "",
+            "ip_wlan": "",
+            "gateway_ip": "",
+            "bssid": "",
+            "captive_probe_iface": self._resolved_captive_probe_iface or "",
+            "captive_portal": "NA",
+            "captive_portal_reason": self._resolved_captive_probe_reason if not self._resolved_captive_probe_iface else "NOT_CHECKED",
+            "captive_checked_at": "",
+            "captive_portal_url": "",
+            "captive_probe_url": "",
+            "captive_effective_url": "",
+            "captive_location": "",
+            "captive_portal_detail": {
+                "status": "NA",
+                "reason": self._resolved_captive_probe_reason if not self._resolved_captive_probe_iface else "NOT_CHECKED",
+                "checked_at": "",
+                "portal_url": "",
+                "probe_url": "",
+                "effective_url": "",
+                "location": "",
+            },
+        }
+
+    @staticmethod
+    def _normalize_http_url(candidate: object) -> str:
+        text = str(candidate or "").strip()
+        if not text or any(ch in text for ch in ("\r", "\n")):
+            return ""
+        parsed = urlparse(text)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            return ""
+        return text
+
+    def _choose_portal_url(self, status: str, detail: Dict[str, object]) -> str:
+        if str(status or "").upper() not in {"YES", "SUSPECTED"}:
+            return ""
+        for key in ("location", "effective_url", "url"):
+            normalized = self._normalize_http_url(detail.get(key, ""))
+            if normalized:
+                return normalized
+        return ""
+
+    @staticmethod
+    def _derive_internet_check(wifi_state: object, captive_status: object, current: object) -> str:
+        """Derive Internet status from latest captive-portal result."""
+        wifi = str(wifi_state or "").upper()
+        captive = str(captive_status or "").upper()
+        prev = str(current or "").upper()
+
+        if wifi == "DISCONNECTED":
+            return "N/A"
+        if wifi != "CONNECTED":
+            return prev if prev else "UNKNOWN"
+        if captive == "NO":
+            return "OK"
+        if captive in {"YES", "SUSPECTED"}:
+            return "FAIL"
+        return prev if prev else "UNKNOWN"
+
+    def _normalize_connection_state(self, raw: Optional[Dict[str, object]]) -> Dict[str, object]:
+        normalized = self._default_connection_state()
+        if isinstance(raw, dict):
+            normalized.update(raw)
+
+        wifi_state = str(normalized.get("wifi_state", "DISCONNECTED") or "DISCONNECTED")
+        normalized["wifi_state"] = wifi_state
+        if wifi_state == "DISCONNECTED":
+            for key in ("ssid", "ip_wlan", "gateway_ip", "bssid"):
+                normalized[key] = ""
+            normalized["usb_nat"] = "OFF"
+            if not normalized.get("internet_check"):
+                normalized["internet_check"] = "N/A"
+            normalized["captive_portal_url"] = ""
+            normalized["captive_probe_url"] = ""
+            normalized["captive_effective_url"] = ""
+            normalized["captive_location"] = ""
+
+        if not normalized.get("captive_probe_iface"):
+            normalized["captive_probe_iface"] = self._resolved_captive_probe_iface or ""
+
+        if self.last_probe:
+            normalized["captive_probe_iface"] = self.last_probe.captive_iface or str(normalized.get("captive_probe_iface") or "")
+            normalized["captive_portal"] = self.last_probe.captive_status
+            normalized["captive_portal_reason"] = self.last_probe.captive_reason
+            normalized["captive_checked_at"] = self.last_probe.captive_checked_at
+            captive_detail = self.last_probe.details.get("captive", {}) if isinstance(self.last_probe.details, dict) else {}
+            if isinstance(captive_detail, dict):
+                normalized["captive_probe_url"] = str(captive_detail.get("url", "") or "")
+                normalized["captive_effective_url"] = str(captive_detail.get("effective_url", "") or "")
+                normalized["captive_location"] = str(captive_detail.get("location", "") or "")
+                portal_url = self._choose_portal_url(self.last_probe.captive_status, captive_detail)
+                if portal_url:
+                    normalized["captive_portal_url"] = portal_url
+
+        if not normalized.get("captive_portal"):
+            normalized["captive_portal"] = "NA"
+        if not normalized.get("captive_portal_reason"):
+            normalized["captive_portal_reason"] = self._resolved_captive_probe_reason or "NOT_CHECKED"
+        if not normalized.get("captive_checked_at"):
+            normalized["captive_checked_at"] = ""
+        if not normalized.get("captive_portal_url"):
+            normalized["captive_portal_url"] = ""
+        if not normalized.get("captive_probe_url"):
+            normalized["captive_probe_url"] = ""
+        if not normalized.get("captive_effective_url"):
+            normalized["captive_effective_url"] = ""
+        if not normalized.get("captive_location"):
+            normalized["captive_location"] = ""
+
+        normalized["internet_check"] = self._derive_internet_check(
+            normalized.get("wifi_state", ""),
+            normalized.get("captive_portal", "NA"),
+            normalized.get("internet_check", ""),
+        )
+
+        normalized["captive_portal_detail"] = {
+            "status": normalized.get("captive_portal", "NA"),
+            "reason": normalized.get("captive_portal_reason", "NOT_CHECKED"),
+            "checked_at": normalized.get("captive_checked_at", ""),
+            "portal_url": normalized.get("captive_portal_url", ""),
+            "probe_url": normalized.get("captive_probe_url", ""),
+            "effective_url": normalized.get("captive_effective_url", ""),
+            "location": normalized.get("captive_location", ""),
+        }
+        return normalized
+
     def write_snapshot(self, summary: Dict[str, object], link_meta: Dict[str, object], skip_sync: bool = False) -> None:
         """Write a UI snapshot JSON for the TUI to consume."""
         # Step 1: Update persistent connection state from any available file
@@ -527,10 +947,10 @@ class FirstMinuteController:
         # Gather Wi-Fi channel scan data
         channel_congestion = "unknown"
         channel_ap_count = 0
-        if self._is_wireless_iface(self.cfg.interfaces.get("upstream", "wlan0")):
+        if self._is_wireless_iface(self.cfg.interfaces.get("upstream", "")):
             try:
                 from azazel_zero.sensors.wifi_channel_scanner import scan_wifi_channels
-                scan_result = scan_wifi_channels(self.cfg.interfaces.get("upstream", "wlan0"))
+                scan_result = scan_wifi_channels(self.cfg.interfaces.get("upstream", ""))
                 if scan_result.get("scan_success"):
                     channel_congestion = scan_result.get("congestion_level", "unknown")
                     channel_ap_count = scan_result.get("ap_count", 0)
@@ -573,7 +993,7 @@ class FirstMinuteController:
             "gateway_ip": (link or {}).get("gateway") or self.cfg.interfaces.get("gateway_ip", "-"),
             "down_if": self.cfg.interfaces.get("downstream", "usb0"),
             "down_ip": self.cfg.interfaces.get("mgmt_ip", "-"),
-            "up_if": self.cfg.interfaces.get("upstream", "wlan0"),
+            "up_if": self.cfg.interfaces.get("upstream", ""),
             "user_state": self._user_state_from_stage(self.current_stage),
             "recommendation": summary.get("reason", "Checking"),
             "reasons": [summary.get("reason", "")] if summary.get("reason") else [],
@@ -608,12 +1028,7 @@ class FirstMinuteController:
             "suricata_critical": suricata_critical,
             "suricata_warning": suricata_warning,
             # Default connection section (will be overwritten with persisted state below)
-            "connection": {
-                "wifi_state": "DISCONNECTED",
-                "usb_nat": "OFF",
-                "internet_check": "UNKNOWN",
-                "captive_portal": "UNKNOWN"
-            }
+            "connection": self._default_connection_state(),
         }
         try:
             self.snapshot_path.parent.mkdir(parents=True, exist_ok=True)
@@ -647,15 +1062,15 @@ class FirstMinuteController:
             # Merge persistent connection state (from memory or file)
             # This ensures Wi-Fi connection data is never lost across snapshot writes
             if self.persistent_connection_state:
-                snap["connection"] = self.persistent_connection_state.copy()
+                snap["connection"] = self._normalize_connection_state(self.persistent_connection_state.copy())
                 self.logger.debug(f"snapshot: using persistent connection state (from memory): {self.persistent_connection_state}")
             elif existing_connection:
-                snap["connection"] = existing_connection.copy()
-                # Also update memory for next iteration
-                self.persistent_connection_state = existing_connection.copy()
+                snap["connection"] = self._normalize_connection_state(existing_connection.copy())
                 self.logger.debug(f"snapshot: loaded connection state from file: {existing_connection}")
             else:
+                snap["connection"] = self._normalize_connection_state(None)
                 self.logger.debug("snapshot: no connection state available")
+            self.persistent_connection_state = snap["connection"].copy()
             
             # Write snapshot to BOTH paths to ensure synchronization
             # Primary path: /run/azazel-zero/ui_snapshot.json
@@ -794,7 +1209,7 @@ class FirstMinuteController:
             return
 
         link = link_meta.get("link", {}) if link_meta else {}
-        up_ip = self._get_interface_ip(self.cfg.interfaces.get("upstream", "wlan0"))
+        up_ip = self._get_interface_ip(self.cfg.interfaces.get("upstream", ""))
         reason = str(summary.get("reason", "") or "")
 
         epd_script = Path(__file__).resolve().parents[2] / "azazel_epd.py"
@@ -875,18 +1290,56 @@ class FirstMinuteController:
             self.logger.debug(f"EPD: Unknown stage {stage}, skipping update")
             return
 
+        if not force and fp == self.epd_last_failed_fp and now < self.epd_retry_after:
+            remaining = self.epd_retry_after - now
+            self.logger.debug(f"EPD: Skipping retry - previous attempt failed, retry in {remaining:.1f}s")
+            return
+
         # Execute EPD update command
         self.logger.info(f"EPD: Updating display - mode={mode}, stage={stage.value}, forced={force}")
         try:
-            subprocess.run(cmd, timeout=30, check=False)
+            result = subprocess.run(cmd, timeout=self.epd_timeout_sec, check=False)
+            if result.returncode != 0:
+                raise subprocess.CalledProcessError(result.returncode, cmd)
             self.epd_last_update = now
             self.epd_last_fp = fp
             # 信号強度も更新 (NORMAL状態時)
             if stage in (Stage.INIT, Stage.PROBE, Stage.NORMAL):
                 self.epd_last_signal_bucket = signal_bucket
+            # Clear failure retry guards on success.
+            self.epd_last_failed_fp = None
+            self.epd_retry_after = 0.0
+            self.epd_fail_count = 0
             self.logger.info(f"EPD: Update successful")
+        except subprocess.TimeoutExpired:
+            self.epd_fail_count += 1
+            backoff = min(
+                self.epd_fail_backoff_max_sec,
+                self.epd_fail_backoff_base_sec * (2 ** max(0, self.epd_fail_count - 1)),
+            )
+            backoff = max(backoff, self.epd_min_interval)
+            self.epd_last_failed_fp = fp
+            self.epd_retry_after = now + backoff
+            # Treat failed attempt as a recent try to avoid hot-loop retries.
+            self.epd_last_update = now
+            self.logger.warning(
+                f"EPD: Update timed out after {self.epd_timeout_sec:.0f}s; "
+                f"retrying in {backoff:.0f}s (fail_count={self.epd_fail_count})"
+            )
+            return
         except Exception as e:
-            self.logger.warning(f"EPD: Update failed: {e}")
+            self.epd_fail_count += 1
+            backoff = min(
+                self.epd_fail_backoff_max_sec,
+                self.epd_fail_backoff_base_sec * (2 ** max(0, self.epd_fail_count - 1)),
+            )
+            backoff = max(backoff, self.epd_min_interval)
+            self.epd_last_failed_fp = fp
+            self.epd_retry_after = now + backoff
+            self.epd_last_update = now
+            self.logger.warning(
+                f"EPD: Update failed: {e}; retrying in {backoff:.0f}s (fail_count={self.epd_fail_count})"
+            )
             return
 
     def _maybe_write_wifi_health(self, link_meta: Dict[str, object]) -> None:
@@ -906,7 +1359,7 @@ class FirstMinuteController:
         status = "ok" if risk <= 2 else "warn"
         summary = {
             "ts": now,
-            "iface": self.cfg.interfaces.get("upstream", "wlan0"),
+            "iface": self.cfg.interfaces.get("upstream", ""),
             "link": link,
             "tags": tags,
             "risk": risk,
@@ -941,7 +1394,7 @@ class FirstMinuteController:
         if tags:
             lines.append("• wifi tags: " + ",".join(tags))
         if self.last_probe:
-            lines.append(f"• captive portal: {'yes' if self.last_probe.captive_portal else 'no'}")
+            lines.append(f"• captive portal: {self.last_probe.captive_status} ({self.last_probe.captive_reason})")
             lines.append(f"• tls mismatch: {'yes' if self.last_probe.tls_mismatch else 'no'}")
             lines.append(f"• dns mismatch: {self.last_probe.dns_mismatch}")
         if not lines:
@@ -1044,6 +1497,7 @@ class FirstMinuteController:
         if not self.dry_run:
             self.apply_sysctl()
             self._refresh_upstream_iface(force=True, reapply_rules=False)
+            self._refresh_captive_probe_iface()
             self.nft.apply_base()
             # まずは開放状態 (NORMAL) から開始し、脅威を検知した場合のみ縮退させる
             self.apply_stage(Stage.NORMAL)
@@ -1051,6 +1505,8 @@ class FirstMinuteController:
             self.start_dns_observer()
             self.start_status_api()
             self.seed_probe_destinations()
+        else:
+            self._refresh_captive_probe_iface()
         self.run_loop()
 
     def stop(self) -> None:
@@ -1400,7 +1856,7 @@ class FirstMinuteController:
             
             if force_disconnect:
                 self.logger.info("ACTION: Disconnect requested via API")
-                iface = self.cfg.interfaces.get("upstream", "wlan0")
+                iface = self.cfg.interfaces.get("upstream", "")
                 disconnect_ok = False
                 reason = f"Wi-Fi disconnected ({iface})"
                 errors = []
@@ -1429,12 +1885,16 @@ class FirstMinuteController:
 
                 if disconnect_ok:
                     self.state_machine.ctx.last_reason = "disconnect"
-                    self.persistent_connection_state = {
+                    self.persistent_connection_state = self._normalize_connection_state(
+                        {
                         "wifi_state": "DISCONNECTED",
                         "usb_nat": "OFF",
-                        "internet_check": "UNKNOWN",
-                        "captive_portal": "UNKNOWN",
-                    }
+                        "internet_check": "N/A",
+                        "captive_portal": "NA",
+                        "captive_portal_reason": "MANUAL_DISCONNECT",
+                        "captive_probe_iface": "",
+                        }
+                    )
                 else:
                     reason = "Disconnect failed: " + ("; ".join(errors) if errors else "unknown error")
                 with self.status_ctx_lock:
@@ -1468,6 +1928,42 @@ class FirstMinuteController:
                 continue  # Skip the rest of the loop
             
             link_state, link_meta, new_link = self.poll_wifi()
+            resolved_probe = self._refresh_captive_probe_iface()
+            captive_probe_iface = str(resolved_probe.get("iface", "") or "")
+            captive_skip_reason = str(resolved_probe.get("reason", "NOT_FOUND") or "NOT_FOUND")
+            if not captive_probe_iface:
+                checked_at = datetime.utcnow().isoformat() + "Z"
+                self.last_probe = ProbeOutcome(
+                    captive_portal=False,
+                    captive_status="NA",
+                    captive_reason=captive_skip_reason,
+                    captive_checked_at=checked_at,
+                    captive_iface="",
+                    tls_mismatch=False,
+                    dns_mismatch=0,
+                    route_anomaly=False,
+                    details={
+                        "captive": {
+                            "status": "NA",
+                            "reason": captive_skip_reason,
+                            "checked_at": checked_at,
+                            "iface": "",
+                        },
+                        "tls": [],
+                        "dns": {},
+                        "route": {"upstream": self.cfg.interfaces.get("upstream", "")},
+                    },
+                )
+                current_conn = self.persistent_connection_state.copy() if self.persistent_connection_state else {}
+                current_conn.update(
+                    {
+                        "captive_probe_iface": "",
+                        "captive_portal": "NA",
+                        "captive_portal_reason": captive_skip_reason,
+                        "captive_checked_at": checked_at,
+                    }
+                )
+                self.persistent_connection_state = self._normalize_connection_state(current_conn)
             signals: Dict[str, object] = {"link_up": link_state}
             if link_meta.get("bssid"):
                 signals["bssid"] = link_meta["bssid"]
@@ -1477,8 +1973,22 @@ class FirstMinuteController:
             if new_link:
                 probe_done = False
 
-            if link_state and not probe_done:
-                self.last_probe = run_all(self.cfg.probes, self.cfg.interfaces["upstream"])
+            if link_state and captive_probe_iface and not probe_done:
+                self.last_probe = run_all(
+                    self.cfg.probes,
+                    self.cfg.interfaces["upstream"],
+                    captive_iface=captive_probe_iface,
+                )
+                current_conn = self.persistent_connection_state.copy() if self.persistent_connection_state else {}
+                current_conn.update(
+                    {
+                        "captive_probe_iface": self.last_probe.captive_iface or captive_probe_iface,
+                        "captive_portal": self.last_probe.captive_status,
+                        "captive_portal_reason": self.last_probe.captive_reason,
+                        "captive_checked_at": self.last_probe.captive_checked_at,
+                    }
+                )
+                self.persistent_connection_state = self._normalize_connection_state(current_conn)
                 signals["probe_fail"] = self.last_probe.captive_portal or self.last_probe.tls_mismatch
                 signals["probe_fail_count"] = 1 + self.last_probe.dns_mismatch
                 signals["dns_mismatch"] = self.last_probe.dns_mismatch
@@ -1607,7 +2117,10 @@ class FirstMinuteController:
                     "last_decision_id": self.last_decision_id,
                     # Web UI 用の追加データ
                     "start_time": getattr(self, "_start_time", time.time()),
-                    "upstream_if": self.cfg.interfaces.get("upstream", "wlan0"),
+                    "upstream_if": self.cfg.interfaces.get("upstream", ""),
+                    "captive_probe_iface": self._resolved_captive_probe_iface,
+                    "captive_portal_status": self.last_probe.captive_status if self.last_probe else "NA",
+                    "captive_portal_reason": self.last_probe.captive_reason if self.last_probe else self._resolved_captive_probe_reason,
                     "downstream_if": self.cfg.interfaces.get("downstream", "usb0"),
                     "mgmt_ip": self.cfg.interfaces.get("mgmt_ip", "10.55.0.10"),
                     "ssid": (link or {}).get("ssid", "-"),
@@ -1697,7 +2210,7 @@ class FirstMinuteController:
         probe = self.last_probe
         probe_lines = []
         if probe:
-            probe_lines.append(f"Captive: {'YES' if probe.captive_portal else 'no'}")
+            probe_lines.append(f"Captive: {probe.captive_status}")
             probe_lines.append(f"TLS mismatch: {'YES' if probe.tls_mismatch else 'no'}")
             probe_lines.append(f"DNS mismatch: {probe.dns_mismatch}")
         tags = link_meta.get("wifi_tags", []) if link_meta else []

@@ -212,6 +212,12 @@ Shortest path:
 2. Open `https://10.55.0.10` (Web UI is served via HTTPS/Caddy)
 3. Scan Wi‑Fi → connect (save if needed)
 
+If you want captive portal operation from downstream devices, install portal viewer too:
+
+```bash
+sudo ./install.sh --with-webui --with-portal-viewer
+```
+
 Manual `nmcli` usage should be considered **last resort**.
 
 ```bash

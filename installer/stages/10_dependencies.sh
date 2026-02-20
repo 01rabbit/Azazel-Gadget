@@ -12,6 +12,7 @@ WITH_CANARY="${WITH_CANARY:-0}"
 WITH_EPD="${WITH_EPD:-0}"
 WITH_WEBUI="${WITH_WEBUI:-0}"
 WITH_NTFY="${WITH_NTFY:-0}"
+WITH_PORTAL_VIEWER="${WITH_PORTAL_VIEWER:-0}"
 
 main() {
     log_info "════════════════════════════════════════════"
@@ -99,6 +100,22 @@ main() {
         fi
     fi
     
+    # 8. オプション: ntfy
+    if [[ "$WITH_PORTAL_VIEWER" == "1" ]]; then
+        log_info "Captive Portal Viewer 依存をインストール..."
+        local portal_packages=(
+            novnc websockify x11vnc xvfb openbox
+        )
+        install_packages "${portal_packages[@]}"
+
+        if ! command -v chromium >/dev/null 2>&1 && ! command -v chromium-browser >/dev/null 2>&1; then
+            if ! install_package chromium; then
+                install_package chromium-browser || true
+            fi
+        fi
+        log_info "✓ Captive Portal Viewer 依存インストール完了"
+    fi
+
     # 8. オプション: ntfy
     if [[ "$WITH_NTFY" == "1" ]]; then
         log_info "ntfy サーバをインストール..."
