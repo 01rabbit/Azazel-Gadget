@@ -86,6 +86,22 @@ OUTIF=\${WAN_IF}
 EOF
     log_info "✓ 環境ファイル作成: /etc/default/azazel-zero"
 
+    # 4.2 zram-tools 設定（利用可能環境のみ）
+    if dpkg-query -W -f='${Status}' zram-tools 2>/dev/null | grep -q "install ok installed"; then
+        log_info "zram 設定を作成..."
+        cat > /etc/default/zramswap <<'EOF'
+# Azazel-Zero: Pi Zero 2 向け zram 設定
+# 低メモリ環境でOOM耐性を上げる
+ALGO=lz4
+PERCENT=50
+PRIORITY=100
+EOF
+        chmod 0644 /etc/default/zramswap
+        log_info "✓ zram 設定作成: /etc/default/zramswap"
+    else
+        log_info "zram-tools 未導入のため /etc/default/zramswap はスキップ"
+    fi
+
     # 4.5 Web UI HTTPS (Caddy) 設定
     if [[ "$WITH_WEBUI" == "1" ]]; then
         log_info "Caddy HTTPS 設定を配置..."

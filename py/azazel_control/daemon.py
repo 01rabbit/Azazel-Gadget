@@ -42,6 +42,8 @@ ACTION_SCRIPTS = {
     'stage_open': '/home/azazel/Azazel-Zero/py/azazel_control/scripts/stage_open.sh',
     'disconnect': '/home/azazel/Azazel-Zero/py/azazel_control/scripts/disconnect.sh',
     'details': '/home/azazel/Azazel-Zero/py/azazel_control/scripts/details.sh',
+    'shutdown': '/home/azazel/Azazel-Zero/py/azazel_control/scripts/shutdown.sh',
+    'reboot': '/home/azazel/Azazel-Zero/py/azazel_control/scripts/reboot.sh',
 }
 
 # Rate limiting
@@ -49,6 +51,8 @@ last_action_time = {}
 RATE_LIMITS = {
     'wifi_scan': 1.0,      # 1 second
     'wifi_connect': 3.0,   # 3 seconds
+    'shutdown': 10.0,      # Prevent accidental repeated shutdown requests
+    'reboot': 10.0,        # Prevent accidental repeated reboot requests
 }
 PORTAL_DEFAULT_START_URL = "http://neverssl.com"
 
@@ -402,6 +406,13 @@ def execute_action(action_name, params=None):
     # Handle Wi-Fi actions via Python modules
     if action_name in ["wifi_scan", "wifi_connect"]:
         return execute_wifi_action(action_name, params or {})
+
+    if action_name == "shutdown":
+        if not check_rate_limit("shutdown"):
+            return {"ok": False, "error": "Rate limit exceeded (1 req/10sec)", "ts": time.time()}
+    if action_name == "reboot":
+        if not check_rate_limit("reboot"):
+            return {"ok": False, "error": "Rate limit exceeded (1 req/10sec)", "ts": time.time()}
 
     if action_name == "portal_viewer_open":
         timeout_raw = (params or {}).get("timeout_sec", 15)

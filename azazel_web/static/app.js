@@ -395,6 +395,14 @@ async function executeAction(action) {
                 showDetailsModal(data);
                 return;
             }
+            if (action === 'shutdown') {
+                showToast('🛑 Shutdown requested. Device will power off in a few seconds.', 'success');
+                return;
+            }
+            if (action === 'reboot') {
+                showToast('♻️ Reboot requested. Device will restart in a few seconds.', 'success');
+                return;
+            }
             showToast(`✅ ${action} executed successfully`, 'success');
             // Immediately refresh state
             setTimeout(fetchState, 500);
@@ -405,6 +413,32 @@ async function executeAction(action) {
         console.error(`Action ${action} failed:`, e);
         showToast(`❌ ${action} failed: ${e.message}`, 'error');
     }
+}
+
+async function executeShutdown() {
+    const firstConfirm = window.confirm('⚠️ This will shut down Azazel-Zero now. Continue?');
+    if (!firstConfirm) return;
+
+    const typed = window.prompt('Type SHUTDOWN to confirm power off');
+    if (typed !== 'SHUTDOWN') {
+        showToast('ℹ️ Shutdown canceled', 'info');
+        return;
+    }
+
+    await executeAction('shutdown');
+}
+
+async function executeReboot() {
+    const firstConfirm = window.confirm('⚠️ This will reboot Azazel-Zero now. Continue?');
+    if (!firstConfirm) return;
+
+    const typed = window.prompt('Type REBOOT to confirm restart');
+    if (typed !== 'REBOOT') {
+        showToast('ℹ️ Reboot canceled', 'info');
+        return;
+    }
+
+    await executeAction('reboot');
 }
 
 // POST /api/action/<action>
@@ -952,7 +986,7 @@ async function connectWiFi() {
         const body = {
             ssid: ssid,
             security: security,
-            persist: true,
+            persist: security !== 'OPEN',
             saved: isSavedSelection
         };
         

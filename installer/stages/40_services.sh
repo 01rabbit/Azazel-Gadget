@@ -177,9 +177,6 @@ main() {
     if [[ "$WITH_NTFY" == "1" ]]; then
         primary_services+=("ntfy.service")
     fi
-    if [[ "$WITH_PORTAL_VIEWER" == "1" ]]; then
-        primary_services+=("azazel-portal-viewer.service")
-    fi
     
     for service in "${primary_services[@]}"; do
         log_info "  サービス: $service"
@@ -240,10 +237,23 @@ main() {
         }
     fi
     if [[ "$WITH_PORTAL_VIEWER" == "1" ]]; then
-        log_info "  • azazel-portal-viewer.service を再起動..."
-        systemctl restart azazel-portal-viewer.service >> "$LOG_FILE" 2>&1 || {
-            log_warn "⚠️  azazel-portal-viewer.service 起動失敗"
+        # Portal Viewer は重い（Chromium 常駐）ため、既定は手動起動専用にする。
+        log_info "  • azazel-portal-viewer.service を非常駐化（必要時のみ起動）..."
+        systemctl disable azazel-portal-viewer.service >> "$LOG_FILE" 2>&1 || true
+        systemctl stop azazel-portal-viewer.service >> "$LOG_FILE" 2>&1 || true
+    fi
+
+    # 8.5 zram swap（利用可能環境のみ）
+    if systemctl list-unit-files zramswap.service >/dev/null 2>&1; then
+        log_info "  • zramswap.service を有効化..."
+        systemctl enable zramswap.service >> "$LOG_FILE" 2>&1 || {
+            log_warn "⚠️  zramswap.service 有効化失敗"
         }
+        systemctl restart zramswap.service >> "$LOG_FILE" 2>&1 || {
+            log_warn "⚠️  zramswap.service 起動失敗"
+        }
+    else
+        log_info "zram (zramswap.service) は未導入または未対応（スキップ）"
     fi
     
     # 9. オプション: OpenCanary サービス

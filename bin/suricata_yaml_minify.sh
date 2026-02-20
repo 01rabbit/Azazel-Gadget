@@ -73,7 +73,8 @@ if grep -q '^[[:space:]]*rule-files:[[:space:]]*$' "$YAML"; then
   awk -v rf="$RULE_FILE" '
   BEGIN { inblock=0 }
   /^[[:space:]]*rule-files:[[:space:]]*$/ { print "rule-files:\n  - " rf; inblock=1; next }
-  /^[^[:space:]]/ { if (inblock) inblock=0 }
+  # End block only when a new top-level key starts (not a top-level list item).
+  /^[^[:space:]-]/ { if (inblock) inblock=0 }
   { if (!inblock) print $0 }
   ' "$YAML" > "${YAML}.tmp"
   mv "${YAML}.tmp" "$YAML"

@@ -58,7 +58,7 @@ WEBUI_CA_CERT_PATH = Path(
 # Allowed actions
 ALLOWED_ACTIONS = {
     "refresh", "reprobe", "contain", "release", "details", "stage_open", "disconnect",
-    "wifi_scan", "wifi_connect", "portal_viewer_open"  # Wi-Fi + portal viewer actions
+    "wifi_scan", "wifi_connect", "portal_viewer_open", "shutdown", "reboot"  # Wi-Fi + portal viewer actions
 }
 
 
@@ -1208,7 +1208,7 @@ def api_wifi_connect():
     security = data.get("security", "UNKNOWN")
     passphrase = data.get("passphrase")
     saved = bool(data.get("saved", False))
-    persist = data.get("persist", False)
+    persist = bool(data.get("persist", False))
     
     # Validation
     if not ssid:
@@ -1217,6 +1217,8 @@ def api_wifi_connect():
     # For OPEN networks, discard passphrase if present
     if security == "OPEN":
         passphrase = None
+        # OPEN AP profiles are always ephemeral to avoid stale remembered entries.
+        persist = False
     elif not passphrase and not saved:
         # Non-OPEN network requires passphrase unless already saved
         return jsonify({"ok": False, "error": "Passphrase required for protected network"}), 400
