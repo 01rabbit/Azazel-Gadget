@@ -374,16 +374,24 @@ def check_rate_limit(action: str) -> bool:
     last_action_time[action] = now
     return True
 
+def rate_limit_error(action: str, error_message: str) -> dict | None:
+    """Return a standard rate-limit error payload when throttled."""
+    if check_rate_limit(action):
+        return None
+    return {"ok": False, "error": error_message, "ts": time.time()}
+
 def execute_wifi_action(action_name: str, params: dict) -> dict:
     """Execute Wi-Fi-specific actions (Python modules)"""
     if action_name == "wifi_scan":
-        if not check_rate_limit("wifi_scan"):
-            return {"ok": False, "error": "Rate limit exceeded (1 req/sec)", "ts": time.time()}
+        limited = rate_limit_error("wifi_scan", "Rate limit exceeded (1 req/sec)")
+        if limited:
+            return limited
         return scan_wifi()
     
     elif action_name == "wifi_connect":
-        if not check_rate_limit("wifi_connect"):
-            return {"ok": False, "error": "Rate limit exceeded (1 req/3sec)", "ts": time.time()}
+        limited = rate_limit_error("wifi_connect", "Rate limit exceeded (1 req/3sec)")
+        if limited:
+            return limited
         
         # Extract parameters
         ssid = params.get("ssid")
@@ -407,12 +415,10 @@ def execute_action(action_name, params=None):
     if action_name in ["wifi_scan", "wifi_connect"]:
         return execute_wifi_action(action_name, params or {})
 
-    if action_name == "shutdown":
-        if not check_rate_limit("shutdown"):
-            return {"ok": False, "error": "Rate limit exceeded (1 req/10sec)", "ts": time.time()}
-    if action_name == "reboot":
-        if not check_rate_limit("reboot"):
-            return {"ok": False, "error": "Rate limit exceeded (1 req/10sec)", "ts": time.time()}
+    if action_name in ("shutdown", "reboot"):
+        limited = rate_limit_error(action_name, "Rate limit exceeded (1 req/10sec)")
+        if limited:
+            return limited
 
     if action_name == "portal_viewer_open":
         timeout_raw = (params or {}).get("timeout_sec", 15)

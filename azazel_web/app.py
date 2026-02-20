@@ -586,28 +586,88 @@ def read_state() -> Dict[str, Any]:
         }
 
 
+def _normalize_status_payload(payload: Dict[str, Any], action: str = "") -> Dict[str, Any]:
+    """Normalize Status API payload shape."""
+    if payload.get("status") == "ok" and "ok" not in payload:
+        payload["ok"] = True
+    if action and "action" not in payload:
+        payload["action"] = action
+    return payload
+
+
+def _status_api_json(
+    host: str,
+    path: str,
+    method: str = "GET",
+    timeout_sec: float = 2.0,
+    action: str = "",
+    empty_ok: bool = False,
+    empty_message: str = "",
+) -> Optional[Dict[str, Any]]:
+    """Call first-minute Status API and return normalized JSON payload if available."""
+    try:
+        cmd: List[str] = ["curl", "-s"]
+        if method.upper() == "POST":
+            cmd.extend(["-X", "POST"])
+        cmd.append(f"http://{host}:8082{path}")
+
+        result = subprocess.run(cmd, capture_output=True, timeout=timeout_sec)
+        if result.returncode != 0:
+            return None
+
+        response_text = result.stdout.decode("utf-8").strip()
+        if not response_text:
+            if not empty_ok:
+                return None
+            payload: Dict[str, Any] = {"ok": True}
+            if action:
+                payload["action"] = action
+            if empty_message:
+                payload["message"] = empty_message
+            return payload
+
+        payload = json.loads(response_text)
+        if not isinstance(payload, dict):
+            return None
+        return _normalize_status_payload(payload, action=action)
+    except Exception:
+        return None
+
+
+def _first_status_api_response(
+    path: str,
+    method: str = "GET",
+    action: str = "",
+    empty_ok: bool = False,
+    empty_message: str = "",
+) -> Optional[Dict[str, Any]]:
+    """Try Status API hosts in order and return first successful JSON payload."""
+    for host in STATUS_API_HOSTS:
+        payload = _status_api_json(
+            host=host,
+            path=path,
+            method=method,
+            action=action,
+            empty_ok=empty_ok,
+            empty_message=empty_message,
+        )
+        if payload is not None:
+            return payload
+    return None
+
+
 def execute_contain_action() -> Dict[str, Any]:
     """Execute contain action: activate CONTAIN stage via Status API"""
     try:
-        # Try to reach Status API on first-minute service
-        # Try both 127.0.0.1:8082 and 10.55.0.10:8082
-        for host in ["10.55.0.10", "127.0.0.1"]:
-            try:
-                result = subprocess.run(
-                    ["curl", "-s", "-X", "POST", f"http://{host}:8082/action/contain"],
-                    capture_output=True,
-                    timeout=2
-                )
-                if result.returncode == 0:
-                    response_text = result.stdout.decode("utf-8").strip()
-                    if response_text:
-                        payload = json.loads(response_text)
-                        if payload.get("status") == "ok" and "ok" not in payload:
-                            payload["ok"] = True
-                        return payload
-                    return {"ok": True, "action": "contain", "message": "Containment activated"}
-            except Exception:
-                continue
+        payload = _first_status_api_response(
+            path="/action/contain",
+            method="POST",
+            action="contain",
+            empty_ok=True,
+            empty_message="Containment activated",
+        )
+        if payload is not None:
+            return payload
         return {"ok": False, "action": "contain", "error": "Failed to reach Status API on any host"}
     except Exception as e:
         return {"ok": False, "action": "contain", "error": str(e)}
@@ -616,22 +676,14 @@ def execute_disconnect_action() -> Dict[str, Any]:
     """Execute disconnect action: disconnect downstream USB clients"""
     try:
         # Try to send to Status API first
-        for host in ["10.55.0.10", "127.0.0.1"]:
-            try:
-                result = subprocess.run(
-                    ["curl", "-s", "-X", "POST", f"http://{host}:8082/action/disconnect"],
-                    capture_output=True,
-                    timeout=2
-                )
-                if result.returncode == 0:
-                    response_text = result.stdout.decode("utf-8").strip()
-                    if response_text:
-                        payload = json.loads(response_text)
-                        if payload.get("status") == "ok" and "ok" not in payload:
-                            payload["ok"] = True
-                        return payload
-            except Exception:
-                continue
+        payload = _first_status_api_response(
+            path="/action/disconnect",
+            method="POST",
+            action="disconnect",
+            empty_ok=False,
+        )
+        if payload is not None:
+            return payload
         
         # Fallback: attempt to bring down upstream Wi-Fi interface
         iface = os.environ.get("AZAZEL_UP_IF", "wlan0")
@@ -654,43 +706,17 @@ def execute_disconnect_action() -> Dict[str, Any]:
 
 def _post_status_action(host: str, action: str) -> Optional[Dict[str, Any]]:
     """POST action to first-minute Status API and normalize response."""
-    try:
-        result = subprocess.run(
-            ["curl", "-s", "-X", "POST", f"http://{host}:8082/action/{action}"],
-            capture_output=True,
-            timeout=2,
-        )
-        if result.returncode != 0:
-            return None
-        response_text = result.stdout.decode("utf-8").strip()
-        if not response_text:
-            return {"ok": True, "action": action}
-        payload = json.loads(response_text)
-        if payload.get("status") == "ok" and "ok" not in payload:
-            payload["ok"] = True
-        return payload
-    except Exception:
-        return None
+    return _status_api_json(
+        host=host,
+        path=f"/action/{action}",
+        method="POST",
+        action=action,
+        empty_ok=True,
+    )
 
 def _read_status_state(host: str) -> Optional[Dict[str, Any]]:
     """GET current state from first-minute Status API."""
-    try:
-        result = subprocess.run(
-            ["curl", "-s", f"http://{host}:8082/"],
-            capture_output=True,
-            timeout=2,
-        )
-        if result.returncode != 0:
-            return None
-        response_text = result.stdout.decode("utf-8").strip()
-        if not response_text:
-            return None
-        payload = json.loads(response_text)
-        if isinstance(payload, dict):
-            return payload
-        return None
-    except Exception:
-        return None
+    return _status_api_json(host=host, path="/", method="GET", empty_ok=False)
 
 def execute_release_action() -> Dict[str, Any]:
     """Execute release action and verify that stage actually leaves CONTAIN."""
@@ -757,23 +783,15 @@ def execute_release_action() -> Dict[str, Any]:
 def execute_details_action() -> Dict[str, Any]:
     """Execute details action: get detailed threat analysis from Status API"""
     try:
-        for host in ["10.55.0.10", "127.0.0.1"]:
-            try:
-                result = subprocess.run(
-                    ["curl", "-s", f"http://{host}:8082/details"],
-                    capture_output=True,
-                    timeout=2,
-                )
-                if result.returncode == 0:
-                    response_text = result.stdout.decode("utf-8").strip()
-                    if response_text:
-                        payload = json.loads(response_text)
-                        if payload.get("status") == "ok" and "ok" not in payload:
-                            payload["ok"] = True
-                        return payload
-                    return {"ok": True, "action": "details", "message": "No details available"}
-            except Exception:
-                continue
+        payload = _first_status_api_response(
+            path="/details",
+            method="GET",
+            action="details",
+            empty_ok=True,
+            empty_message="No details available",
+        )
+        if payload is not None:
+            return payload
         return {"ok": False, "action": "details", "error": "Failed to reach Status API on any host"}
     except Exception as e:
         return {"ok": False, "action": "details", "error": str(e)}
@@ -781,26 +799,77 @@ def execute_details_action() -> Dict[str, Any]:
 def execute_stage_open_action() -> Dict[str, Any]:
     """Execute stage_open action: return to NORMAL stage via Status API"""
     try:
-        for host in ["10.55.0.10", "127.0.0.1"]:
-            try:
-                result = subprocess.run(
-                    ["curl", "-s", "-X", "POST", f"http://{host}:8082/action/stage_open"],
-                    capture_output=True,
-                    timeout=2,
-                )
-                if result.returncode == 0:
-                    response_text = result.stdout.decode("utf-8").strip()
-                    if response_text:
-                        payload = json.loads(response_text)
-                        if payload.get("status") == "ok" and "ok" not in payload:
-                            payload["ok"] = True
-                        return payload
-                    return {"ok": True, "action": "stage_open", "message": "Stage opened"}
-            except Exception:
-                continue
+        payload = _first_status_api_response(
+            path="/action/stage_open",
+            method="POST",
+            action="stage_open",
+            empty_ok=True,
+            empty_message="Stage opened",
+        )
+        if payload is not None:
+            return payload
         return {"ok": False, "action": "stage_open", "error": "Failed to reach Status API on any host"}
     except Exception as e:
         return {"ok": False, "action": "stage_open", "error": str(e)}
+
+
+def _send_control_command_socket(
+    action: str,
+    params: Optional[Dict[str, Any]] = None,
+    timeout_sec: float = 5.0,
+) -> Dict[str, Any]:
+    """Send command to Control Daemon via Unix socket."""
+    if not CONTROL_SOCKET.exists():
+        return {
+            "ok": False,
+            "action": action,
+            "error": "Control daemon not running",
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%S")
+        }
+
+    try:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(timeout_sec)
+        sock.connect(str(CONTROL_SOCKET))
+
+        command: Dict[str, Any] = {"action": action, "ts": time.time()}
+        if params is not None:
+            command["params"] = params
+
+        sock.sendall(json.dumps(command).encode("utf-8") + b"\n")
+
+        response = b""
+        while True:
+            chunk = sock.recv(4096)
+            if not chunk:
+                break
+            response += chunk
+            if b"\n" in chunk:
+                break
+        sock.close()
+
+        if response:
+            return json.loads(response.decode("utf-8"))
+        return {
+            "ok": False,
+            "action": action,
+            "error": "Empty response from daemon",
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%S")
+        }
+    except socket.timeout:
+        return {
+            "ok": False,
+            "action": action,
+            "error": "Daemon timeout",
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%S")
+        }
+    except Exception as e:
+        return {
+            "ok": False,
+            "action": action,
+            "error": str(e),
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%S")
+        }
 
 def send_control_command(action: str) -> Dict[str, Any]:
     """Send command to Control Daemon via Unix socket"""
@@ -812,73 +881,19 @@ def send_control_command(action: str) -> Dict[str, Any]:
             "ts": time.strftime("%Y-%m-%dT%H:%M:%S")
         }
     
-    # Handle contain and disconnect directly
-    if action == "contain":
-        return execute_contain_action()
-    if action == "release":
-        return execute_release_action()
-    if action == "disconnect":
-        return execute_disconnect_action()
-    if action == "details":
-        return execute_details_action()
-    if action == "stage_open":
-        return execute_stage_open_action()
+    direct_handlers = {
+        "contain": execute_contain_action,
+        "release": execute_release_action,
+        "disconnect": execute_disconnect_action,
+        "details": execute_details_action,
+        "stage_open": execute_stage_open_action,
+    }
+    handler = direct_handlers.get(action)
+    if handler is not None:
+        return handler()
     if action == "portal_viewer_open":
         return send_control_command_with_params("portal_viewer_open", {"timeout_sec": 15})
-    
-    if not CONTROL_SOCKET.exists():
-        return {
-            "ok": False,
-            "action": action,
-            "error": "Control daemon not running",
-            "ts": time.strftime("%Y-%m-%dT%H:%M:%S")
-        }
-    
-    try:
-        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        sock.settimeout(5.0)
-        sock.connect(str(CONTROL_SOCKET))
-        
-        # Send JSON command
-        command = json.dumps({"action": action, "ts": time.time()})
-        sock.sendall(command.encode("utf-8") + b"\n")
-        
-        # Receive response
-        response = b""
-        while True:
-            chunk = sock.recv(4096)
-            if not chunk:
-                break
-            response += chunk
-            if b"\n" in chunk:
-                break
-        
-        sock.close()
-        
-        if response:
-            return json.loads(response.decode("utf-8"))
-        else:
-            return {
-                "ok": False,
-                "action": action,
-                "error": "Empty response from daemon",
-                "ts": time.strftime("%Y-%m-%dT%H:%M:%S")
-            }
-    
-    except socket.timeout:
-        return {
-            "ok": False,
-            "action": action,
-            "error": "Daemon timeout",
-            "ts": time.strftime("%Y-%m-%dT%H:%M:%S")
-        }
-    except Exception as e:
-        return {
-            "ok": False,
-            "action": action,
-            "error": str(e),
-            "ts": time.strftime("%Y-%m-%dT%H:%M:%S")
-        }
+    return _send_control_command_socket(action=action, params=None, timeout_sec=5.0)
 
 
 def send_control_command_with_params(action: str, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -890,60 +905,7 @@ def send_control_command_with_params(action: str, params: Dict[str, Any]) -> Dic
             "error": "Unknown action",
             "ts": time.strftime("%Y-%m-%dT%H:%M:%S")
         }
-    
-    if not CONTROL_SOCKET.exists():
-        return {
-            "ok": False,
-            "action": action,
-            "error": "Control daemon not running",
-            "ts": time.strftime("%Y-%m-%dT%H:%M:%S")
-        }
-    
-    try:
-        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        sock.settimeout(30.0)  # Longer timeout for Wi-Fi operations
-        sock.connect(str(CONTROL_SOCKET))
-        
-        # Send JSON command with params
-        command = json.dumps({"action": action, "params": params, "ts": time.time()})
-        sock.sendall(command.encode("utf-8") + b"\n")
-        
-        # Receive response
-        response = b""
-        while True:
-            chunk = sock.recv(4096)
-            if not chunk:
-                break
-            response += chunk
-            if b"\n" in chunk:
-                break
-        
-        sock.close()
-        
-        if response:
-            return json.loads(response.decode("utf-8"))
-        else:
-            return {
-                "ok": False,
-                "action": action,
-                "error": "Empty response from daemon",
-                "ts": time.strftime("%Y-%m-%dT%H:%M:%S")
-            }
-    
-    except socket.timeout:
-        return {
-            "ok": False,
-            "action": action,
-            "error": "Daemon timeout",
-            "ts": time.strftime("%Y-%m-%dT%H:%M:%S")
-        }
-    except Exception as e:
-        return {
-            "ok": False,
-            "action": action,
-            "error": str(e),
-            "ts": time.strftime("%Y-%m-%dT%H:%M:%S")
-        }
+    return _send_control_command_socket(action=action, params=params, timeout_sec=30.0)
 
 
 # Web UI Routes
