@@ -125,8 +125,11 @@ def check_networkmanager(iface: str) -> bool:
         return False
 
 
-def get_saved_networks_nm() -> set:
-    """Get saved network SSIDs from NetworkManager"""
+def get_saved_networks_nm(include_open: bool = False) -> set:
+    """Get saved network SSIDs from NetworkManager.
+
+    By default, OPEN profiles are excluded because they are treated as ephemeral.
+    """
     try:
         result = subprocess.run(
             [
@@ -160,8 +163,26 @@ def get_saved_networks_nm() -> set:
                 continue
             ssid_line = (ssid_result.stdout or "").strip()
             ssid_value = ssid_line.splitlines()[0] if ssid_line else ""
-            if ssid_value:
+            if not ssid_value:
+                continue
+
+            if include_open:
                 saved.add(ssid_value)
+                continue
+
+            key_mgmt_result = subprocess.run(
+                ["nmcli", "-g", "802-11-wireless-security.key-mgmt", "con", "show", name],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            if key_mgmt_result.returncode != 0:
+                continue
+            key_mgmt_line = (key_mgmt_result.stdout or "").strip()
+            key_mgmt = key_mgmt_line.splitlines()[0].strip().lower() if key_mgmt_line else ""
+            if key_mgmt in {"", "--", "none", "(none)"}:
+                continue
+            saved.add(ssid_value)
         return saved
     except Exception as e:
         logger.warning(f"Failed to get saved networks from nmcli: {e}")

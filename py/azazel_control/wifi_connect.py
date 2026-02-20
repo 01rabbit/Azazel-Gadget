@@ -120,9 +120,12 @@ def connect_nm(iface: str, ssid: str, security: str, passphrase: Optional[str], 
     """Connect using NetworkManager/nmcli"""
     try:
         sec_flags = parse_security(security)
+        # OPEN AP profiles are always treated as ephemeral to avoid stale reconnection failures.
+        persist = bool(persist and not sec_flags["open"])
 
-        def find_nm_connection_for_ssid(target_ssid: str) -> Optional[str]:
-            """Find NM connection name by matching 802-11-wireless.ssid."""
+        def list_nm_connections_for_ssid(target_ssid: str) -> List[str]:
+            """List NM connection names matching 802-11-wireless.ssid."""
+            names: List[str] = []
             try:
                 result = subprocess.run(
                     [
@@ -138,7 +141,7 @@ def connect_nm(iface: str, ssid: str, security: str, passphrase: Optional[str], 
                     timeout=5,
                 )
                 if result.returncode != 0:
-                    return None
+                    return names
                 for line in result.stdout.splitlines():
                     parts = line.split(":", 1)
                     if len(parts) != 2:
@@ -161,10 +164,22 @@ def connect_nm(iface: str, ssid: str, security: str, passphrase: Optional[str], 
                     else:
                         ssid_value = ssid_line
                     if ssid_value == target_ssid:
-                        return name
-                return None
+                        names.append(name)
+                return names
             except Exception:
-                return None
+                return names
+
+        def find_nm_connection_for_ssid(target_ssid: str) -> Optional[str]:
+            names = list_nm_connections_for_ssid(target_ssid)
+            return names[0] if names else None
+
+        def delete_nm_connections_for_ssid(target_ssid: str) -> None:
+            for con_name in list_nm_connections_for_ssid(target_ssid):
+                subprocess.run(
+                    ["nmcli", "con", "delete", con_name],
+                    capture_output=True,
+                    timeout=5,
+                )
 
         def get_nm_key_mgmt(connection_name: str) -> str:
             """Return current key-mgmt for an existing NM connection (empty if unset)."""
@@ -206,6 +221,33 @@ def connect_nm(iface: str, ssid: str, security: str, passphrase: Optional[str], 
             if sec_flags["wpa2"] or sec_flags["wpa"]:
                 return "wpa-psk"
             return None
+
+        if sec_flags["open"]:
+            # OPEN reconnects are fragile when stale profiles remain; force a clean connect path.
+            delete_nm_connections_for_ssid(ssid)
+            cmd = ["nmcli", "dev", "wifi", "connect", ssid, "ifname", iface]
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            if result.returncode != 0:
+                # One recovery retry after best-effort cleanup.
+                delete_nm_connections_for_ssid(ssid)
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=20,
+                )
+            if result.returncode != 0:
+                return {"ok": False, "error": result.stderr.strip() or "Connection failed"}
+
+            # Keep OPEN profiles ephemeral; do not leave remembered AP entries behind.
+            delete_nm_connections_for_ssid(ssid)
+            logger.info("Wi-Fi connected via nmcli (OPEN ephemeral)")
+            return {"ok": True}
 
         # Check if connection exists for this SSID
         con_name = find_nm_connection_for_ssid(ssid)
@@ -275,12 +317,7 @@ def connect_nm(iface: str, ssid: str, security: str, passphrase: Optional[str], 
             
             # If not persisting, delete the connection after use (best-effort)
             if not persist and result.returncode == 0:
-                con_name = find_nm_connection_for_ssid(ssid) or ssid
-                subprocess.run(
-                    ["nmcli", "con", "delete", con_name],
-                    capture_output=True,
-                    timeout=5
-                )
+                delete_nm_connections_for_ssid(ssid)
         
         if result.returncode != 0:
             return {"ok": False, "error": result.stderr.strip() or "Connection failed"}

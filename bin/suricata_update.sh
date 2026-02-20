@@ -129,9 +129,98 @@ apply_pi_zero_tuning() {
 
   # Pin AF_PACKET to a single thread and capture only OpenCanary-facing traffic.
   sed -i '/^af-packet:/,/^af-xdp:/ {
-    s|^[[:space:]]*#\?threads:[[:space:]].*|    threads: '"${AF_PACKET_THREADS}"'|
-    s|^[[:space:]]*#\?bpf-filter:[[:space:]].*|    bpf-filter: "'"${AF_PACKET_BPF}"'"|
+    s|^[[:space:]]*#\?threads:[[:space:]].*|  threads: '"${AF_PACKET_THREADS}"'|
+    s|^[[:space:]]*#\?bpf-filter:[[:space:]].*|  bpf-filter: "'"${AF_PACKET_BPF}"'"|
   }' "$yaml"
+}
+
+ensure_yaml_header() {
+  local yaml="/etc/suricata/suricata.yaml"
+  [[ -f "$yaml" ]] || return 0
+
+  local first second
+  first="$(sed -n '1p' "$yaml" 2>/dev/null || true)"
+  second="$(sed -n '2p' "$yaml" 2>/dev/null || true)"
+  if [[ "$first" == "%YAML 1.1" && "$second" == "---" ]]; then
+    return 0
+  fi
+
+  local tmp
+  tmp="$(mktemp)"
+  {
+    echo "%YAML 1.1"
+    echo "---"
+    cat "$yaml"
+  } > "$tmp"
+  mv "$tmp" "$yaml"
+}
+
+apply_eve_alert_only() {
+  local yaml="/etc/suricata/suricata.yaml"
+  [[ -f "$yaml" ]] || return 0
+
+  if ! command -v python3 >/dev/null 2>&1; then
+    warn "python3 not found; skipping eve-log alert-only tuning"
+    return 0
+  fi
+
+  if ! python3 - "$yaml" <<'PY'
+import sys
+from pathlib import Path
+
+try:
+    import yaml  # type: ignore
+except Exception:
+    sys.exit(2)
+
+path = Path(sys.argv[1])
+data = yaml.safe_load(path.read_text(encoding="utf-8"))
+if not isinstance(data, dict):
+    sys.exit(0)
+
+outputs = data.get("outputs")
+if not isinstance(outputs, list):
+    sys.exit(0)
+
+changed = False
+for item in outputs:
+    if not isinstance(item, dict) or "eve-log" not in item:
+        continue
+    eve = item.get("eve-log")
+    if not isinstance(eve, dict):
+        continue
+
+    eve["enabled"] = True
+    eve["community-id"] = False
+    eve["pcap-file"] = False
+    eve["payload"] = False
+    eve["packet"] = False
+    eve["metadata"] = False
+    eve["http-body"] = False
+    eve["http-body-printable"] = False
+    eve["payload-printable"] = False
+    eve["types"] = [{"alert": {"metadata": False, "payload": False, "packet": False}}]
+
+    xff = eve.get("xff")
+    if isinstance(xff, dict):
+        xff["enabled"] = False
+    else:
+        eve["xff"] = {"enabled": False}
+
+    changed = True
+
+if changed:
+    dumped = yaml.safe_dump(data, sort_keys=False, default_flow_style=False, allow_unicode=True)
+    # Suricata requires YAML header lines at the top of suricata.yaml.
+    output_text = "%YAML 1.1\n---\n" + dumped.lstrip()
+    path.write_text(output_text, encoding="utf-8")
+PY
+  then
+    warn "eve-log alert-only tuning skipped (PyYAML missing or parse failed)"
+    return 0
+  fi
+
+  log "Applied eve-log alert-only tuning"
 }
 
 build_rules() {
@@ -195,6 +284,9 @@ log "Applying Suricata profile=${PROFILE}, wan-if=${WAN_IF}"
 build_rules
 apply_yaml_minify
 apply_pi_zero_tuning
+ensure_yaml_header
+apply_eve_alert_only
+ensure_yaml_header
 normalize_default_iface
 
 if [[ "$DO_TEST" -eq 1 ]]; then

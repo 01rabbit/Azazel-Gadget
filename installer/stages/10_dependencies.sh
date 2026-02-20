@@ -34,7 +34,7 @@ main() {
         suricata suricata-update
         # その他
         git curl jq tmux ca-certificates wireless-tools iw network-manager
-        util-linux
+        util-linux zram-tools
     )
     
     install_packages "${base_packages[@]}"

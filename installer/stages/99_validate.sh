@@ -138,6 +138,25 @@ main() {
     log_info ""
     log_info "【3】ネットワークポート確認:"
 
+    # first-minute 再起動直後は dnsmasq の起動が遅れることがあるため短時間待機
+    local dhcp_listen=false
+    local dns_listen=false
+    for _ in $(seq 1 20); do
+        if pgrep -af "dnsmasq.*dnsmasq-first_minute.conf" >/dev/null 2>&1; then
+            fm_dnsmasq_detected=true
+        fi
+        if ss -ulnH 2>/dev/null | grep -Eq ':67[[:space:]]'; then
+            dhcp_listen=true
+        fi
+        if ss -ulnH 2>/dev/null | grep -Eq ':53[[:space:]]'; then
+            dns_listen=true
+        fi
+        if [[ "$fm_dnsmasq_detected" == "true" && "$dhcp_listen" == "true" && "$dns_listen" == "true" ]]; then
+            break
+        fi
+        sleep 0.5
+    done
+
     local mgmt_ip="10.55.0.10"
     if [[ -f /etc/default/azazel-zero ]]; then
         # shellcheck disable=SC1091
@@ -156,14 +175,14 @@ main() {
         all_passed=false
     fi
 
-    if ss -ulnH 2>/dev/null | grep -Eq ':67[[:space:]]'; then
+    if [[ "$dhcp_listen" == "true" ]]; then
         log_info "  ✓ DHCP (UDP/67) がリッスン中"
     else
         log_error "  ✗ DHCP (UDP/67) がリッスンしていません"
         all_passed=false
     fi
 
-    if ss -ulnH 2>/dev/null | grep -Eq ':53[[:space:]]'; then
+    if [[ "$dns_listen" == "true" ]]; then
         log_info "  ✓ DNS (UDP/53) がリッスン中"
     else
         log_error "  ✗ DNS (UDP/53) がリッスンしていません"
