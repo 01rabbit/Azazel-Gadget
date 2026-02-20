@@ -12,6 +12,34 @@ WITH_NTFY="${WITH_NTFY:-0}"
 WITH_CANARY="${WITH_CANARY:-0}"
 WITH_PORTAL_VIEWER="${WITH_PORTAL_VIEWER:-0}"
 
+configure_sshd_usb_only() {
+    local mgmt_ip="10.55.0.10"
+    if [[ -f /etc/default/azazel-zero ]]; then
+        # shellcheck disable=SC1091
+        source /etc/default/azazel-zero
+        if [[ -n "${MGMT_IP:-}" ]]; then
+            mgmt_ip="$MGMT_IP"
+        fi
+    fi
+
+    local dropin_dir="/etc/ssh/sshd_config.d"
+    local dropin_file="${dropin_dir}/90-azazel-usb0-only.conf"
+    mkdir -p "$dropin_dir"
+    cat > "$dropin_file" <<EOF
+# Azazel: keep admin SSH on usb0 only; free uplink TCP/22 for OpenCanary.
+ListenAddress 127.0.0.1
+ListenAddress ${mgmt_ip}
+EOF
+
+    if sshd -t >> "$LOG_FILE" 2>&1; then
+        systemctl restart ssh.service >> "$LOG_FILE" 2>&1 || \
+            log_warn "⚠️  ssh.service 再起動失敗（設定は保存済み）"
+        log_info "✓ SSH 待受を管理IP限定に設定: ${mgmt_ip}"
+    else
+        log_warn "⚠️  sshd 設定検証失敗。${dropin_file} を確認してください"
+    fi
+}
+
 main() {
     log_info "════════════════════════════════════════════"
     log_info "Stage 40: Systemd Services Registration"
@@ -179,6 +207,9 @@ main() {
     
     # 9. オプション: OpenCanary サービス
     if [[ "$WITH_CANARY" == "1" ]]; then
+        log_info "  • SSH 待受を管理ネットワークに限定..."
+        configure_sshd_usb_only
+
         if systemctl list-unit-files | grep -q "opencanary.service"; then
             log_info "  • opencanary.service を有効化..."
             systemctl enable opencanary.service >> "$LOG_FILE" 2>&1 || {

@@ -176,12 +176,14 @@ main() {
 
     if systemctl is-enabled --quiet azazel-portal-viewer.service 2>/dev/null; then
         local portal_port="6080"
+        local portal_bind=""
         if [[ -f /etc/azazel-zero/portal-viewer.env ]]; then
             local parsed_port
             parsed_port="$(awk -F= '/^[[:space:]]*PORTAL_NOVNC_PORT[[:space:]]*=/{gsub(/[[:space:]"\047]/, "", $2); print $2; exit}' /etc/azazel-zero/portal-viewer.env || true)"
             if [[ -n "$parsed_port" ]]; then
                 portal_port="$parsed_port"
             fi
+            portal_bind="$(awk -F= '/^[[:space:]]*PORTAL_NOVNC_BIND[[:space:]]*=/{gsub(/[[:space:]"\047]/, "", $2); print $2; exit}' /etc/azazel-zero/portal-viewer.env || true)"
         fi
 
         if check_service "azazel-portal-viewer.service"; then
@@ -194,6 +196,21 @@ main() {
         else
             log_error "  ✗ azazel-portal-viewer.service が起動していません"
             all_passed=false
+        fi
+
+        if [[ -n "$portal_bind" ]] && [[ "$portal_bind" != "10.55.0.10" ]]; then
+            log_warn "  ⚠️  PORTAL_NOVNC_BIND=${portal_bind}（推奨: 10.55.0.10）"
+        else
+            log_info "  ✓ noVNC bind 制限を確認 (${portal_bind:-10.55.0.10})"
+        fi
+    fi
+
+    # 3.1 OpenCanary 利用時の SSH 公開面チェック
+    if [[ "$WITH_CANARY" == "1" ]]; then
+        if ss -ltnH 2>/dev/null | awk '{print $4}' | grep -Eq '(^|[[:space:]])0\.0\.0\.0:22$|(^|[[:space:]])\[::\]:22$'; then
+            log_warn "  ⚠️  sshd が全IF(22/tcp)で待受しています（OpenCanary 22と競合する可能性）"
+        else
+            log_info "  ✓ sshd の 22/tcp 待受は全IF公開されていません"
         fi
     fi
     
