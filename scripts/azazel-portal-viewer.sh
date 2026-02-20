@@ -43,6 +43,7 @@ PORTAL_RUNTIME_DIR="${PORTAL_RUNTIME_DIR:-/run/azazel-portal-viewer}"
 PORTAL_DISPLAY="${PORTAL_DISPLAY:-:99}"
 PORTAL_SCREEN="${PORTAL_SCREEN:-1366x768x24}"
 PORTAL_START_URL="${PORTAL_START_URL:-http://neverssl.com}"
+PORTAL_START_URL_FILE="${PORTAL_START_URL_FILE:-/run/azazel/portal-viewer-start-url}"
 PORTAL_VNC_PORT="${PORTAL_VNC_PORT:-5900}"
 # Default to the usb0 management IP so noVNC is not exposed on uplink networks.
 PORTAL_NOVNC_BIND="${PORTAL_NOVNC_BIND:-10.55.0.10}"
@@ -58,6 +59,11 @@ require_cmd websockify
 
 BROWSER_BIN="$(resolve_browser)"
 
+is_http_url() {
+    local url="$1"
+    [[ "$url" =~ ^https?://[^[:space:]]+$ ]]
+}
+
 if [[ ! -d "$PORTAL_NOVNC_WEB" ]]; then
     log "ERROR: noVNC web root not found: $PORTAL_NOVNC_WEB"
     exit 1
@@ -67,6 +73,17 @@ mkdir -p "$PORTAL_RUNTIME_DIR"
 chmod 0700 "$PORTAL_RUNTIME_DIR" || true
 mkdir -p "$PORTAL_BROWSER_PROFILE"
 chmod 0700 "$PORTAL_BROWSER_PROFILE" || true
+
+if [[ -f "$PORTAL_START_URL_FILE" ]]; then
+    runtime_start_url="$(head -n 1 "$PORTAL_START_URL_FILE" | tr -d '\r')"
+    if is_http_url "$runtime_start_url"; then
+        PORTAL_START_URL="$runtime_start_url"
+        log "Using runtime portal start URL: $PORTAL_START_URL"
+    else
+        log "Ignoring invalid runtime portal start URL in $PORTAL_START_URL_FILE"
+    fi
+    rm -f "$PORTAL_START_URL_FILE" || true
+fi
 
 XVFB_PID=""
 OPENBOX_PID=""

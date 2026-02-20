@@ -4,6 +4,7 @@
 const AUTH_TOKEN = localStorage.getItem('azazel_token') || 'azazel-default-token-change-me';
 let updateInterval;
 let portalViewerOpening = false;
+let portalReprobeRunning = false;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -112,6 +113,8 @@ function updateUI(state) {
     const portalViewer = state.portal_viewer || {};
     const portalViewerRow = document.getElementById('portalViewerRow');
     const portalViewerBtn = document.getElementById('portalViewerBtn');
+    const portalReprobeRow = document.getElementById('portalReprobeRow');
+    const portalReprobeBtn = document.getElementById('portalReprobeBtn');
     const shouldShowPortalButton = (
         (captivePortal === 'SUSPECTED' || captivePortal === 'YES') &&
         portalViewer.url
@@ -140,6 +143,22 @@ function updateUI(state) {
             portalViewerBtn.disabled = false;
             portalViewerBtn.textContent = '🧭 Open Portal';
             portalViewerBtn.title = '';
+        }
+    }
+    if (portalReprobeRow && portalReprobeBtn) {
+        if (captivePortal === 'SUSPECTED' || captivePortal === 'YES') {
+            portalReprobeRow.style.display = 'flex';
+            if (!portalReprobeRunning) {
+                portalReprobeBtn.disabled = false;
+                portalReprobeBtn.textContent = '✅ Auth Done & Re-Probe';
+                portalReprobeBtn.title = 'Run Re-Probe after portal login';
+            }
+        } else {
+            portalReprobeRow.style.display = 'none';
+            portalReprobeRunning = false;
+            portalReprobeBtn.disabled = false;
+            portalReprobeBtn.textContent = '✅ Auth Done & Re-Probe';
+            portalReprobeBtn.title = '';
         }
     }
     
@@ -304,6 +323,33 @@ async function openPortalViewer() {
         portalViewerOpening = false;
         btn.disabled = false;
         setTimeout(fetchState, 400);
+    }
+}
+
+async function completePortalAuthReprobe() {
+    const btn = document.getElementById('portalReprobeBtn');
+    if (!btn || portalReprobeRunning) {
+        return;
+    }
+
+    portalReprobeRunning = true;
+    btn.disabled = true;
+    btn.textContent = '⏳ Re-Probing...';
+
+    try {
+        const data = await postAction('reprobe');
+        if (data.ok) {
+            showToast('🔍 Re-Probe started', 'success');
+        } else {
+            showToast(`❌ Re-Probe failed: ${data.error || 'unknown error'}`, 'error');
+        }
+    } catch (e) {
+        showToast(`❌ Re-Probe failed: ${e.message}`, 'error');
+    } finally {
+        portalReprobeRunning = false;
+        btn.disabled = false;
+        btn.textContent = '✅ Auth Done & Re-Probe';
+        setTimeout(fetchState, 600);
     }
 }
 

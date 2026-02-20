@@ -8,7 +8,6 @@ import json
 import time
 import sys
 import os
-import re
 import logging
 import socket
 import subprocess
@@ -35,6 +34,7 @@ logger = logging.getLogger('azazel-daemon')
 SOCKET_PATH = Path('/run/azazel/control.sock')
 PORTAL_VIEWER_SERVICE = "azazel-portal-viewer.service"
 PORTAL_VIEWER_ENV = Path("/etc/azazel-zero/portal-viewer.env")
+PORTAL_START_URL_RUNTIME_PATH = Path("/run/azazel/portal-viewer-start-url")
 ACTION_SCRIPTS = {
     'refresh': '/home/azazel/Azazel-Zero/py/azazel_control/scripts/refresh.sh',
     'reprobe': '/home/azazel/Azazel-Zero/py/azazel_control/scripts/reprobe.sh',
@@ -83,59 +83,14 @@ def _normalize_http_url(candidate: object) -> str:
     return text
 
 
-def _quote_env_value(value: str) -> str:
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-    return f"\"{escaped}\""
-
-
-def _upsert_portal_viewer_env_value(key: str, value: str) -> tuple[bool, str]:
-    """Set a key in /etc/azazel-zero/portal-viewer.env."""
+def _write_runtime_start_url(url: str) -> tuple[bool, str]:
+    """Write transient portal start URL for next portal-viewer launch."""
     try:
-        current = PORTAL_VIEWER_ENV.read_text(encoding="utf-8").splitlines() if PORTAL_VIEWER_ENV.exists() else []
-        out: list[str] = []
-        pattern = re.compile(rf"^\s*(?:export\s+)?{re.escape(key)}\s*=")
-        replacement = f"{key}={_quote_env_value(value)}"
-        found = False
-        changed = False
-
-        for raw in current:
-            if pattern.match(raw):
-                found = True
-                if raw.strip() != replacement:
-                    out.append(replacement)
-                    changed = True
-                else:
-                    out.append(raw)
-                continue
-            out.append(raw)
-
-        if not found:
-            if out and out[-1].strip():
-                out.append("")
-            out.append(replacement)
-            changed = True
-
-        if not changed:
-            return True, ""
-
-        if PORTAL_VIEWER_ENV.exists():
-            st = PORTAL_VIEWER_ENV.stat()
-            mode = st.st_mode & 0o777
-            uid = st.st_uid
-            gid = st.st_gid
-        else:
-            mode = 0o640
-            uid = -1
-            gid = -1
-            PORTAL_VIEWER_ENV.parent.mkdir(parents=True, exist_ok=True)
-
-        text = "\n".join(out).rstrip("\n") + "\n"
-        tmp = PORTAL_VIEWER_ENV.with_suffix(PORTAL_VIEWER_ENV.suffix + ".tmp")
-        tmp.write_text(text, encoding="utf-8")
-        os.chmod(tmp, mode)
-        if uid >= 0 and gid >= 0:
-            os.chown(tmp, uid, gid)
-        os.replace(tmp, PORTAL_VIEWER_ENV)
+        PORTAL_START_URL_RUNTIME_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = PORTAL_START_URL_RUNTIME_PATH.with_suffix(".tmp")
+        tmp.write_text(url + "\n", encoding="utf-8")
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, PORTAL_START_URL_RUNTIME_PATH)
         return True, ""
     except Exception as e:
         return False, str(e)
@@ -219,11 +174,11 @@ def ensure_portal_viewer_ready(timeout_sec: float = 15.0, start_url: str | None 
     try:
         service_action = "start"
         if requested_start_url:
-            ok, err = _upsert_portal_viewer_env_value("PORTAL_START_URL", requested_start_url)
+            ok, err = _write_runtime_start_url(requested_start_url)
             if not ok:
                 return {
                     "ok": False,
-                    "error": f"Failed to update portal-viewer.env: {err}",
+                    "error": f"Failed to stage runtime portal URL: {err}",
                     "service": PORTAL_VIEWER_SERVICE,
                     "bind": bind,
                     "probe_hosts": probe_hosts,
