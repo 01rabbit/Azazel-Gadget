@@ -44,7 +44,8 @@ PORTAL_DISPLAY="${PORTAL_DISPLAY:-:99}"
 PORTAL_SCREEN="${PORTAL_SCREEN:-1366x768x24}"
 PORTAL_START_URL="${PORTAL_START_URL:-http://neverssl.com}"
 PORTAL_VNC_PORT="${PORTAL_VNC_PORT:-5900}"
-PORTAL_NOVNC_BIND="${PORTAL_NOVNC_BIND:-0.0.0.0}"
+# Default to the usb0 management IP so noVNC is not exposed on uplink networks.
+PORTAL_NOVNC_BIND="${PORTAL_NOVNC_BIND:-10.55.0.10}"
 PORTAL_NOVNC_PORT="${PORTAL_NOVNC_PORT:-6080}"
 PORTAL_BROWSER_PROFILE="${PORTAL_BROWSER_PROFILE:-$HOME/.config/azazel-portal-browser}"
 PORTAL_BROWSER_ARGS="${PORTAL_BROWSER_ARGS:---new-window --no-first-run --no-default-browser-check --start-maximized}"
@@ -121,7 +122,7 @@ if [[ -n "${PORTAL_VNC_PASSWORD:-}" ]]; then
     chmod 0600 "$passwd_file"
     auth_args=(-rfbauth "$passwd_file")
 else
-    log "WARNING: PORTAL_VNC_PASSWORD is empty; running without VNC password"
+    log "VNC password auth disabled (PORTAL_VNC_PASSWORD is empty)"
     auth_args=(-nopw)
 fi
 

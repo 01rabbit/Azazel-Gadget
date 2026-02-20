@@ -17,6 +17,7 @@ import tempfile
 import os
 from typing import Dict, Any, Optional, List
 from pathlib import Path
+from urllib.parse import urlparse
 
 logger = logging.getLogger("wifi_connect")
 DEFAULT_CAPTIVE_RETRY_SCHEDULE_SEC = [0, 3, 10]
@@ -348,6 +349,28 @@ def _parse_location(headers: str) -> str:
     return ""
 
 
+def _normalize_http_url(candidate: Any) -> str:
+    """Return normalized http(s) URL or empty string."""
+    text = str(candidate or "").strip()
+    if not text or any(ch in text for ch in ("\r", "\n")):
+        return ""
+    parsed = urlparse(text)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return ""
+    return text
+
+
+def _choose_portal_url_from_checks(checks: Dict[str, Any], status: str) -> str:
+    """Pick best portal URL candidate from captive probe checks."""
+    if status not in ("YES", "SUSPECTED"):
+        return ""
+    for key in ("location", "effective_url", "probe_url"):
+        normalized = _normalize_http_url(checks.get(key, ""))
+        if normalized:
+            return normalized
+    return ""
+
+
 def check_connectivity(iface: Optional[str]) -> Dict[str, Any]:
     """
     Connectivity checks with captive-portal aware HTTP probe.
@@ -370,6 +393,7 @@ def check_connectivity(iface: Optional[str]) -> Dict[str, Any]:
         "location": "",
         "body_len": 0,
         "effective_url": "",
+        "probe_url": "http://connectivitycheck.gstatic.com/generate_204",
         "curl_error": "",
     }
 
@@ -720,6 +744,10 @@ def update_state_json(wifi_state: str, **kwargs):
             "captive_portal": "NA",
             "captive_portal_reason": "NOT_CHECKED",
             "captive_checked_at": "",
+            "captive_portal_url": "",
+            "captive_probe_url": "",
+            "captive_effective_url": "",
+            "captive_location": "",
         }
         conn = {}
         if isinstance(data.get("connection"), dict):
@@ -735,11 +763,19 @@ def update_state_json(wifi_state: str, **kwargs):
             merged["internet_check"] = "N/A"
             merged["usb_nat"] = "OFF"
             merged["captive_probe_attempts"] = []
+            merged["captive_portal_url"] = ""
+            merged["captive_probe_url"] = ""
+            merged["captive_effective_url"] = ""
+            merged["captive_location"] = ""
 
         merged["captive_portal_detail"] = {
             "status": merged.get("captive_portal", "NA"),
             "reason": merged.get("captive_portal_reason", "NOT_CHECKED"),
             "checked_at": merged.get("captive_checked_at", ""),
+            "portal_url": merged.get("captive_portal_url", ""),
+            "probe_url": merged.get("captive_probe_url", ""),
+            "effective_url": merged.get("captive_effective_url", ""),
+            "location": merged.get("captive_location", ""),
         }
         data["connection"] = merged
         
@@ -844,6 +880,7 @@ def connect_wifi(ssid: str, security: str = "UNKNOWN", passphrase: Optional[str]
     captive_attempts = captive_eval.get("attempts", [])
     captive_portal = captive_eval["status"]
     captive_reason = captive_eval["reason"]
+    captive_portal_url = _choose_portal_url_from_checks(checks, captive_portal)
     internet_check = "OK" if captive_portal == "NO" else "FAIL"
     
     # Step 9: Apply NAT
@@ -871,6 +908,10 @@ def connect_wifi(ssid: str, security: str = "UNKNOWN", passphrase: Optional[str]
         captive_portal_reason=captive_reason,
         captive_checked_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         captive_probe_attempts=captive_attempts,
+        captive_portal_url=captive_portal_url,
+        captive_probe_url=str(checks.get("probe_url", "") or ""),
+        captive_effective_url=str(checks.get("effective_url", "") or ""),
+        captive_location=str(checks.get("location", "") or ""),
     )
     
     return {

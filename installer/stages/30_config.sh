@@ -76,19 +76,18 @@ EOF
     local portal_env="/etc/azazel-zero/portal-viewer.env"
     if [[ ! -f "$portal_env" ]]; then
         log_info "Captive Portal Viewer 用環境ファイルを作成..."
-        local portal_password
-        portal_password="$(od -An -N12 -tx1 /dev/urandom | tr -d ' \n')"
         cat > "$portal_env" <<EOF
 # Captive Portal Viewer (noVNC) 設定
-# PORTAL_VNC_PASSWORD は初期値です。運用前に変更してください。
+# 管理ネットワーク専用運用を前提に、既定では VNC パスワード認証を無効化しています。
+# 必要な場合のみ PORTAL_VNC_PASSWORD を設定してください。
 
 PORTAL_START_URL=http://neverssl.com
 PORTAL_DISPLAY=:99
 PORTAL_SCREEN=1366x768x24
-PORTAL_NOVNC_BIND=0.0.0.0
+PORTAL_NOVNC_BIND=10.55.0.10
 PORTAL_NOVNC_PORT=6080
 PORTAL_VNC_PORT=5900
-PORTAL_VNC_PASSWORD=$portal_password
+PORTAL_VNC_PASSWORD=
 PORTAL_BROWSER_CMD=auto
 PORTAL_BROWSER_PROFILE=/home/azazel/.config/azazel-portal-browser
 PORTAL_BROWSER_ARGS="--new-window --no-first-run --no-default-browser-check --disable-features=Translate,AutofillServerCommunication --start-maximized"
@@ -97,7 +96,24 @@ EOF
         chown root:azazel "$portal_env" 2>/dev/null || true
         log_info "✓ Portal Viewer 設定作成: $portal_env"
     else
-        log_info "Portal Viewer 設定は既存ファイルを維持: $portal_env"
+        # Security migration: old configs may expose noVNC on 0.0.0.0.
+        local current_bind
+        current_bind="$(awk -F= '/^[[:space:]]*PORTAL_NOVNC_BIND[[:space:]]*=/{gsub(/[[:space:]"\047]/, "", $2); print $2; exit}' "$portal_env" || true)"
+        if [[ "$current_bind" == "0.0.0.0" ]]; then
+            sed -i 's/^[[:space:]]*PORTAL_NOVNC_BIND[[:space:]]*=.*/PORTAL_NOVNC_BIND=10.55.0.10/' "$portal_env"
+            log_info "✓ Portal Viewer 設定を更新: PORTAL_NOVNC_BIND=10.55.0.10"
+        elif [[ -z "$current_bind" ]]; then
+            printf '\nPORTAL_NOVNC_BIND=10.55.0.10\n' >> "$portal_env"
+            log_info "✓ Portal Viewer 設定に PORTAL_NOVNC_BIND を追加"
+        else
+            log_info "Portal Viewer 設定は既存値を維持: PORTAL_NOVNC_BIND=$current_bind"
+        fi
+
+        # If password key is missing in old configs, add empty default (no auth).
+        if ! grep -qE '^[[:space:]]*PORTAL_VNC_PASSWORD[[:space:]]*=' "$portal_env"; then
+            printf 'PORTAL_VNC_PASSWORD=\n' >> "$portal_env"
+            log_info "✓ Portal Viewer 設定に PORTAL_VNC_PASSWORD= を追加（認証無効）"
+        fi
     fi
     
     # 5. OpenCanary 初期設定（optional）

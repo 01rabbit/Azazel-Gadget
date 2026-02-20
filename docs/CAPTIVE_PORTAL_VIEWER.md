@@ -39,9 +39,9 @@ Environment file:
 Main keys:
 
 - `PORTAL_START_URL` (default: `http://neverssl.com`)
-- `PORTAL_NOVNC_BIND` (default: `0.0.0.0`)
+- `PORTAL_NOVNC_BIND` (default: `10.55.0.10`)
 - `PORTAL_NOVNC_PORT` (default: `6080`)
-- `PORTAL_VNC_PASSWORD` (set/change before operation)
+- `PORTAL_VNC_PASSWORD` (optional; empty means no VNC password)
 - `PORTAL_BROWSER_CMD` (`auto`, `chromium`, `chromium-browser`)
 
 Apply changes:

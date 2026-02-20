@@ -8,11 +8,13 @@ import json
 import time
 import sys
 import os
+import re
 import logging
 import socket
 import subprocess
 import threading
 from pathlib import Path
+from urllib.parse import urlparse
 try:
     import yaml
 except Exception:  # pragma: no cover
@@ -48,48 +50,209 @@ RATE_LIMITS = {
     'wifi_scan': 1.0,      # 1 second
     'wifi_connect': 3.0,   # 3 seconds
 }
+PORTAL_DEFAULT_START_URL = "http://neverssl.com"
 
 
-def _load_portal_viewer_port(default: int = 6080) -> int:
-    """Read PORTAL_NOVNC_PORT from env file if present."""
+def _read_portal_viewer_env() -> dict[str, str]:
+    """Read /etc/azazel-zero/portal-viewer.env into a dict."""
+    parsed: dict[str, str] = {}
     try:
         if not PORTAL_VIEWER_ENV.exists():
-            return default
+            return parsed
         for raw in PORTAL_VIEWER_ENV.read_text(encoding="utf-8").splitlines():
             line = raw.strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue
+            if line.startswith("export "):
+                line = line[7:].strip()
             key, value = line.split("=", 1)
-            if key.strip() != "PORTAL_NOVNC_PORT":
-                continue
-            return int(value.strip().strip('"').strip("'"))
+            parsed[key.strip()] = value.strip().strip('"').strip("'")
     except Exception as e:
         logger.debug(f"Failed to read {PORTAL_VIEWER_ENV}: {e}")
-    return default
+    return parsed
 
 
-def _tcp_open_local(port: int, timeout_sec: float = 0.2) -> bool:
-    """Check localhost TCP availability."""
+def _normalize_http_url(candidate: object) -> str:
+    """Return normalized http(s) URL or empty string."""
+    text = str(candidate or "").strip()
+    if not text or any(ch in text for ch in ("\r", "\n")):
+        return ""
+    parsed = urlparse(text)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return ""
+    return text
+
+
+def _quote_env_value(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f"\"{escaped}\""
+
+
+def _upsert_portal_viewer_env_value(key: str, value: str) -> tuple[bool, str]:
+    """Set a key in /etc/azazel-zero/portal-viewer.env."""
     try:
-        with socket.create_connection(("127.0.0.1", port), timeout=timeout_sec):
-            return True
+        current = PORTAL_VIEWER_ENV.read_text(encoding="utf-8").splitlines() if PORTAL_VIEWER_ENV.exists() else []
+        out: list[str] = []
+        pattern = re.compile(rf"^\s*(?:export\s+)?{re.escape(key)}\s*=")
+        replacement = f"{key}={_quote_env_value(value)}"
+        found = False
+        changed = False
+
+        for raw in current:
+            if pattern.match(raw):
+                found = True
+                if raw.strip() != replacement:
+                    out.append(replacement)
+                    changed = True
+                else:
+                    out.append(raw)
+                continue
+            out.append(raw)
+
+        if not found:
+            if out and out[-1].strip():
+                out.append("")
+            out.append(replacement)
+            changed = True
+
+        if not changed:
+            return True, ""
+
+        if PORTAL_VIEWER_ENV.exists():
+            st = PORTAL_VIEWER_ENV.stat()
+            mode = st.st_mode & 0o777
+            uid = st.st_uid
+            gid = st.st_gid
+        else:
+            mode = 0o640
+            uid = -1
+            gid = -1
+            PORTAL_VIEWER_ENV.parent.mkdir(parents=True, exist_ok=True)
+
+        text = "\n".join(out).rstrip("\n") + "\n"
+        tmp = PORTAL_VIEWER_ENV.with_suffix(PORTAL_VIEWER_ENV.suffix + ".tmp")
+        tmp.write_text(text, encoding="utf-8")
+        os.chmod(tmp, mode)
+        if uid >= 0 and gid >= 0:
+            os.chown(tmp, uid, gid)
+        os.replace(tmp, PORTAL_VIEWER_ENV)
+        return True, ""
+    except Exception as e:
+        return False, str(e)
+
+
+def _service_is_active(service: str) -> bool:
+    try:
+        active = subprocess.run(
+            ["/bin/systemctl", "is-active", service],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        return active.returncode == 0 and (active.stdout or "").strip() == "active"
     except Exception:
         return False
 
 
-def ensure_portal_viewer_ready(timeout_sec: float = 15.0) -> dict:
-    """Start portal viewer service and wait until noVNC TCP port is reachable."""
-    port = _load_portal_viewer_port()
+def _load_portal_viewer_endpoint(default_port: int = 6080) -> tuple[str, int]:
+    """Read PORTAL_NOVNC_BIND/PORT from env file if present."""
+    env = _read_portal_viewer_env()
+    bind = str(env.get("PORTAL_NOVNC_BIND") or os.environ.get("PORTAL_NOVNC_BIND") or os.environ.get("MGMT_IP") or "10.55.0.10")
     try:
+        port = int(env.get("PORTAL_NOVNC_PORT") or os.environ.get("PORTAL_NOVNC_PORT") or default_port)
+    except Exception:
+        port = default_port
+    return bind, port
+
+
+def _load_portal_start_url(default: str = PORTAL_DEFAULT_START_URL) -> str:
+    env = _read_portal_viewer_env()
+    url = _normalize_http_url(env.get("PORTAL_START_URL", ""))
+    if url:
+        return url
+    fallback = _normalize_http_url(os.environ.get("PORTAL_START_URL", ""))
+    return fallback or default
+
+
+def _probe_hosts_for_bind(bind_host: str) -> list[str]:
+    """Build probe host candidates from bind address."""
+    host = str(bind_host or "").strip()
+    if host.startswith("[") and host.endswith("]"):
+        host = host[1:-1]
+    if host in {"", "0.0.0.0", "::", "*"}:
+        return ["127.0.0.1", "::1"]
+    if host in {"localhost", "127.0.0.1", "::1"}:
+        return [host]
+    return [host, "127.0.0.1"]
+
+
+def _tcp_open(port: int, hosts: list[str], timeout_sec: float = 0.2) -> bool:
+    """Check TCP availability on any candidate host."""
+    seen = set()
+    for host in hosts:
+        if host in seen:
+            continue
+        seen.add(host)
+        try:
+            with socket.create_connection((host, port), timeout=timeout_sec):
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def ensure_portal_viewer_ready(timeout_sec: float = 15.0, start_url: str | None = None) -> dict:
+    """Start portal viewer service and wait until noVNC TCP port is reachable."""
+    bind, port = _load_portal_viewer_endpoint()
+    probe_hosts = _probe_hosts_for_bind(bind)
+    requested_start_url = _normalize_http_url(start_url or "")
+    if start_url and not requested_start_url:
+        return {
+            "ok": False,
+            "error": "Invalid start_url (must be absolute http/https URL)",
+            "service": PORTAL_VIEWER_SERVICE,
+            "bind": bind,
+            "probe_hosts": probe_hosts,
+            "port": port,
+            "ts": time.time(),
+        }
+    try:
+        service_action = "start"
+        if requested_start_url:
+            ok, err = _upsert_portal_viewer_env_value("PORTAL_START_URL", requested_start_url)
+            if not ok:
+                return {
+                    "ok": False,
+                    "error": f"Failed to update portal-viewer.env: {err}",
+                    "service": PORTAL_VIEWER_SERVICE,
+                    "bind": bind,
+                    "probe_hosts": probe_hosts,
+                    "port": port,
+                    "start_url": requested_start_url,
+                    "ts": time.time(),
+                }
+            # Restart when URL is requested so Chromium always lands on the target page.
+            service_action = "restart" if _service_is_active(PORTAL_VIEWER_SERVICE) else "start"
+
         start = subprocess.run(
-            ["/bin/systemctl", "start", PORTAL_VIEWER_SERVICE],
+            ["/bin/systemctl", service_action, PORTAL_VIEWER_SERVICE],
             capture_output=True,
             text=True,
             timeout=6,
         )
         if start.returncode != 0:
             err = (start.stderr or start.stdout or "").strip() or "systemctl start failed"
-            return {"ok": False, "error": err, "service": PORTAL_VIEWER_SERVICE, "port": port, "ts": time.time()}
+            return {
+                "ok": False,
+                "error": err,
+                "service": PORTAL_VIEWER_SERVICE,
+                "bind": bind,
+                "probe_hosts": probe_hosts,
+                "port": port,
+                "service_action": service_action,
+                "start_url": requested_start_url or _load_portal_start_url(),
+                "ts": time.time(),
+            }
 
         deadline = time.time() + max(1.0, timeout_sec)
         last_active = ""
@@ -101,28 +264,48 @@ def ensure_portal_viewer_ready(timeout_sec: float = 15.0) -> dict:
                 timeout=2,
             )
             last_active = (active.stdout or "").strip()
-            if active.returncode == 0 and last_active == "active" and _tcp_open_local(port):
+            if active.returncode == 0 and last_active == "active" and _tcp_open(port, probe_hosts):
                 return {
                     "ok": True,
                     "service": PORTAL_VIEWER_SERVICE,
                     "active": True,
                     "ready": True,
+                    "bind": bind,
+                    "probe_hosts": probe_hosts,
                     "port": port,
+                    "service_action": service_action,
+                    "start_url": requested_start_url or _load_portal_start_url(),
                     "ts": time.time(),
                 }
             time.sleep(0.25)
 
         return {
             "ok": False,
-            "error": f"Portal viewer not ready within {timeout_sec:.0f}s (is-active={last_active or 'unknown'})",
+            "error": (
+                f"Portal viewer not ready within {timeout_sec:.0f}s "
+                f"(is-active={last_active or 'unknown'}, bind={bind}, probe={probe_hosts})"
+            ),
             "service": PORTAL_VIEWER_SERVICE,
             "active": last_active == "active",
             "ready": False,
+            "bind": bind,
+            "probe_hosts": probe_hosts,
             "port": port,
+            "service_action": service_action,
+            "start_url": requested_start_url or _load_portal_start_url(),
             "ts": time.time(),
         }
     except Exception as e:
-        return {"ok": False, "error": str(e), "service": PORTAL_VIEWER_SERVICE, "port": port, "ts": time.time()}
+        return {
+            "ok": False,
+            "error": str(e),
+            "service": PORTAL_VIEWER_SERVICE,
+            "bind": bind,
+            "probe_hosts": probe_hosts,
+            "port": port,
+            "start_url": requested_start_url or _load_portal_start_url(),
+            "ts": time.time(),
+        }
 
 
 def load_control_flags() -> dict:
@@ -272,7 +455,9 @@ def execute_action(action_name, params=None):
         except Exception:
             timeout_sec = 15.0
         timeout_sec = max(1.0, min(timeout_sec, 30.0))
-        return ensure_portal_viewer_ready(timeout_sec=timeout_sec)
+        start_url_raw = (params or {}).get("start_url", "")
+        start_url = str(start_url_raw).strip() if isinstance(start_url_raw, str) else ""
+        return ensure_portal_viewer_ready(timeout_sec=timeout_sec, start_url=start_url or None)
     
     # Handle shell script actions
     script_path = ACTION_SCRIPTS.get(action_name)

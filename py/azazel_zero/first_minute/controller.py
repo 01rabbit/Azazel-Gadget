@@ -439,6 +439,17 @@ class FirstMinuteController:
             if bool(meta.get("is_up")) and bool(meta.get("has_ipv4")) and bool(meta.get("has_default_route")):
                 route_ready.append((iface, meta))
         if route_ready:
+            # In auto mode, prefer wireless uplink when both wired/wireless routes exist.
+            wireless_route_ready = [(iface, meta) for iface, meta in route_ready if bool(meta.get("is_wireless"))]
+            if wireless_route_ready:
+                wireless_route_ready.sort(
+                    key=lambda item: (
+                        self._sort_wireless_iface(item[0]),
+                        int(item[1].get("default_metric", 10**9)),
+                        item[0],
+                    )
+                )
+                return wireless_route_ready[0][0]
             route_ready.sort(key=lambda item: self._sort_any_iface(item[0], item[1]))
             return route_ready[0][0]
 
@@ -800,12 +811,56 @@ class FirstMinuteController:
             "captive_portal": "NA",
             "captive_portal_reason": self._resolved_captive_probe_reason if not self._resolved_captive_probe_iface else "NOT_CHECKED",
             "captive_checked_at": "",
+            "captive_portal_url": "",
+            "captive_probe_url": "",
+            "captive_effective_url": "",
+            "captive_location": "",
             "captive_portal_detail": {
                 "status": "NA",
                 "reason": self._resolved_captive_probe_reason if not self._resolved_captive_probe_iface else "NOT_CHECKED",
                 "checked_at": "",
+                "portal_url": "",
+                "probe_url": "",
+                "effective_url": "",
+                "location": "",
             },
         }
+
+    @staticmethod
+    def _normalize_http_url(candidate: object) -> str:
+        text = str(candidate or "").strip()
+        if not text or any(ch in text for ch in ("\r", "\n")):
+            return ""
+        parsed = urlparse(text)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            return ""
+        return text
+
+    def _choose_portal_url(self, status: str, detail: Dict[str, object]) -> str:
+        if str(status or "").upper() not in {"YES", "SUSPECTED"}:
+            return ""
+        for key in ("location", "effective_url", "url"):
+            normalized = self._normalize_http_url(detail.get(key, ""))
+            if normalized:
+                return normalized
+        return ""
+
+    @staticmethod
+    def _derive_internet_check(wifi_state: object, captive_status: object, current: object) -> str:
+        """Derive Internet status from latest captive-portal result."""
+        wifi = str(wifi_state or "").upper()
+        captive = str(captive_status or "").upper()
+        prev = str(current or "").upper()
+
+        if wifi == "DISCONNECTED":
+            return "N/A"
+        if wifi != "CONNECTED":
+            return prev if prev else "UNKNOWN"
+        if captive == "NO":
+            return "OK"
+        if captive in {"YES", "SUSPECTED"}:
+            return "FAIL"
+        return prev if prev else "UNKNOWN"
 
     def _normalize_connection_state(self, raw: Optional[Dict[str, object]]) -> Dict[str, object]:
         normalized = self._default_connection_state()
@@ -820,6 +875,10 @@ class FirstMinuteController:
             normalized["usb_nat"] = "OFF"
             if not normalized.get("internet_check"):
                 normalized["internet_check"] = "N/A"
+            normalized["captive_portal_url"] = ""
+            normalized["captive_probe_url"] = ""
+            normalized["captive_effective_url"] = ""
+            normalized["captive_location"] = ""
 
         if not normalized.get("captive_probe_iface"):
             normalized["captive_probe_iface"] = self._resolved_captive_probe_iface or ""
@@ -829,6 +888,14 @@ class FirstMinuteController:
             normalized["captive_portal"] = self.last_probe.captive_status
             normalized["captive_portal_reason"] = self.last_probe.captive_reason
             normalized["captive_checked_at"] = self.last_probe.captive_checked_at
+            captive_detail = self.last_probe.details.get("captive", {}) if isinstance(self.last_probe.details, dict) else {}
+            if isinstance(captive_detail, dict):
+                normalized["captive_probe_url"] = str(captive_detail.get("url", "") or "")
+                normalized["captive_effective_url"] = str(captive_detail.get("effective_url", "") or "")
+                normalized["captive_location"] = str(captive_detail.get("location", "") or "")
+                portal_url = self._choose_portal_url(self.last_probe.captive_status, captive_detail)
+                if portal_url:
+                    normalized["captive_portal_url"] = portal_url
 
         if not normalized.get("captive_portal"):
             normalized["captive_portal"] = "NA"
@@ -836,11 +903,29 @@ class FirstMinuteController:
             normalized["captive_portal_reason"] = self._resolved_captive_probe_reason or "NOT_CHECKED"
         if not normalized.get("captive_checked_at"):
             normalized["captive_checked_at"] = ""
+        if not normalized.get("captive_portal_url"):
+            normalized["captive_portal_url"] = ""
+        if not normalized.get("captive_probe_url"):
+            normalized["captive_probe_url"] = ""
+        if not normalized.get("captive_effective_url"):
+            normalized["captive_effective_url"] = ""
+        if not normalized.get("captive_location"):
+            normalized["captive_location"] = ""
+
+        normalized["internet_check"] = self._derive_internet_check(
+            normalized.get("wifi_state", ""),
+            normalized.get("captive_portal", "NA"),
+            normalized.get("internet_check", ""),
+        )
 
         normalized["captive_portal_detail"] = {
             "status": normalized.get("captive_portal", "NA"),
             "reason": normalized.get("captive_portal_reason", "NOT_CHECKED"),
             "checked_at": normalized.get("captive_checked_at", ""),
+            "portal_url": normalized.get("captive_portal_url", ""),
+            "probe_url": normalized.get("captive_probe_url", ""),
+            "effective_url": normalized.get("captive_effective_url", ""),
+            "location": normalized.get("captive_location", ""),
         }
         return normalized
 
