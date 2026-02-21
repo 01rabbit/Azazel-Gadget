@@ -44,20 +44,86 @@ class AzazelTextualApp(App):
     CSS = """
     Screen {
         layout: vertical;
+        background: #1a1a2e;
+        color: #eeeeee;
+    }
+
+    Header {
+        background: #16213e;
+        color: #00d4ff;
+        text-style: bold;
+    }
+
+    HeaderClock {
+        color: #00d4ff;
+        text-style: bold;
+    }
+
+    Footer {
+        background: #16213e;
+        color: #aaaaaa;
+        border-top: solid #00d4ff;
     }
 
     #status-line {
         height: 1;
-        color: black;
-        background: $accent;
+        color: #05080e;
+        background: #00d4ff;
+        text-style: bold;
         content-align: left middle;
         padding: 0 1;
     }
 
+    #status-line.state-checking {
+        background: #00d4ff;
+        color: #05080e;
+    }
+
+    #status-line.state-safe {
+        background: #2ecc71;
+        color: #05080e;
+    }
+
+    #status-line.state-limited {
+        background: #f39c12;
+        color: #05080e;
+    }
+
+    #status-line.state-contained {
+        background: #e74c3c;
+        color: #ffffff;
+    }
+
+    #status-line.state-deception {
+        background: #e74c3c;
+        color: #ffffff;
+    }
+
     #summary {
         height: 8;
-        border: round $accent;
+        border: round #00d4ff;
+        background: #16213e;
         padding: 0 1;
+    }
+
+    #summary.state-checking {
+        border: round #00d4ff;
+    }
+
+    #summary.state-safe {
+        border: round #2ecc71;
+    }
+
+    #summary.state-limited {
+        border: round #f39c12;
+    }
+
+    #summary.state-contained {
+        border: round #e74c3c;
+    }
+
+    #summary.state-deception {
+        border: round #e74c3c;
     }
 
     #middle {
@@ -66,44 +132,57 @@ class AzazelTextualApp(App):
 
     #connection {
         width: 1fr;
-        border: round green;
+        border: round #00d4ff;
+        background: #16213e;
         padding: 0 1;
     }
 
     #control {
         width: 1fr;
-        border: round cyan;
+        border: round #00d4ff;
+        background: #16213e;
         padding: 0 1;
     }
 
     #evidence {
         height: 1fr;
-        border: round yellow;
+        border: round #f39c12;
+        background: #16213e;
         padding: 0 1;
     }
 
     #flow {
         height: 1;
-        background: $panel;
-        color: $text;
+        background: #16213e;
+        color: #aaaaaa;
         content-align: left middle;
         padding: 0 1;
     }
 
     #details {
         height: 8;
-        border: round magenta;
+        border: round #00d4ff;
+        background: #16213e;
         padding: 0 1;
         display: none;
     }
 
     #menu {
         height: 1fr;
-        border: round $accent-darken-2;
+        border: round #00d4ff;
+        background: #16213e;
         padding: 0 1;
         display: none;
     }
     """
+
+    _STATE_CLASSES = (
+        "state-checking",
+        "state-safe",
+        "state-limited",
+        "state-contained",
+        "state-deception",
+    )
 
     BINDINGS = [
         Binding("u", "refresh", "Refresh"),
@@ -240,15 +319,17 @@ class AzazelTextualApp(App):
             self.query_one("#status-line", Static).update(Text(f"Status: {self._status_message}"))
             return
 
+        status_widget = self.query_one("#status-line", Static)
         ssid = self._safe_get(self._snapshot, "ssid", "-")
         state = self._safe_get(self._snapshot, "user_state", "CHECKING")
+        self._apply_state_class(status_widget, state)
         source = self._safe_get(self._snapshot, "source", "SNAPSHOT")
         risk = self._safe_get(self._snapshot, "risk_score", 0)
         line = (
             f"State={state}  SSID={ssid}  Risk={risk}/100  "
             f"Age={self._live_age()}  View={source}  Status={self._status_message}"
         )
-        self.query_one("#status-line", Static).update(Text(line))
+        status_widget.update(Text(line))
 
     def _state_label(self, state: str) -> str:
         labels = {
@@ -277,6 +358,23 @@ class AzazelTextualApp(App):
             return "".join("🔴" if i < level else "⚪" for i in range(5))
         return "".join("X" if i < level else "." for i in range(5))
 
+    def _state_css_class(self, state: str) -> str:
+        state_name = str(state).upper()
+        if state_name == "SAFE":
+            return "state-safe"
+        if state_name == "LIMITED":
+            return "state-limited"
+        if state_name in ("CONTAINED", "LOCKDOWN"):
+            return "state-contained"
+        if state_name == "DECEPTION":
+            return "state-deception"
+        return "state-checking"
+
+    def _apply_state_class(self, widget: Static, state: str) -> None:
+        for css_class in self._STATE_CLASSES:
+            widget.remove_class(css_class)
+        widget.add_class(self._state_css_class(state))
+
     def _severity_prefix(self, line: str) -> str:
         lowered = line.lower()
         if any(x in lowered for x in ("blocked", "error", "fail", "contain", "anomaly", "hijack")):
@@ -301,6 +399,7 @@ class AzazelTextualApp(App):
         evidence = self._safe_get(snap, "evidence", []) or []
 
         state = self._safe_get(snap, "user_state", "CHECKING")
+        self._apply_state_class(self.query_one("#summary", Static), state)
         state_icon = self._state_icon(state)
         state_label = self._state_label(state)
         threat_level = self._safe_get(snap, "threat_level", 0)
