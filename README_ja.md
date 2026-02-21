@@ -143,6 +143,10 @@ Textual モード:
 sudo python3 py/azazel_zero/cli_unified.py --textual
 ```
 
+補足:
+- Textual モードでは安定性のため EPD 更新はデフォルトで無効です。
+- 必要な場合のみ `--enable-epd` を付けて有効化してください。
+
 ### 画面構成
 
 ```

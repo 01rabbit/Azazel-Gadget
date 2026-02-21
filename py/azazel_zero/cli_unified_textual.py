@@ -16,7 +16,7 @@ from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
-from textual.widgets import Footer, Header, Static
+from textual.widgets import Header, Static
 
 
 SnapshotLoader = Callable[[], Any]
@@ -139,7 +139,6 @@ class AzazelTextualApp(App):
         yield Static("Flow: PROBE -> DEGRADED -> NORMAL -> SAFE", id="flow", markup=False)
         yield Static("[U] Refresh  [A] Stage-Open  [R] Re-Probe  [C] Contain  [L] Details  [Q] Quit", id="actions", markup=False)
         yield Static("Details hidden. Press [L] to toggle.", id="details", markup=False)
-        yield Footer()
 
     async def on_mount(self) -> None:
         self.set_interval(1.0, self._tick_age_only)

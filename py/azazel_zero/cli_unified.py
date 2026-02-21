@@ -1512,10 +1512,15 @@ def main():
 
     unicode_mode = detect_unicode(args.ascii, args.unicode)
     
-    # EPD update enabled by default, unless explicitly disabled
-    enable_epd = not args.disable_epd
-    if args.enable_epd:
+    # EPD behavior:
+    # - curses mode: enabled by default (legacy behavior)
+    # - textual mode: disabled by default (safer on unstable EPD setups)
+    if args.disable_epd:
+        enable_epd = False
+    elif args.enable_epd:
         enable_epd = True
+    else:
+        enable_epd = False if args.textual else True
 
     if args.textual:
         try:
