@@ -83,6 +83,7 @@ Heavyweight ML remains a future research theme; the current deterministic stack 
   - `py/azazel_zero/cli_unified.py` is the unified monitoring TUI showing Wi-Fi state, threat level, channel congestion, control rules in real time.
   - Colorful icons and color-coding for intuitive situational awareness.
   - Manual refresh mode ([U] key).
+  - Textual mode is also available with `--textual` (keeps the same action keys).
   
 - **tmux console**  
   - `py/azazel_menu.py` is a curses menu for Wi-Fi selection, OpenCanary start/stop/log tail, and E-Paper test actions.  
@@ -131,6 +132,12 @@ suppress_auto_wifi: true
 
 ```bash
 sudo python3 py/azazel_zero/cli_unified.py
+```
+
+Textual mode:
+
+```bash
+sudo python3 py/azazel_zero/cli_unified.py --textual
 ```
 
 ### Layout
