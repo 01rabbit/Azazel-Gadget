@@ -38,6 +38,7 @@ sudo ./install.sh --with-webui --with-canary --with-ntfy --with-portal-viewer
 ✅ **Stage 10: Dependency Installation**
 - APT パッケージ更新
 - 基本パッケージ（nftables, dnsmasq, suricata など）
+- Textual TUI 依存（`python3-textual`、提供環境のみ）
 - Python venv（OpenCanary, Web UI）
 - オプション機能
 
