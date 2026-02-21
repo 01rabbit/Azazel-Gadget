@@ -1505,17 +1505,38 @@ def main():
     parser = argparse.ArgumentParser(description="Azazel-Zero manual-refresh TUI")
     parser.add_argument("--ascii", action="store_true", help="Force ASCII fallback")
     parser.add_argument("--unicode", action="store_true", help="Force Unicode box/icons")
+    parser.add_argument("--textual", action="store_true", help="Run Textual UI instead of curses")
     parser.add_argument("--enable-epd", action="store_true", help="Enable E-Paper display updates")
     parser.add_argument("--disable-epd", action="store_true", help="Disable E-Paper display updates")
     args = parser.parse_args()
 
     unicode_mode = detect_unicode(args.ascii, args.unicode)
-    snap = load_snapshot()
     
     # EPD update enabled by default, unless explicitly disabled
     enable_epd = not args.disable_epd
     if args.enable_epd:
         enable_epd = True
+
+    if args.textual:
+        try:
+            from .cli_unified_textual import run_textual
+        except Exception:
+            try:
+                from cli_unified_textual import run_textual
+            except Exception as exc:
+                print(f"[TUI] Textual mode unavailable: {exc}", file=sys.stderr)
+                sys.exit(1)
+        run_textual(
+            load_snapshot_fn=load_snapshot,
+            send_command_fn=send_command,
+            update_epd_fn=update_epd,
+            epd_fingerprint_fn=_epd_fingerprint,
+            unicode_mode=unicode_mode,
+            enable_epd=enable_epd,
+        )
+        return
+
+    snap = load_snapshot()
     
     # Initial EPD update
     last_epd_fp: Optional[Tuple[str, str, str, Optional[int], str]] = None
