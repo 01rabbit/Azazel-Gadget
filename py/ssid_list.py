@@ -55,10 +55,12 @@ def update_epaper():
     """Invoke boot_splash_epd.py to refresh the e‑paper display. Errors are non‑fatal."""
     if os.path.exists(BOOT_SPLASH_PATH):
         try:
-            subprocess.run(["/usr/bin/python3", BOOT_SPLASH_PATH],
-                           stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL,
-                           check=False)
+            subprocess.Popen(
+                ["/usr/bin/python3", BOOT_SPLASH_PATH],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
         except Exception:
             pass
 

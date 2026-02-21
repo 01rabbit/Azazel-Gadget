@@ -11,9 +11,10 @@ import asyncio
 import time
 from typing import Any, Callable, Optional, Tuple
 
+from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal
 from textual.widgets import Footer, Header, Static
 
 
@@ -162,7 +163,7 @@ class AzazelTextualApp(App):
 
     def _render_status_line(self) -> None:
         if self._snapshot is None:
-            self.query_one("#status-line", Static).update(f"Status: {self._status_message}")
+            self.query_one("#status-line", Static).update(Text(f"Status: {self._status_message}"))
             return
 
         ssid = self._safe_get(self._snapshot, "ssid", "-")
@@ -173,7 +174,7 @@ class AzazelTextualApp(App):
             f"State={state}  SSID={ssid}  Risk={risk}/100  "
             f"Age={self._live_age()}  View={source}  Status={self._status_message}"
         )
-        self.query_one("#status-line", Static).update(line)
+        self.query_one("#status-line", Static).update(Text(line))
 
     def _state_label(self, state: str) -> str:
         labels = {
@@ -243,7 +244,7 @@ class AzazelTextualApp(App):
             f"Monitoring: Suricata={monitoring.get('suricata', 'UNKNOWN')}  "
             f"OpenCanary={monitoring.get('opencanary', 'UNKNOWN')}  ntfy={monitoring.get('ntfy', 'UNKNOWN')}"
         )
-        self.query_one("#summary", Static).update(summary)
+        self.query_one("#summary", Static).update(Text(summary))
 
         connection_text = (
             "Connection\n"
@@ -259,7 +260,7 @@ class AzazelTextualApp(App):
             f"NAT: {connection.get('usb_nat', 'UNKNOWN')}  "
             f"Internet: {connection.get('internet_check', 'UNKNOWN')}"
         )
-        self.query_one("#connection", Static).update(connection_text)
+        self.query_one("#connection", Static).update(Text(connection_text))
 
         control_text = (
             "Control / Safety\n"
@@ -277,19 +278,19 @@ class AzazelTextualApp(App):
             f"Monitoring: IDS={monitoring.get('suricata', 'UNKNOWN')} "
             f"Canary={monitoring.get('opencanary', 'UNKNOWN')} ntfy={monitoring.get('ntfy', 'UNKNOWN')}"
         )
-        self.query_one("#control", Static).update(control_text)
+        self.query_one("#control", Static).update(Text(control_text))
 
         ev_lines = evidence[-12:] if len(evidence) > 12 else evidence
         evidence_text = "Evidence (last entries)\n" + "\n".join(f"{self._severity_prefix(line)} {line}" for line in ev_lines)
         if not ev_lines:
             evidence_text += "\n- (no evidence)"
-        self.query_one("#evidence", Static).update(evidence_text)
+        self.query_one("#evidence", Static).update(Text(evidence_text))
 
         flow_text = (
             f"Flow: PROBE -> DEGRADED -> NORMAL -> SAFE"
             f" | state_timeline: {self._safe_get(snap, 'state_timeline', '-')}"
         )
-        self.query_one("#flow", Static).update(flow_text)
+        self.query_one("#flow", Static).update(Text(flow_text))
 
         if self._details_open:
             blocked_text = ", ".join(f"{d}({c})" for d, c in top_blocked[:5]) if top_blocked else "-"
@@ -305,7 +306,7 @@ class AzazelTextualApp(App):
                 f"(down={self._safe_get(snap, 'traffic_download_mb', 0.0)}MB "
                 f"up={self._safe_get(snap, 'traffic_upload_mb', 0.0)}MB)"
             )
-            self.query_one("#details", Static).update(details_text)
+            self.query_one("#details", Static).update(Text(details_text))
 
         self._render_status_line()
 

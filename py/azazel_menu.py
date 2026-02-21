@@ -336,9 +336,19 @@ def _update_epaper() -> None:
         if os.path.exists(script_path):
             info = _tmux_info()
             if info:
-                subprocess.run(EPD_INFO_CMD + [info], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.Popen(
+                    EPD_INFO_CMD + [info],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
             else:
-                subprocess.run(EPD_INFO_CMD, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.Popen(
+                    EPD_INFO_CMD,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
     except Exception:
         pass
 
