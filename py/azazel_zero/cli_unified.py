@@ -1603,17 +1603,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-def _parse_log_ts(line: str) -> float:
-    """Parse leading timestamp from log line; return epoch or 0."""
-    # Expect format like: "2025-01-29 09:29:42,123 INFO {...}"
-    try:
-        parts = line.split(None, 2)
-        if len(parts) >= 2:
-            ts_part = f"{parts[0]} {parts[1]}"
-            try:
-                return time.mktime(time.strptime(ts_part, "%Y-%m-%d %H:%M:%S,%f"))
-            except ValueError:
-                return time.mktime(time.strptime(ts_part, "%Y-%m-%d %H:%M:%S"))
-    except Exception:
-        return 0
-    return 0
