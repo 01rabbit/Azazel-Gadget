@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Azazel-Zero Web UI - Flask Application
+Azazel-Gadget Web UI - Flask Application
 
 Provides HTTP API for remote monitoring and control via USB gadget network.
-- Reads: /run/azazel-zero/ui_snapshot.json (shared with TUI)
+- Reads: control-plane snapshot (with file fallback)
 - Executes: Actions via Unix socket to control daemon
 - Serves: HTML dashboard + JSON API endpoints
 """
@@ -22,6 +22,7 @@ from flask import (
 import json
 import os
 import socket
+import sys
 import time
 import subprocess
 import hashlib
@@ -35,24 +36,51 @@ from urllib.parse import urlparse
 
 app = Flask(__name__)
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PY_ROOT = PROJECT_ROOT / "py"
+if str(PY_ROOT) not in sys.path:
+    sys.path.insert(0, str(PY_ROOT))
+
+try:
+    from azazel_gadget.control_plane import (
+        read_snapshot_payload as cp_read_snapshot_payload,
+        watch_snapshots as cp_watch_snapshots,
+    )
+    from azazel_gadget.path_schema import (
+        first_minute_config_candidates,
+        portal_env_candidates,
+        snapshot_path_candidates,
+        web_token_candidates,
+        warn_if_legacy_path,
+    )
+except Exception:
+    cp_read_snapshot_payload = None
+    cp_watch_snapshots = None
+    first_minute_config_candidates = lambda: [Path("/etc/azazel-zero/first_minute.yaml")]  # type: ignore
+    portal_env_candidates = lambda: [Path("/etc/azazel-zero/portal-viewer.env")]  # type: ignore
+    snapshot_path_candidates = lambda: [Path("/run/azazel-zero/ui_snapshot.json"), Path(".azazel-zero/run/ui_snapshot.json")]  # type: ignore
+    web_token_candidates = lambda: [Path.home() / ".azazel-zero" / "web_token.txt"]  # type: ignore
+    warn_if_legacy_path = lambda *args, **kwargs: None  # type: ignore
+
 # Configuration
-STATE_PATH = Path("/run/azazel-zero/ui_snapshot.json")  # Share TUI snapshot
-FALLBACK_STATE_PATH = Path(".azazel-zero/run/ui_snapshot.json")  # Fallback for testing
+_STATE_PATHS = snapshot_path_candidates()
+STATE_PATH = _STATE_PATHS[0]  # Share TUI snapshot
+FALLBACK_STATE_PATH = _STATE_PATHS[-1]  # Fallback for testing
 CONTROL_SOCKET = Path("/run/azazel/control.sock")
-TOKEN_FILE = Path.home() / ".azazel-zero" / "web_token.txt"
+TOKEN_FILE = web_token_candidates()[0]
 BIND_HOST = os.environ.get("AZAZEL_WEB_HOST", "0.0.0.0")
 BIND_PORT = int(os.environ.get("AZAZEL_WEB_PORT", "8084"))
 STATUS_API_HOSTS = ["10.55.0.10", "127.0.0.1"]
-PORTAL_VIEWER_ENV_PATH = Path("/etc/azazel-zero/portal-viewer.env")
+PORTAL_VIEWER_ENV_PATH = portal_env_candidates()[0]
 NTFY_CONFIG_PATHS = [
-    Path(os.environ.get("AZAZEL_CONFIG_PATH", "/etc/azazel-zero/first_minute.yaml")),
+    Path(os.environ.get("AZAZEL_CONFIG_PATH", str(first_minute_config_candidates()[0]))),
     Path("configs/first_minute.yaml"),
 ]
 NTFY_SSE_KEEPALIVE_SEC = int(os.environ.get("AZAZEL_SSE_KEEPALIVE_SEC", "20"))
 NTFY_SSE_READ_TIMEOUT_SEC = int(os.environ.get("AZAZEL_NTFY_READ_TIMEOUT_SEC", "35"))
 NTFY_SSE_MAX_BACKOFF_SEC = int(os.environ.get("AZAZEL_NTFY_MAX_BACKOFF_SEC", "30"))
 WEBUI_CA_CERT_PATH = Path(
-    os.environ.get("AZAZEL_WEBUI_CA_PATH", "/etc/azazel-zero/certs/azazel-webui-local-ca.crt")
+    os.environ.get("AZAZEL_WEBUI_CA_PATH", "/etc/azazel-gadget/certs/azazel-webui-local-ca.crt")
 )
 
 # Allowed actions
@@ -560,8 +588,15 @@ def get_monitoring_state() -> Dict[str, str]:
 
 
 def read_state() -> Dict[str, Any]:
-    """Read state.json from filesystem (shared with TUI)"""
+    """Read snapshot from control-plane first, then filesystem fallback."""
     try:
+        if cp_read_snapshot_payload is not None:
+            data, source = cp_read_snapshot_payload(prefer_control_plane=True, logger=app.logger)
+            if isinstance(data, dict):
+                data["ok"] = True
+                data["source"] = source
+                return data
+
         # Try primary path (TUI snapshot)
         path = STATE_PATH
         if not path.exists():
@@ -572,11 +607,14 @@ def read_state() -> Dict[str, Any]:
             return {
                 "ok": False,
                 "error": "ui_snapshot.json not found",
+                "source": "NONE",
                 "ts": time.strftime("%Y-%m-%dT%H:%M:%S")
             }
         
+        warn_if_legacy_path(path, logger=app.logger)
         data = json.loads(path.read_text(encoding="utf-8"))
         data["ok"] = True
+        data.setdefault("source", f"FILE:{path}")
         return data
     except Exception as e:
         return {
@@ -927,6 +965,38 @@ def api_state():
     state["monitoring"] = get_monitoring_state()
     state["portal_viewer"] = get_portal_viewer_state()
     return jsonify(state)
+
+
+@app.route("/api/state/stream")
+def api_state_stream():
+    """GET /api/state/stream - SSE stream for control-plane snapshot updates."""
+    if not verify_token():
+        return jsonify({"error": "Unauthorized"}), 403
+
+    headers = {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+    }
+
+    def generate() -> Iterator[str]:
+        yield "event: ready\ndata: " + json.dumps({"ok": True, "source": "state_stream"}) + "\n\n"
+        if cp_watch_snapshots is not None:
+            for snap in cp_watch_snapshots(interval_sec=1.0):
+                payload = dict(snap)
+                payload["ok"] = True
+                payload["monitoring"] = get_monitoring_state()
+                payload["portal_viewer"] = get_portal_viewer_state()
+                yield "event: state\ndata: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
+            return
+        while True:
+            payload = read_state()
+            payload["monitoring"] = get_monitoring_state()
+            payload["portal_viewer"] = get_portal_viewer_state()
+            yield "event: state\ndata: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
+            time.sleep(1.0)
+
+    return Response(stream_with_context(generate()), headers=headers, mimetype="text/event-stream")
 
 
 @app.route("/api/portal-viewer")

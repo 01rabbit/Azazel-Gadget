@@ -10,6 +10,13 @@ try:
 except ImportError as exc:  # pragma: no cover - dependency notice
     raise SystemExit("PyYAML is required: sudo apt-get install -y python3-yaml") from exc
 
+from azazel_gadget.path_schema import (
+    config_dir_candidates,
+    log_dir_candidates,
+    runtime_dir_candidates,
+    warn_if_legacy_path,
+)
+
 
 @dataclass
 class FirstMinuteConfig:
@@ -87,15 +94,24 @@ class FirstMinuteConfig:
 
     @property
     def runtime_dir(self) -> Path:
-        return Path(self.paths.get("runtime_dir", "/run/azazel-zero"))
+        default = runtime_dir_candidates()[0]
+        path = Path(self.paths.get("runtime_dir", str(default)))
+        warn_if_legacy_path(path, logger=None)
+        return path
 
     @property
     def log_dir(self) -> Path:
-        return Path(self.paths.get("log_dir", "/var/log/azazel-zero"))
+        default = log_dir_candidates()[0]
+        path = Path(self.paths.get("log_dir", str(default)))
+        warn_if_legacy_path(path, logger=None)
+        return path
 
     @property
     def pid_file(self) -> Path:
-        return Path(self.paths.get("pid_file", "/run/azazel-zero/first_minute.pid"))
+        default = runtime_dir_candidates()[0] / "first_minute.pid"
+        path = Path(self.paths.get("pid_file", str(default)))
+        warn_if_legacy_path(path, logger=None)
+        return path
 
     @property
     def dns_log_path(self) -> Path:
@@ -103,14 +119,20 @@ class FirstMinuteConfig:
 
     @property
     def nft_template_path(self) -> Path:
-        return Path(self.paths.get("nft_template", "/etc/azazel-zero/nftables/first_minute.nft"))
+        default = config_dir_candidates()[0] / "nftables" / "first_minute.nft"
+        path = Path(self.paths.get("nft_template", str(default)))
+        warn_if_legacy_path(path, logger=None)
+        return path
 
     @property
     def dnsmasq_conf_path(self) -> Path:
-        return Path(self.paths.get("dnsmasq_conf", "/etc/azazel-zero/dnsmasq-first_minute.conf"))
+        default = config_dir_candidates()[0] / "dnsmasq-first_minute.conf"
+        path = Path(self.paths.get("dnsmasq_conf", str(default)))
+        warn_if_legacy_path(path, logger=None)
+        return path
 
     def ensure_dirs(self) -> None:
-        # Try desired locations; if not writable (e.g., non-root), fall back to repo-local .azazel-zero
+        # Try desired locations; if not writable (e.g., non-root), fall back to repo-local .azazel-gadget
         try_dirs = [self.runtime_dir, self.log_dir]
         try:
             for d in try_dirs:
@@ -119,7 +141,7 @@ class FirstMinuteConfig:
         except PermissionError:
             pass
 
-        fallback_base = Path(__file__).resolve().parents[3] / ".azazel-zero"
+        fallback_base = Path(__file__).resolve().parents[3] / ".azazel-gadget"
         fallback_runtime = fallback_base / "run"
         fallback_log = fallback_base / "log"
         fallback_base.mkdir(parents=True, exist_ok=True)

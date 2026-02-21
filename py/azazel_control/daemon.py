@@ -13,16 +13,29 @@ import socket
 import subprocess
 import threading
 from pathlib import Path
+from typing import Any, Optional
 from urllib.parse import urlparse
 try:
     import yaml
 except Exception:  # pragma: no cover
     yaml = None
 
-# Import Wi-Fi modules
+# Import project modules
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PY_ROOT = PROJECT_ROOT / "py"
 sys.path.insert(0, str(Path(__file__).parent))
+if str(PY_ROOT) not in sys.path:
+    sys.path.insert(0, str(PY_ROOT))
 from wifi_scan import scan_wifi, get_wireless_interface, check_networkmanager
 from wifi_connect import connect_wifi, update_state_json
+from azazel_gadget.path_schema import (
+    first_minute_config_candidates,
+    migrate_schema,
+    portal_env_candidates,
+    snapshot_path_candidates,
+    status as path_schema_status,
+    warn_if_legacy_path,
+)
 
 # Logging setup
 logging.basicConfig(
@@ -33,9 +46,8 @@ logger = logging.getLogger('azazel-daemon')
 
 SOCKET_PATH = Path('/run/azazel/control.sock')
 PORTAL_VIEWER_SERVICE = "azazel-portal-viewer.service"
-PORTAL_VIEWER_ENV = Path("/etc/azazel-zero/portal-viewer.env")
+PORTAL_VIEWER_ENV_CANDIDATES = portal_env_candidates()
 PORTAL_START_URL_RUNTIME_PATH = Path("/run/azazel/portal-viewer-start-url")
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_ROOT = PROJECT_ROOT / "py" / "azazel_control" / "scripts"
 ACTION_SCRIPTS = {
     'refresh': str(SCRIPT_ROOT / 'refresh.sh'),
@@ -60,21 +72,25 @@ PORTAL_DEFAULT_START_URL = "http://neverssl.com"
 
 
 def _read_portal_viewer_env() -> dict[str, str]:
-    """Read /etc/azazel-zero/portal-viewer.env into a dict."""
+    """Read portal-viewer.env (schema-aware) into a dict."""
     parsed: dict[str, str] = {}
     try:
-        if not PORTAL_VIEWER_ENV.exists():
-            return parsed
-        for raw in PORTAL_VIEWER_ENV.read_text(encoding="utf-8").splitlines():
-            line = raw.strip()
-            if not line or line.startswith("#") or "=" not in line:
+        for env_path in PORTAL_VIEWER_ENV_CANDIDATES:
+            if not env_path.exists():
                 continue
-            if line.startswith("export "):
-                line = line[7:].strip()
-            key, value = line.split("=", 1)
-            parsed[key.strip()] = value.strip().strip('"').strip("'")
+            warn_if_legacy_path(env_path, logger=logger)
+            for raw in env_path.read_text(encoding="utf-8").splitlines():
+                line = raw.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                if line.startswith("export "):
+                    line = line[7:].strip()
+                key, value = line.split("=", 1)
+                parsed[key.strip()] = value.strip().strip('"').strip("'")
+            if parsed:
+                break
     except Exception as e:
-        logger.debug(f"Failed to read {PORTAL_VIEWER_ENV}: {e}")
+        logger.debug(f"Failed to read portal env: {e}")
     return parsed
 
 
@@ -280,12 +296,14 @@ def load_control_flags() -> dict:
         env_path = os.environ.get(env_key)
         if env_path:
             candidates.append(Path(env_path))
-    candidates.extend([Path("/etc/azazel-zero/first_minute.yaml"), repo_cfg])
+    candidates.extend(first_minute_config_candidates())
+    candidates.append(repo_cfg)
 
     for path in candidates:
         try:
             if not path.exists():
                 continue
+            warn_if_legacy_path(path, logger=logger)
             data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
             if isinstance(data, dict) and "suppress_auto_wifi" in data:
                 flags["suppress_auto_wifi"] = bool(data.get("suppress_auto_wifi"))
@@ -294,6 +312,48 @@ def load_control_flags() -> dict:
         except Exception as e:
             logger.debug(f"Failed to read control config {path}: {e}")
     return flags
+
+
+def _snapshot_candidates() -> list[Path]:
+    return snapshot_path_candidates(home=Path.home())
+
+
+def read_ui_snapshot() -> dict[str, Any]:
+    """Read latest UI snapshot from schema-aware paths."""
+    for path in _snapshot_candidates():
+        try:
+            if not path.exists():
+                continue
+            warn_if_legacy_path(path, logger=logger)
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return {
+                    "ok": True,
+                    "snapshot": data,
+                    "path": str(path),
+                    "ts": time.time(),
+                }
+        except Exception as exc:
+            logger.debug(f"Failed to read snapshot {path}: {exc}")
+    return {
+        "ok": False,
+        "error": "snapshot_not_found",
+        "paths": [str(p) for p in _snapshot_candidates()],
+        "ts": time.time(),
+    }
+
+
+def stream_ui_snapshots(conn: socket.socket, interval_sec: float = 1.0) -> None:
+    """Stream newline-delimited snapshots whenever content changes."""
+    interval = max(0.2, min(float(interval_sec), 5.0))
+    last_fp = ""
+    while True:
+        payload = read_ui_snapshot()
+        fp = json.dumps(payload.get("snapshot", {}), sort_keys=True, ensure_ascii=False) if payload.get("ok") else ""
+        if fp != last_fp:
+            conn.sendall((json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8"))
+            last_fp = fp
+        time.sleep(interval)
 
 def ensure_socket_dir():
     """Create /run/azazel if needed"""
@@ -413,9 +473,22 @@ def execute_wifi_action(action_name: str, params: dict) -> dict:
 
 def execute_action(action_name, params=None):
     """Execute action script and return result"""
+    params = params or {}
+
+    if action_name == "get_snapshot":
+        return read_ui_snapshot()
+    if action_name == "path_schema_status":
+        return {"ok": True, "schema": path_schema_status(), "ts": time.time()}
+    if action_name == "migrate_path_schema":
+        target = str(params.get("target_schema", "v2")).strip().lower()
+        dry_run = bool(params.get("dry_run", False))
+        result = migrate_schema(target, dry_run=dry_run, home=Path.home())
+        result["ts"] = time.time()
+        return result
+
     # Handle Wi-Fi actions via Python modules
     if action_name in ["wifi_scan", "wifi_connect"]:
-        return execute_wifi_action(action_name, params or {})
+        return execute_wifi_action(action_name, params)
 
     if action_name in ("shutdown", "reboot"):
         limited = rate_limit_error(action_name, "Rate limit exceeded (1 req/10sec)")
@@ -423,13 +496,13 @@ def execute_action(action_name, params=None):
             return limited
 
     if action_name == "portal_viewer_open":
-        timeout_raw = (params or {}).get("timeout_sec", 15)
+        timeout_raw = params.get("timeout_sec", 15)
         try:
             timeout_sec = float(timeout_raw)
         except Exception:
             timeout_sec = 15.0
         timeout_sec = max(1.0, min(timeout_sec, 30.0))
-        start_url_raw = (params or {}).get("start_url", "")
+        start_url_raw = params.get("start_url", "")
         start_url = str(start_url_raw).strip() if isinstance(start_url_raw, str) else ""
         return ensure_portal_viewer_ready(timeout_sec=timeout_sec, start_url=start_url or None)
     
@@ -464,10 +537,20 @@ def execute_action(action_name, params=None):
 def handle_client(conn, addr):
     """Handle incoming client connection"""
     try:
-        data = conn.recv(4096).decode('utf-8')  # Increased buffer for wifi_connect with passphrase
+        raw = conn.recv(4096).decode("utf-8", errors="ignore")
+        data = raw.strip()
+        if not data:
+            conn.sendall(b'{"ok": false, "error": "Empty request"}\n')
+            return
         request = json.loads(data)
         action = request.get('action')
         params = request.get('params', {})
+
+        if action == "watch_snapshot":
+            interval = float((params or {}).get("interval_sec", 1.0))
+            logger.info(f"Received action: watch_snapshot interval={interval}")
+            stream_ui_snapshots(conn, interval_sec=interval)
+            return
         
         # Special handling: NEVER log wifi_connect params (contains passphrase)
         if action == 'wifi_connect':
@@ -477,13 +560,18 @@ def handle_client(conn, addr):
         
         result = execute_action(action, params)
         
-        response = json.dumps(result)
-        conn.send(response.encode('utf-8'))
+        response = json.dumps(result, ensure_ascii=False) + "\n"
+        conn.sendall(response.encode("utf-8"))
     except json.JSONDecodeError:
-        conn.send(b'{"ok": false, "error": "Invalid JSON"}')
+        conn.sendall(b'{"ok": false, "error": "Invalid JSON"}\n')
+    except (BrokenPipeError, ConnectionResetError):
+        logger.debug("Client disconnected")
     except Exception as e:
         logger.error(f"Error handling client: {e}")
-        conn.send(json.dumps({'ok': False, 'error': str(e)}).encode('utf-8'))
+        try:
+            conn.sendall((json.dumps({'ok': False, 'error': str(e)}) + "\n").encode("utf-8"))
+        except Exception:
+            pass
     finally:
         conn.close()
 
@@ -498,7 +586,7 @@ def main():
     sock.bind(str(SOCKET_PATH))
     # Make socket world-readable/writable for other processes
     os.chmod(str(SOCKET_PATH), 0o666)
-    sock.listen(1)
+    sock.listen(16)
     logger.info(f"Listening on {SOCKET_PATH}")
     
     try:

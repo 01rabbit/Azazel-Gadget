@@ -2,8 +2,8 @@
 """
 Azazel-Gadget full-screen TUI (manual refresh, dark theme, fixed layout).
  - Snapshot JSON is fetched on demand (no auto-refresh).
- - IPC is file-based by default: /run/azazel-zero/ui_snapshot.json and ui_command.json
- - Actions send commands via the command file; controller側で処理することを想定。
+ - IPC prefers control-plane Unix socket (/run/azazel/control.sock), then file fallback.
+ - Actions send commands through control plane first, then command file fallback.
  - Unicode が不安定なら ASCII 枠＋アイコンに自動フォールバック (--ascii/--unicodeで強制可)。
 """
 from __future__ import annotations
@@ -22,14 +22,21 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from urllib.request import urlopen
 
+PY_ROOT = Path(__file__).resolve().parents[1]
+if str(PY_ROOT) not in sys.path:
+    sys.path.insert(0, str(PY_ROOT))
+
+from azazel_gadget.control_plane import read_snapshot_payload, send_action_with_fallback
+from azazel_gadget.path_schema import log_dir_candidates, snapshot_path_candidates
+
 DEFAULT_ROOT = Path(__file__).resolve().parent.parent.parent
-SNAPSHOT_PATH = Path("/run/azazel-zero/ui_snapshot.json")
-CMD_PATH = Path("/run/azazel-zero/ui_command.json")
-FALLBACK_RUN = DEFAULT_ROOT / ".azazel-zero" / "run"
-FALLBACK_SNAPSHOT = FALLBACK_RUN / "ui_snapshot.json"
-FALLBACK_CMD = FALLBACK_RUN / "ui_command.json"
-LOG_PATH = Path("/var/log/azazel-zero/first_minute.log")
-FALLBACK_LOG = DEFAULT_ROOT / ".azazel-zero" / "log" / "first_minute.log"
+_SNAPSHOT_PATHS = snapshot_path_candidates()
+SNAPSHOT_PATH = _SNAPSHOT_PATHS[0]
+FALLBACK_SNAPSHOT = _SNAPSHOT_PATHS[-1]
+FALLBACK_RUN = FALLBACK_SNAPSHOT.parent
+_LOG_DIRS = log_dir_candidates()
+LOG_PATH = _LOG_DIRS[0] / "first_minute.log"
+FALLBACK_LOG = _LOG_DIRS[-1] / "first_minute.log"
 
 STATE_MAP = {
     "CHECKING": ("青", "⟳", "~"),
@@ -604,31 +611,45 @@ def generate_recommendation(snap: Snapshot) -> str:
 
 
 def load_snapshot() -> Snapshot:
-    path = SNAPSHOT_PATH if SNAPSHOT_PATH.exists() else FALLBACK_SNAPSHOT
     data: Dict[str, object]
-    snap_from_log = load_snapshot_from_log()
-    if snap_from_log:
-        snap = snap_from_log
-    elif path.exists():
+    payload, source = read_snapshot_payload(prefer_control_plane=True)
+    if payload is not None:
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            snap = build_snapshot(data, source="SNAPSHOT")
+            snap = build_snapshot(payload, source=source)
         except Exception:
+            snap_from_log = load_snapshot_from_log()
+            if snap_from_log:
+                snap = snap_from_log
+            else:
+                sample = default_snapshot()
+                snap = build_snapshot(sample, source="SAMPLE")
+    else:
+        snap_from_log = load_snapshot_from_log()
+        if snap_from_log:
+            snap = snap_from_log
+        elif SNAPSHOT_PATH.exists() or FALLBACK_SNAPSHOT.exists():
+            path = SNAPSHOT_PATH if SNAPSHOT_PATH.exists() else FALLBACK_SNAPSHOT
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                snap = build_snapshot(data, source="SNAPSHOT")
+            except Exception:
+                FALLBACK_RUN.mkdir(parents=True, exist_ok=True)
+                sample = default_snapshot()
+                try:
+                    SNAPSHOT_PATH.parent.mkdir(parents=True, exist_ok=True)
+                    SNAPSHOT_PATH.write_text(json.dumps(sample, ensure_ascii=False), encoding="utf-8")
+                except Exception:
+                    pass
+                snap = build_snapshot(sample, source="SAMPLE")
+        else:
             FALLBACK_RUN.mkdir(parents=True, exist_ok=True)
             sample = default_snapshot()
             try:
-                path.write_text(json.dumps(sample, ensure_ascii=False), encoding="utf-8")
+                SNAPSHOT_PATH.parent.mkdir(parents=True, exist_ok=True)
+                SNAPSHOT_PATH.write_text(json.dumps(sample, ensure_ascii=False), encoding="utf-8")
             except Exception:
                 pass
             snap = build_snapshot(sample, source="SAMPLE")
-    else:
-        FALLBACK_RUN.mkdir(parents=True, exist_ok=True)
-        sample = default_snapshot()
-        try:
-            path.write_text(json.dumps(sample, ensure_ascii=False), encoding="utf-8")
-        except Exception:
-            pass
-        snap = build_snapshot(sample, source="SAMPLE")
     
     # WiFiチャンネルスキャンを実行（上りインターフェースを使用）
     try:
@@ -844,13 +865,7 @@ def default_snapshot() -> Dict[str, object]:
 
 
 def send_command(action: str) -> None:
-    path = CMD_PATH if CMD_PATH.exists() or CMD_PATH.parent.exists() else FALLBACK_CMD
-    path.parent.mkdir(parents=True, exist_ok=True)
-    cmd = {"ts": time.time(), "action": action}
-    try:
-        path.write_text(json.dumps(cmd), encoding="utf-8")
-    except Exception:
-        pass
+    send_action_with_fallback(action, logger=None)
 
 
 def _epd_fingerprint(snap: Snapshot) -> Tuple[str, str, str, Optional[int], str]:
