@@ -70,8 +70,8 @@ Azazel-Gadget Unified Installer
   - --resume は Stage 30 以降のみ実行（Stage 10 の依存インストールは再実行しない）
 
 詳細:
-  $PROJECT_ROOT/docs/INSTALLER_UNIFIED_DESIGN.md
-  $PROJECT_ROOT/docs/DHCP_DNS_TROUBLESHOOTING.md
+  \$PROJECT_ROOT/docs/INSTALLER_UNIFIED_DESIGN.md
+  \$PROJECT_ROOT/docs/DHCP_DNS_TROUBLESHOOTING.md
 EOF
 }
 
