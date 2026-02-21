@@ -171,7 +171,10 @@ HERE = os.path.abspath(os.path.dirname(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, os.pardir))
 
 # Tool commands
-SSID_TOOL = ["/usr/bin/python3", os.path.join(HERE, "ssid_list.py")]
+if os.geteuid() == 0:
+    SSID_TOOL = ["/usr/bin/python3", os.path.join(HERE, "ssid_list.py")]
+else:
+    SSID_TOOL = ["sudo", "/usr/bin/python3", os.path.join(HERE, "ssid_list.py")]
 # Placeholder for future tools
 DELAY_TOOL = ["/usr/bin/python3", os.path.join(HERE, "delay_tool.py")]  # if not present, we gray it out
 
@@ -251,9 +254,9 @@ class AzazelMenuTextualApp(App):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
-        yield Static("Loading status...", id="status")
-        yield Static("Loading menu...", id="menu")
-        yield Static(self._message, id="message")
+        yield Static("Loading status...", id="status", markup=False)
+        yield Static("Loading menu...", id="menu", markup=False)
+        yield Static(self._message, id="message", markup=False)
         yield Footer()
 
     async def on_mount(self) -> None:

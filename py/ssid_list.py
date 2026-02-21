@@ -276,18 +276,18 @@ class SSIDListTextualApp(App):
     }
     """
 
-    def __init__(self, iface: str, nets: list[dict[str, Any]]) -> None:
+    def __init__(self, iface: str, nets: list[dict[str, Any]], message: str = "Ready") -> None:
         super().__init__()
         self._iface = iface
         self._nets = list(nets)
         self._idx = 0
-        self._message = "Ready"
+        self._message = message
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
-        yield Static("Scanning result", id="status")
-        yield Static("Loading list...", id="list")
-        yield Static(self._message, id="message")
+        yield Static("Scanning result", id="status", markup=False)
+        yield Static("Loading list...", id="list", markup=False)
+        yield Static(self._message, id="message", markup=False)
         yield Footer()
 
     async def on_mount(self) -> None:
@@ -404,11 +404,11 @@ def interactive_select(iface, nets):
     return curses.wrapper(_interactive_select, iface, nets)
 
 
-def interactive_select_textual(iface, nets):
+def interactive_select_textual(iface, nets, message: str = "Ready"):
     if not TEXTUAL_AVAILABLE:
         print("Error: Textual mode requested but python3-textual is not installed.", file=sys.stderr)
         return None
-    result = SSIDListTextualApp(iface, nets).run()
+    result = SSIDListTextualApp(iface, nets, message=message).run()
     if not result:
         return None
     action, payload = result
@@ -434,13 +434,19 @@ def main():
     # スキャン（共通モジュール使用）
     nets = _rescan_nets(iface)
     
-    if not nets:
+    if not nets and not args.textual:
         print("No networks found or scan failed", file=sys.stderr)
         sys.exit(2)
 
     # Interactive selection
     if args.textual:
-        choice = interactive_select_textual(iface, nets)
+        initial_message = "Ready"
+        if not nets:
+            if os.geteuid() != 0:
+                initial_message = "No networks found. Try sudo or press r to rescan."
+            else:
+                initial_message = "No networks found. Press r to rescan or q to quit."
+        choice = interactive_select_textual(iface, nets, message=initial_message)
     else:
         choice = interactive_select(iface, nets)
     if choice is None:

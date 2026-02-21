@@ -128,15 +128,15 @@ class AzazelTextualApp(App):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
-        yield Static("Status: booting...", id="status-line")
-        yield Static("Loading snapshot...", id="summary")
+        yield Static("Status: booting...", id="status-line", markup=False)
+        yield Static("Loading snapshot...", id="summary", markup=False)
         with Horizontal(id="middle"):
-            yield Static("Loading connection...", id="connection")
-            yield Static("Loading control...", id="control")
-        yield Static("Loading evidence...", id="evidence")
-        yield Static("Flow: PROBE -> DEGRADED -> NORMAL -> SAFE", id="flow")
-        yield Static("[U] Refresh  [A] Stage-Open  [R] Re-Probe  [C] Contain  [L] Details  [Q] Quit", id="actions")
-        yield Static("Details hidden. Press [L] to toggle.", id="details")
+            yield Static("Loading connection...", id="connection", markup=False)
+            yield Static("Loading control...", id="control", markup=False)
+        yield Static("Loading evidence...", id="evidence", markup=False)
+        yield Static("Flow: PROBE -> DEGRADED -> NORMAL -> SAFE", id="flow", markup=False)
+        yield Static("[U] Refresh  [A] Stage-Open  [R] Re-Probe  [C] Contain  [L] Details  [Q] Quit", id="actions", markup=False)
+        yield Static("Details hidden. Press [L] to toggle.", id="details", markup=False)
         yield Footer()
 
     async def on_mount(self) -> None:
