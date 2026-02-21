@@ -7,9 +7,16 @@ echo "  テスト4: E-Paper ディスプレイ動作確認"
 echo "================================================"
 echo ""
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+CONFIG_FILE="/etc/azazel-zero/first_minute.yaml"
+if [ ! -f "$CONFIG_FILE" ]; then
+  CONFIG_FILE="${REPO_ROOT}/configs/first_minute.yaml"
+fi
+
 # API ポート設定
 API_HOST="10.55.0.10"
-API_PORT=$(grep -A 2 "status_api:" /home/azazel/Azazel-Zero/configs/first_minute.yaml | grep "port:" | awk '{print $NF}' || echo "8082")
+API_PORT=$(grep -A 2 "status_api:" "$CONFIG_FILE" | grep "port:" | awk '{print $NF}' || echo "8082")
 
 echo "[前提確認] E-Paper ディスプレイサービスの確認..."
 echo ""

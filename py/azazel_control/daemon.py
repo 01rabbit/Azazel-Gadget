@@ -35,15 +35,17 @@ SOCKET_PATH = Path('/run/azazel/control.sock')
 PORTAL_VIEWER_SERVICE = "azazel-portal-viewer.service"
 PORTAL_VIEWER_ENV = Path("/etc/azazel-zero/portal-viewer.env")
 PORTAL_START_URL_RUNTIME_PATH = Path("/run/azazel/portal-viewer-start-url")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+SCRIPT_ROOT = PROJECT_ROOT / "py" / "azazel_control" / "scripts"
 ACTION_SCRIPTS = {
-    'refresh': '/home/azazel/Azazel-Zero/py/azazel_control/scripts/refresh.sh',
-    'reprobe': '/home/azazel/Azazel-Zero/py/azazel_control/scripts/reprobe.sh',
-    'contain': '/home/azazel/Azazel-Zero/py/azazel_control/scripts/contain.sh',
-    'stage_open': '/home/azazel/Azazel-Zero/py/azazel_control/scripts/stage_open.sh',
-    'disconnect': '/home/azazel/Azazel-Zero/py/azazel_control/scripts/disconnect.sh',
-    'details': '/home/azazel/Azazel-Zero/py/azazel_control/scripts/details.sh',
-    'shutdown': '/home/azazel/Azazel-Zero/py/azazel_control/scripts/shutdown.sh',
-    'reboot': '/home/azazel/Azazel-Zero/py/azazel_control/scripts/reboot.sh',
+    'refresh': str(SCRIPT_ROOT / 'refresh.sh'),
+    'reprobe': str(SCRIPT_ROOT / 'reprobe.sh'),
+    'contain': str(SCRIPT_ROOT / 'contain.sh'),
+    'stage_open': str(SCRIPT_ROOT / 'stage_open.sh'),
+    'disconnect': str(SCRIPT_ROOT / 'disconnect.sh'),
+    'details': str(SCRIPT_ROOT / 'details.sh'),
+    'shutdown': str(SCRIPT_ROOT / 'shutdown.sh'),
+    'reboot': str(SCRIPT_ROOT / 'reboot.sh'),
 }
 
 # Rate limiting

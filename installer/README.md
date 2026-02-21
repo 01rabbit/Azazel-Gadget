@@ -7,7 +7,7 @@
 ### 初回インストール
 
 ```bash
-cd ~/Azazel-Zero
+cd ~/azazel
 sudo ./install.sh
 ```
 

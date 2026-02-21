@@ -172,7 +172,7 @@ sudo ./install.sh --with-webui --with-canary --with-ntfy
 ### 初回ユーザー
 
 ```bash
-cd ~/Azazel-Zero
+cd ~/azazel
 sudo ./install.sh --with-webui  # Web UI 含める
 # → インストール完了（8-12 分）
 ```

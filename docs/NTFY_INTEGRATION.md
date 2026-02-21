@@ -46,7 +46,7 @@ sudo ss -tulpen | grep -E ':(8081|8084)\b'
 
 ### Step 2: 自動インストール
 ```bash
-sudo bash /home/azazel/Azazel-Zero/scripts/install_ntfy.sh
+sudo bash /home/azazel/azazel/scripts/install_ntfy.sh
 ```
 
 スクリプトが実行する内容：
@@ -184,7 +184,7 @@ stage_contain:
 ## ファイル構成
 
 ```
-Azazel-Zero/
+azazel/
 ├── py/azazel_zero/first_minute/
 │   ├── notifier.py                 # ★ ntfy クライアント実装
 │   ├── controller.py               # ★ notifier 統合フック
@@ -284,7 +284,7 @@ sudo journalctl -u azazel-first-minute -f | grep -i "ntfy\|notif"
 
 ```bash
 # ユニットテスト（10 test cases）
-cd /home/azazel/Azazel-Gadget
+cd /home/azazel/azazel
 python3 test_ntfy_notifier.py
 
 # すべてのテストが `OK` で終了することを確認

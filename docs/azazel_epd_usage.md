@@ -232,7 +232,7 @@ After=network.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/python3 /home/azazel/Azazel-Zero/py/azazel_epd.py --state normal --ssid "AzazelNet" --ip "172.16.0.1"
+ExecStart=/usr/bin/python3 /home/azazel/azazel/py/azazel_epd.py --state normal --ssid "AzazelNet" --ip "172.16.0.1"
 User=root
 
 [Install]
@@ -242,7 +242,7 @@ WantedBy=multi-user.target
 ### Periodic updates with cron
 ```bash
 # Update every 5 minutes
-*/5 * * * * /usr/bin/python3 /home/azazel/Azazel-Zero/py/azazel_epd.py --state normal --ssid "AzazelNet" --ip "172.16.0.1" 2>&1 | logger -t azazel-epd
+*/5 * * * * /usr/bin/python3 /home/azazel/azazel/py/azazel_epd.py --state normal --ssid "AzazelNet" --ip "172.16.0.1" 2>&1 | logger -t azazel-epd
 ```
 
 ---

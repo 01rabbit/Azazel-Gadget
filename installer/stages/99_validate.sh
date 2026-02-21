@@ -10,6 +10,7 @@ source "$(dirname "$0")/../_lib.sh"
 
 WITH_CANARY="${WITH_CANARY:-0}"
 WITH_WEBUI="${WITH_WEBUI:-0}"
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
 main() {
     log_info "════════════════════════════════════════════"
@@ -376,7 +377,7 @@ main() {
         log_error "  • サービスステータス: systemctl status azazel-first-minute.service"
         log_error ""
         log_error "詳細は以下を参照:"
-        log_error "  /home/azazel/Azazel-Zero/docs/DHCP_DNS_TROUBLESHOOTING.md"
+        log_error "  ${REPO_ROOT}/docs/DHCP_DNS_TROUBLESHOOTING.md"
         log_error ""
         return 1
     fi

@@ -3,6 +3,11 @@
 # 使用方法: ./scripts/tests/regression/run_test5_mgmt_comms.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+CONFIG_FILE="/etc/azazel-zero/first_minute.yaml"
+if [ ! -f "$CONFIG_FILE" ]; then
+  CONFIG_FILE="${REPO_ROOT}/configs/first_minute.yaml"
+fi
 
 echo "================================================"
 echo "  テスト5: 管理通信（SSH/API）CONTAIN中の動作"
@@ -11,8 +16,8 @@ echo ""
 
 # API ポート設定
 API_HOST="10.55.0.10"
-API_PORT=$(grep -A 2 "status_api:" /home/azazel/Azazel-Zero/configs/first_minute.yaml | grep "port:" | awk '{print $NF}' || echo "8082")
-MGMT_IP=$(grep "ip:" /home/azazel/Azazel-Zero/configs/first_minute.yaml | head -1 | awk '{print $NF}')
+API_PORT=$(grep -A 2 "status_api:" "$CONFIG_FILE" | grep "port:" | awk '{print $NF}' || echo "8082")
+MGMT_IP=$(grep "ip:" "$CONFIG_FILE" | head -1 | awk '{print $NF}')
 
 echo "[前置条件] CONTAIN 状態に準備..."
 python3 << 'PYTHON_SETUP'

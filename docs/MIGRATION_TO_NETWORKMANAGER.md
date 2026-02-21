@@ -101,10 +101,10 @@ sudo apt-get remove wpasupplicant
 nmcli dev status
 
 # Wi-Fi スキャンのテスト
-python3 /home/azazel/Azazel-Zero/py/azazel_control/wifi_scan.py
+python3 /home/azazel/azazel/py/azazel_control/wifi_scan.py
 
 # Wi-Fi 接続のテスト（該当する SSID/パスフレーズで置換）
-python3 /home/azazel/Azazel-Zero/py/azazel_control/wifi_connect.py "TestSSID" --security WPA2 --passphrase "testpass"
+python3 /home/azazel/azazel/py/azazel_control/wifi_connect.py "TestSSID" --security WPA2 --passphrase "testpass"
 ```
 
 ## トラブルシューティング

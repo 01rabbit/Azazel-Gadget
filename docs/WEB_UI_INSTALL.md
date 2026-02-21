@@ -18,7 +18,7 @@
 完全なシステムセットアップ（Web UI 含む）を一括で実行：
 
 ```bash
-cd ~/Azazel-Zero
+cd ~/azazel
 sudo ./install.sh --with-webui
 ```
 
@@ -34,7 +34,7 @@ sudo ./install.sh --with-webui
 既存の Azazel-Gadget システムに Web UI のみを追加する場合は、再度 `./install.sh` を実行してください：
 
 ```bash
-cd ~/Azazel-Zero
+cd ~/azazel
 sudo ./install.sh --with-webui
 ```
 
@@ -47,7 +47,7 @@ sudo ./install.sh --with-webui
 
 ### 2. ディレクトリ構造
 ```
-~/Azazel-Zero/
+~/azazel/
 ├── azazel_web/
 │   ├── app.py                    # Flask アプリケーション
 │   ├── templates/
@@ -212,10 +212,10 @@ python3 -c "import flask; print(flask.__version__)"
 journalctl -u azazel-control-daemon -n 50
 
 # パーミッションを確認
-ls -la ~/Azazel-Zero/py/azazel_control/daemon.py
+ls -la ~/azazel/py/azazel_control/daemon.py
 
 # 手動起動でエラーを確認
-sudo python3 ~/Azazel-Zero/py/azazel_control/daemon.py
+sudo python3 ~/azazel/py/azazel_control/daemon.py
 ```
 
 ### 問題 3: システムメトリクスが表示されない

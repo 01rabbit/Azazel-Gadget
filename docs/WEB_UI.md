@@ -49,8 +49,8 @@ http://<Raspberry Pi の Wi-Fi IP>:8083/
 開発・デバッグ用のテストサーバーを起動：
 
 ```bash
-cd /home/azazel/Azazel-Gadget
-PYTHONPATH=/home/azazel/Azazel-Zero/py python3 test_web_ui.py
+cd /home/azazel/azazel
+PYTHONPATH=/home/azazel/azazel/py python3 test_web_ui.py
 ```
 
 起動後、ブラウザで `http://127.0.0.1:8083/` にアクセス。

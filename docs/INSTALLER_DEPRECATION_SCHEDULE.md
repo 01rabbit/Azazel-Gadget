@@ -34,7 +34,7 @@
 
 ### 基本インストール
 ```bash
-cd ~/Azazel-Zero
+cd ~/azazel
 sudo ./install.sh
 ```
 
@@ -86,14 +86,14 @@ sudo bash bin/diagnose_dhcp.sh > backup_diagnosis.txt
 cp /etc/azazel-zero/* ~/backup_config/
 
 # 新規同等環境セットアップ
-cd ~/Azazel-Zero
+cd ~/azazel
 sudo ./install.sh
 ```
 
 ### ケース 2: アップグレード
 
 ```bash
-cd ~/Azazel-Zero
+cd ~/azazel
 git pull origin main
 sudo ./install.sh  # 既存設定は上書き⚠️
 ```
@@ -102,7 +102,7 @@ sudo ./install.sh  # 既存設定は上書き⚠️
 
 ```bash
 # 最新コード取得
-cd ~/Azazel-Zero
+cd ~/azazel
 git pull origin main
 
 # 既存設定をバックアップ

@@ -317,12 +317,12 @@ Threat: [🔴🔴🔴🔴🔴] Critical ← Dangerous
   - Add `dtoverlay=dwc2` to `/boot/config.txt`
   - Add `modules-load=dwc2,g_ether` to `/boot/cmdline.txt`
   - After reboot, `usb0` is available
-- Repository deployed to `/home/azazel/Azazel-Gadget`
+- Repository deployed to `/home/azazel/azazel`
 
 ### Quick Start (Recommended)
 
 ```bash
-cd ~/Azazel-Zero
+cd ~/azazel
 sudo ./install.sh
 ```
 

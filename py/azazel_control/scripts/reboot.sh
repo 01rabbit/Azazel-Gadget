@@ -3,7 +3,9 @@
 
 set -euo pipefail
 
-EPD_SCRIPT="/home/azazel/Azazel-Zero/py/boot_splash_epd.py"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+EPD_SCRIPT="${PROJECT_ROOT}/py/boot_splash_epd.py"
 
 (
     /bin/sleep 1

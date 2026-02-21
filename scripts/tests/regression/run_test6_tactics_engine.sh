@@ -7,16 +7,27 @@ echo "  テスト6: リスク採点（Tactics Engine）動作確認"
 echo "================================================"
 echo ""
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+CONFIG_FILE="/etc/azazel-zero/first_minute.yaml"
+if [ ! -f "$CONFIG_FILE" ]; then
+  CONFIG_FILE="${REPO_ROOT}/configs/first_minute.yaml"
+fi
+export REPO_ROOT
+
 # API ポート設定
 API_HOST="10.55.0.10"
-API_PORT=$(grep -A 2 "status_api:" /home/azazel/Azazel-Zero/configs/first_minute.yaml | grep "port:" | awk '{print $NF}' || echo "8082")
+API_PORT=$(grep -A 2 "status_api:" "$CONFIG_FILE" | grep "port:" | awk '{print $NF}' || echo "8082")
 
 echo "[テスト1] Tactics Engine モジュールの確認..."
 
 # Python モジュール確認（パスを追加）
 python3 << 'PYTHON_CHECK'
+import os
 import sys
-sys.path.insert(0, '/home/azazel/Azazel-Zero/py')
+repo_root = os.environ.get("REPO_ROOT", "")
+if repo_root:
+    sys.path.insert(0, os.path.join(repo_root, "py"))
 
 modules = ["azazel_zero.tactics_engine.config_hash", 
            "azazel_zero.tactics_engine.eve_parser",
@@ -37,8 +48,11 @@ echo "[テスト2] config_hash 動作確認..."
 
 # config_hash を実行
 CONFIG_HASH=$(python3 << 'PYTHON'
+import os
 import sys
-sys.path.insert(0, '/home/azazel/Azazel-Zero/py')
+repo_root = os.environ.get("REPO_ROOT", "")
+if repo_root:
+    sys.path.insert(0, os.path.join(repo_root, "py"))
 
 try:
     from azazel_zero.tactics_engine import ConfigHash
@@ -46,7 +60,7 @@ try:
     
     config_path = Path('/etc/azazel-zero/first_minute.yaml')
     if not config_path.exists():
-        config_path = Path('/home/azazel/Azazel-Zero/configs/first_minute.yaml')
+        config_path = Path(repo_root) / 'configs' / 'first_minute.yaml'
     
     config_hash = ConfigHash.compute(config_file=config_path)
     print(config_hash)
@@ -100,8 +114,11 @@ if [ -f "$EVE_PATH" ]; then
   
   # eve_parser でパース可能か確認
   PARSE_RESULT=$(python3 << 'PYTHON'
+import os
 import sys
-sys.path.insert(0, '/home/azazel/Azazel-Zero/py')
+repo_root = os.environ.get("REPO_ROOT", "")
+if repo_root:
+    sys.path.insert(0, os.path.join(repo_root, "py"))
 
 try:
     from azazel_zero.tactics_engine import EVEParser
@@ -143,8 +160,11 @@ echo "[テスト5] decision_logger 統合確認..."
 
 # decision_logger で記録可能か確認
 LOG_RESULT=$(python3 << 'PYTHON'
+import os
 import sys
-sys.path.insert(0, '/home/azazel/Azazel-Zero/py')
+repo_root = os.environ.get("REPO_ROOT", "")
+if repo_root:
+    sys.path.insert(0, os.path.join(repo_root, "py"))
 from pathlib import Path
 
 try:
