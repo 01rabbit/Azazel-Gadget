@@ -6,7 +6,8 @@ Wants=network-online.target
 [Service]
 Type=forking
 User=root
-EnvironmentFile=/etc/default/azazel-zero
+EnvironmentFile=-/etc/default/azazel-gadget
+EnvironmentFile=-/etc/default/azazel-zero
 Environment=VIRTUAL_ENV=/home/azazel/canary-venv
 Environment=PATH=/home/azazel/canary-venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=/usr/local/bin/opencanary-start

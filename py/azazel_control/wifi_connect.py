@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Wi-Fi Connect Module for Azazel-Zero Control Daemon
+Wi-Fi Connect Module for Azazel-Gadget Control Daemon
 
 Connects to target SSID and enables USB client NAT:
 - Uses NetworkManager/nmcli for Wi-Fi management
@@ -25,11 +25,15 @@ DEFAULT_CAPTIVE_RETRY_SCHEDULE_SEC = [0, 3, 10]
 # Import wifi_scan helpers
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
+PY_ROOT = Path(__file__).resolve().parents[1]
+if str(PY_ROOT) not in sys.path:
+    sys.path.insert(0, str(PY_ROOT))
 from wifi_scan import (
     get_wireless_interface,
     check_networkmanager,
     get_saved_networks_nm,
 )
+from azazel_gadget.path_schema import snapshot_path_candidates, warn_if_legacy_path
 
 
 def get_usb_interface() -> Optional[str]:
@@ -745,27 +749,26 @@ def apply_nat(wlan_iface: str, usb_iface: str) -> Dict[str, Any]:
 
 
 def update_state_json(wifi_state: str, **kwargs):
-    """Update /run/azazel-zero/ui_snapshot.json with Wi-Fi state"""
-    state_path = Path("/run/azazel-zero/ui_snapshot.json")
-    fallback_path = Path.home() / ".azazel-zero/run/ui_snapshot.json"
+    """Update snapshot.json with Wi-Fi state (schema-aware paths)."""
+    candidates = snapshot_path_candidates(home=Path.home())
+    state_path = candidates[0]
+    fallback_path = candidates[-1]
     
     try:
         # Read from both paths to get the most complete state
         data = {}
         
-        # Try to read primary path first
-        if state_path.exists():
+        # Try all candidate paths to get the richest current state
+        for p in candidates:
+            if not p.exists():
+                continue
             try:
-                data = json.loads(state_path.read_text(encoding="utf-8"))
+                warn_if_legacy_path(p, logger=logger)
+                data = json.loads(p.read_text(encoding="utf-8"))
+                if data:
+                    break
             except Exception as e:
-                logger.debug(f"Failed to read {state_path}: {e}")
-        
-        # If primary is empty, try fallback
-        if not data and fallback_path.exists():
-            try:
-                data = json.loads(fallback_path.read_text(encoding="utf-8"))
-            except Exception as e:
-                logger.debug(f"Failed to read {fallback_path}: {e}")
+                logger.debug(f"Failed to read {p}: {e}")
         
         default_conn = {
             "wifi_state": "DISCONNECTED",
@@ -816,22 +819,15 @@ def update_state_json(wifi_state: str, **kwargs):
         }
         data["connection"] = merged
         
-        # Write to BOTH paths to ensure synchronization
-        # Primary path (if accessible)
-        try:
-            state_path.parent.mkdir(parents=True, exist_ok=True)
-            state_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-            logger.info(f"Updated {state_path}: wifi_state={wifi_state}")
-        except Exception as e:
-            logger.debug(f"Could not write to {state_path}: {e}")
-        
-        # Fallback path (always attempt)
-        try:
-            fallback_path.parent.mkdir(parents=True, exist_ok=True)
-            fallback_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-            logger.info(f"Updated {fallback_path}: wifi_state={wifi_state}")
-        except Exception as e:
-            logger.debug(f"Could not write to {fallback_path}: {e}")
+        # Write to primary + fallback for backward compatibility.
+        for p in (state_path, fallback_path):
+            try:
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(json.dumps(data, indent=2), encoding="utf-8")
+                warn_if_legacy_path(p, logger=logger)
+                logger.info(f"Updated {p}: wifi_state={wifi_state}")
+            except Exception as e:
+                logger.debug(f"Could not write to {p}: {e}")
     
     except Exception as e:
         logger.warning(f"Failed to update state.json: {e}")

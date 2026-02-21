@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Azazel-Zero: tmux top-pane status renderer
+Azazel-Gadget: tmux top-pane status renderer
 - Prints concise network and service status, refreshing periodically
 - Designed to run in a plain terminal (no curses) so it can live in its own tmux pane
 - Exit with Ctrl-C (SIGINT)
@@ -21,6 +21,12 @@ import json
 from datetime import datetime
 from typing import Optional, Tuple
 from pathlib import Path
+
+PY_ROOT = Path(__file__).resolve().parent
+if str(PY_ROOT) not in sys.path:
+    sys.path.insert(0, str(PY_ROOT))
+
+from azazel_gadget.path_schema import runtime_dir_candidates
 
 # ---------- helpers ----------
 
@@ -122,11 +128,17 @@ def _supports_emoji() -> bool:
 
 
 def _health_path() -> Path:
-    run_dir = Path("/run/azazel-zero")
-    if run_dir.exists() and os.access(run_dir, os.R_OK):
-        return run_dir / "wifi_health.json"
-    fb = Path(__file__).resolve().parent.parent / ".azazel-zero" / "run" / "wifi_health.json"
-    return fb
+    for run_dir in runtime_dir_candidates():
+        if run_dir.exists() and os.access(run_dir, os.R_OK):
+            return run_dir / "wifi_health.json"
+    repo_root = Path(__file__).resolve().parent.parent
+    for fb in (
+        repo_root / ".azazel-gadget" / "run" / "wifi_health.json",
+        repo_root / ".azazel-zero" / "run" / "wifi_health.json",
+    ):
+        if fb.exists():
+            return fb
+    return repo_root / ".azazel-gadget" / "run" / "wifi_health.json"
 
 
 def _health_status() -> str:
@@ -166,7 +178,7 @@ def _print_status():
     emoji = _supports_emoji()
 
     ap = '📶 AP' if emoji else '[AP]'
-    aza = '🜲 Azazel-Zero' if emoji else '[Azazel-Zero]'
+    aza = '🜲 Azazel-Gadget' if emoji else '[Azazel-Gadget]'
     dhcp = '🧩 DHCP' if emoji else '[DHCP]'
     lap = '💻 Laptop' if emoji else '[Laptop]'
     arw = ' ➜ ' if emoji else ' -> '
@@ -195,7 +207,7 @@ def _print_status():
     health = _health_status()
 
     # Print
-    print(f"==== Azazel-Zero Status  |  {now} ====")
+    print(f"==== Azazel-Gadget Status  |  {now} ====")
     print(line1 + badges)
     print(f"AP(wlan0): {wlan_ip}   |   Pi(usb0): {usb_ip}   |   Laptop: {lap_ip}")
     print(f"GW-IF: {gw_if}    BSSID: {bssid}")

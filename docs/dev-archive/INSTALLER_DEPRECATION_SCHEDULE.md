@@ -34,7 +34,7 @@
 
 ### 基本インストール
 ```bash
-cd ~/Azazel-Zero
+cd ~/azazel
 sudo ./install.sh
 ```
 
@@ -59,7 +59,7 @@ sudo ./install.sh --all
 
 ### なぜプロファイルシステムは廃止か
 
-Azazel-Zero のインフラは **完全に固定** です：
+Azazel-Gadget のインフラは **完全に固定** です：
 - IP アドレス：10.55.0.10（ハードコード）
 - インターフェース：usb0（ダウンストリーム）、wlan0（アップストリーム）
 - ホスト名：raspberrypi（Raspberry Pi OS デフォルト）
@@ -86,14 +86,14 @@ sudo bash bin/diagnose_dhcp.sh > backup_diagnosis.txt
 cp /etc/azazel-zero/* ~/backup_config/
 
 # 新規同等環境セットアップ
-cd ~/Azazel-Zero
+cd ~/azazel
 sudo ./install.sh
 ```
 
 ### ケース 2: アップグレード
 
 ```bash
-cd ~/Azazel-Zero
+cd ~/azazel
 git pull origin main
 sudo ./install.sh  # 既存設定は上書き⚠️
 ```
@@ -102,7 +102,7 @@ sudo ./install.sh  # 既存設定は上書き⚠️
 
 ```bash
 # 最新コード取得
-cd ~/Azazel-Zero
+cd ~/azazel
 git pull origin main
 
 # 既存設定をバックアップ
@@ -148,7 +148,7 @@ tar czf ~/old_profiles.tar.gz installer/profiles/
 - インフラ監査・ドキュメント化
 - API 統合自動化
 
-ただし Azazel-Zero では固定インフラなため不要。
+ただし Azazel-Gadget では固定インフラなため不要。
 
 ---
 

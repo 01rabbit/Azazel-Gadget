@@ -1,6 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
-AZAZEL_ROOT="${AZAZEL_ROOT:-/home/azazel/Azazel-Zero}"
+for defaults in /etc/default/azazel-gadget /etc/default/azazel-zero; do
+  if [[ -r "$defaults" ]]; then
+    # shellcheck disable=SC1090
+    . "$defaults"
+    break
+  fi
+done
+
+if [[ -z "${AZAZEL_ROOT:-}" ]]; then
+  for candidate in "$HOME/Azazel-Gadget" "$HOME/azazel-gadget" "/home/azazel/Azazel-Gadget"; do
+    if [[ -d "$candidate" ]]; then
+      AZAZEL_ROOT="$candidate"
+      break
+    fi
+  done
+fi
+
+AZAZEL_ROOT="${AZAZEL_ROOT:-/home/azazel/Azazel-Gadget}"
 EPD_PY="${EPD_PY:-${AZAZEL_ROOT}/py/boot_splash_epd.py}"
 LOCK="/run/azazel-epd.lock"
 EVE="/var/log/suricata/eve.json"

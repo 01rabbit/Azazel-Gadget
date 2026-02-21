@@ -1,7 +1,7 @@
-# Azazel-Zero Web UI
+# Azazel-Gadget Web UI
 
 ## 概要
-Azazel-Zero の Web UI ダッシュボードです。リアルタイムでシステムの状態、疑わしさスコア、ネットワーク情報、検知シグナルを可視化します。
+Azazel-Gadget の Web UI ダッシュボードです。リアルタイムでシステムの状態、疑わしさスコア、ネットワーク情報、検知シグナルを可視化します。
 
 **リモートアクセス対応**：ラップトップやスマートフォンから Wi-Fi 経由でリモート監視可能。
 
@@ -25,7 +25,7 @@ Azazel-Zero の Web UI ダッシュボードです。リアルタイムでシス
 ## アクセス方法
 
 ### 通常運用時（複数の方法）
-Azazel-Zero が稼働している場合、以下の URL でアクセス可能：
+Azazel-Gadget が稼働している場合、以下の URL でアクセス可能：
 
 #### ローカル（Raspberry Pi 直接接続）
 ```
@@ -183,9 +183,9 @@ sudo systemctl restart azazel-first-minute
 ## アーキテクチャ
 
 ### バックエンド
-- **モジュール**: [py/azazel_zero/first_minute/web_api.py](../py/azazel_zero/first_minute/web_api.py)
+- **モジュール**: [py/azazel_gadget/first_minute/web_api.py](../py/azazel_gadget/first_minute/web_api.py)
 - **ベース**: Python 標準ライブラリ `http.server.HTTPServer`
-- **統合**: [controller.py](../py/azazel_zero/first_minute/controller.py) の `start_status_api()` で起動
+- **統合**: [controller.py](../py/azazel_gadget/first_minute/controller.py) の `start_status_api()` で起動
 - **リモートアクセス**: `web_host: 0.0.0.0` で全インターフェースでリッスン
 
 ### フロントエンド
@@ -216,7 +216,7 @@ sudo systemctl restart azazel-first-minute
 ```
 
 ### 履歴保持件数
-[py/azazel_zero/first_minute/web_api.py](../py/azazel_zero/first_minute/web_api.py) の `max_history` を変更：
+[py/azazel_gadget/first_minute/web_api.py](../py/azazel_gadget/first_minute/web_api.py) の `max_history` を変更：
 
 ```python
 class WebAPIHandler(BaseHTTPRequestHandler):
@@ -248,10 +248,18 @@ class WebAPIHandler(BaseHTTPRequestHandler):
   curl http://10.55.0.10:8083/api/status
   ```
 
+### 履歴が表示されない
+- ステージ遷移が発生していない可能性
+- テスト用に手動でイベントを追加：
+  ```python
+  from azazel_gadget.first_minute.web_api import add_history_event
+  add_history_event("NORMAL", "PROBE", 15, "テストイベント")
+  ```
+
 ## 開発
 
 ### カスタマイズ
-- **スタイル変更**: [web_api.py](../py/azazel_zero/first_minute/web_api.py) の `<style>` セクションを編集
+- **スタイル変更**: [web_api.py](../py/azazel_gadget/first_minute/web_api.py) の `<style>` セクションを編集
 - **新規 API 追加**: `WebAPIHandler.do_GET()` に新しいエンドポイントを追加
 - **グラフ追加**: Chart.js などのライブラリを `<head>` に追加
 
@@ -264,13 +272,13 @@ class WebAPIHandler(BaseHTTPRequestHandler):
 
 ## 関連ファイル
 
-- **Web API 実装**: [py/azazel_zero/first_minute/web_api.py](../py/azazel_zero/first_minute/web_api.py)
-- **コントローラー統合**: [py/azazel_zero/first_minute/controller.py](../py/azazel_zero/first_minute/controller.py)
+- **Web API 実装**: [py/azazel_gadget/first_minute/web_api.py](../py/azazel_gadget/first_minute/web_api.py)
+- **コントローラー統合**: [py/azazel_gadget/first_minute/controller.py](../py/azazel_gadget/first_minute/controller.py)
 - **設定ファイル**: [configs/first_minute.yaml](../configs/first_minute.yaml)
 
 ## スクリーンショット説明
 
-- **ヘッダー**: Azazel-Zero ロゴと「身代わり結界セキュリティゲートウェイ」
+- **ヘッダー**: Azazel-Gadget ロゴと「身代わり結界セキュリティゲートウェイ」
 - **カード1**: 現在のステージ、疑わしさスコア（プログレスバー）、理由、稼働時間
 - **カード2**: ネットワーク情報（SSID、BSSID、信号強度、インターフェース）
 - **カード3**: トラフィック整形状態（遅延、帯域制限）
@@ -279,4 +287,4 @@ class WebAPIHandler(BaseHTTPRequestHandler):
 - **カード6**: ステージ遷移履歴（時系列リスト）
 
 ## ライセンス
-Azazel-Zero プロジェクトと同一ライセンス
+Azazel-Gadget プロジェクトと同一ライセンス

@@ -5,11 +5,14 @@ IFACE="${1:-}"
 ACTION="${2:-}"
 
 WAN_IF="auto"
-if [[ -f /etc/default/azazel-zero ]]; then
-  # shellcheck disable=SC1091
-  . /etc/default/azazel-zero
-  WAN_IF="${WAN_IF:-auto}"
-fi
+for defaults in /etc/default/azazel-gadget /etc/default/azazel-zero; do
+  if [[ -f "$defaults" ]]; then
+    # shellcheck disable=SC1091
+    . "$defaults"
+    WAN_IF="${WAN_IF:-auto}"
+    break
+  fi
+done
 
 is_uplink_event=0
 if [[ "${WAN_IF}" == "auto" ]]; then

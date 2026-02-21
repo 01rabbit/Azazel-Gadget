@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Azazel-Zero full-screen TUI (manual refresh, dark theme, fixed layout).
+Azazel-Gadget full-screen TUI (manual refresh, dark theme, fixed layout).
  - Snapshot JSON is fetched on demand (no auto-refresh).
- - IPC is file-based by default: /run/azazel-zero/ui_snapshot.json and ui_command.json
- - Actions send commands via the command file; controller側で処理することを想定。
+ - IPC prefers control-plane Unix socket (/run/azazel/control.sock), then file fallback.
+ - Actions send commands through control plane first, then command file fallback.
  - Unicode が不安定なら ASCII 枠＋アイコンに自動フォールバック (--ascii/--unicodeで強制可)。
 """
 from __future__ import annotations
@@ -22,14 +22,21 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from urllib.request import urlopen
 
+PY_ROOT = Path(__file__).resolve().parents[1]
+if str(PY_ROOT) not in sys.path:
+    sys.path.insert(0, str(PY_ROOT))
+
+from azazel_gadget.control_plane import read_snapshot_payload, send_action_with_fallback
+from azazel_gadget.path_schema import log_dir_candidates, snapshot_path_candidates
+
 DEFAULT_ROOT = Path(__file__).resolve().parent.parent.parent
-SNAPSHOT_PATH = Path("/run/azazel-zero/ui_snapshot.json")
-CMD_PATH = Path("/run/azazel-zero/ui_command.json")
-FALLBACK_RUN = DEFAULT_ROOT / ".azazel-zero" / "run"
-FALLBACK_SNAPSHOT = FALLBACK_RUN / "ui_snapshot.json"
-FALLBACK_CMD = FALLBACK_RUN / "ui_command.json"
-LOG_PATH = Path("/var/log/azazel-zero/first_minute.log")
-FALLBACK_LOG = DEFAULT_ROOT / ".azazel-zero" / "log" / "first_minute.log"
+_SNAPSHOT_PATHS = snapshot_path_candidates()
+SNAPSHOT_PATH = _SNAPSHOT_PATHS[0]
+FALLBACK_SNAPSHOT = _SNAPSHOT_PATHS[-1]
+FALLBACK_RUN = FALLBACK_SNAPSHOT.parent
+_LOG_DIRS = log_dir_candidates()
+LOG_PATH = _LOG_DIRS[0] / "first_minute.log"
+FALLBACK_LOG = _LOG_DIRS[-1] / "first_minute.log"
 
 STATE_MAP = {
     "CHECKING": ("青", "⟳", "~"),
@@ -604,31 +611,45 @@ def generate_recommendation(snap: Snapshot) -> str:
 
 
 def load_snapshot() -> Snapshot:
-    path = SNAPSHOT_PATH if SNAPSHOT_PATH.exists() else FALLBACK_SNAPSHOT
     data: Dict[str, object]
-    snap_from_log = load_snapshot_from_log()
-    if snap_from_log:
-        snap = snap_from_log
-    elif path.exists():
+    payload, source = read_snapshot_payload(prefer_control_plane=True)
+    if payload is not None:
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            snap = build_snapshot(data, source="SNAPSHOT")
+            snap = build_snapshot(payload, source=source)
         except Exception:
+            snap_from_log = load_snapshot_from_log()
+            if snap_from_log:
+                snap = snap_from_log
+            else:
+                sample = default_snapshot()
+                snap = build_snapshot(sample, source="SAMPLE")
+    else:
+        snap_from_log = load_snapshot_from_log()
+        if snap_from_log:
+            snap = snap_from_log
+        elif SNAPSHOT_PATH.exists() or FALLBACK_SNAPSHOT.exists():
+            path = SNAPSHOT_PATH if SNAPSHOT_PATH.exists() else FALLBACK_SNAPSHOT
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                snap = build_snapshot(data, source="SNAPSHOT")
+            except Exception:
+                FALLBACK_RUN.mkdir(parents=True, exist_ok=True)
+                sample = default_snapshot()
+                try:
+                    SNAPSHOT_PATH.parent.mkdir(parents=True, exist_ok=True)
+                    SNAPSHOT_PATH.write_text(json.dumps(sample, ensure_ascii=False), encoding="utf-8")
+                except Exception:
+                    pass
+                snap = build_snapshot(sample, source="SAMPLE")
+        else:
             FALLBACK_RUN.mkdir(parents=True, exist_ok=True)
             sample = default_snapshot()
             try:
-                path.write_text(json.dumps(sample, ensure_ascii=False), encoding="utf-8")
+                SNAPSHOT_PATH.parent.mkdir(parents=True, exist_ok=True)
+                SNAPSHOT_PATH.write_text(json.dumps(sample, ensure_ascii=False), encoding="utf-8")
             except Exception:
                 pass
             snap = build_snapshot(sample, source="SAMPLE")
-    else:
-        FALLBACK_RUN.mkdir(parents=True, exist_ok=True)
-        sample = default_snapshot()
-        try:
-            path.write_text(json.dumps(sample, ensure_ascii=False), encoding="utf-8")
-        except Exception:
-            pass
-        snap = build_snapshot(sample, source="SAMPLE")
     
     # WiFiチャンネルスキャンを実行（上りインターフェースを使用）
     try:
@@ -844,13 +865,7 @@ def default_snapshot() -> Dict[str, object]:
 
 
 def send_command(action: str) -> None:
-    path = CMD_PATH if CMD_PATH.exists() or CMD_PATH.parent.exists() else FALLBACK_CMD
-    path.parent.mkdir(parents=True, exist_ok=True)
-    cmd = {"ts": time.time(), "action": action}
-    try:
-        path.write_text(json.dumps(cmd), encoding="utf-8")
-    except Exception:
-        pass
+    send_action_with_fallback(action, logger=None)
 
 
 def _epd_fingerprint(snap: Snapshot) -> Tuple[str, str, str, Optional[int], str]:
@@ -1002,17 +1017,25 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
         stdscr.refresh()
         return
 
-    # Colors
-    curses.start_color()
-    curses.use_default_colors()
-    curses.init_pair(1, curses.COLOR_GREEN, -1)
-    curses.init_pair(2, curses.COLOR_RED, -1)
-    curses.init_pair(3, curses.COLOR_CYAN, -1)
-    curses.init_pair(4, curses.COLOR_YELLOW, -1)
-    curses.init_pair(5, curses.COLOR_MAGENTA, -1)
-    curses.init_pair(6, curses.COLOR_WHITE, -1)
-    curses.init_pair(7, curses.COLOR_BLACK, -1)
+    # Colors (terminalによっては use_default_colors が失敗するため保護する)
     colors_on = curses.has_colors()
+    if colors_on:
+        try:
+            curses.start_color()
+            bg = -1
+            try:
+                curses.use_default_colors()
+            except curses.error:
+                bg = curses.COLOR_BLACK
+            curses.init_pair(1, curses.COLOR_GREEN, bg)
+            curses.init_pair(2, curses.COLOR_RED, bg)
+            curses.init_pair(3, curses.COLOR_CYAN, bg)
+            curses.init_pair(4, curses.COLOR_YELLOW, bg)
+            curses.init_pair(5, curses.COLOR_MAGENTA, bg)
+            curses.init_pair(6, curses.COLOR_WHITE, bg)
+            curses.init_pair(7, curses.COLOR_BLACK, bg)
+        except curses.error:
+            colors_on = False
 
     def cp(idx: int):
         return curses.color_pair(idx) if colors_on else curses.A_BOLD
@@ -1041,7 +1064,7 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
             temp_color = cp(1)  # green
     
     bar = (
-        f"Azazel-Zero | "
+        f"Azazel-Gadget | "
         f"{'📶' if unicode_mode else 'WiFi'} SSID: {snap.ssid}  "
         f"{'⬇️' if unicode_mode else 'Down:'} {snap.down_if}  "
         f"{'⬆️' if unicode_mode else 'Up:'} {snap.up_if}  "
@@ -1458,7 +1481,7 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
             stdscr.addnstr(extra_y + 3, 2, no_blocks[: w - 4], cp(1))
 
     # Actions + Hint (絵文字なし、シンプル表示)
-    actions = "[U] Refresh  [A] Stage-Open  [R] Re-Probe  [C] Contain  [L] Details  [Q] Quit"
+    actions = "[U] Refresh  [A] Stage-Open  [R] Re-Probe  [C] Contain  [L] Details  [M] Menu  [Q] Quit"
     
     # 状態遷移フロー表示
     state_flow = "Flow: PROBE → DEGRADED → NORMAL → ✅ SAFE" if unicode_mode else "Flow: PROBE->DEGRADED->NORMAL->SAFE"
@@ -1502,20 +1525,58 @@ def details_view(stdscr, snap: Snapshot, unicode_mode: bool):
 
 def main():
     locale.setlocale(locale.LC_ALL, "")
-    parser = argparse.ArgumentParser(description="Azazel-Zero manual-refresh TUI")
+    parser = argparse.ArgumentParser(description="Azazel-Gadget manual-refresh TUI")
     parser.add_argument("--ascii", action="store_true", help="Force ASCII fallback")
     parser.add_argument("--unicode", action="store_true", help="Force Unicode box/icons")
+    ui_group = parser.add_mutually_exclusive_group()
+    ui_group.add_argument("--textual", action="store_true", help="Run Textual UI (default)")
+    ui_group.add_argument("--curses", action="store_true", help="Run legacy curses UI")
+    parser.add_argument("--menu", action="store_true", help="Open control menu on startup (Textual mode)")
     parser.add_argument("--enable-epd", action="store_true", help="Enable E-Paper display updates")
     parser.add_argument("--disable-epd", action="store_true", help="Disable E-Paper display updates")
     args = parser.parse_args()
 
     unicode_mode = detect_unicode(args.ascii, args.unicode)
-    snap = load_snapshot()
     
-    # EPD update enabled by default, unless explicitly disabled
+    # EPD is enabled by default unless explicitly disabled.
     enable_epd = not args.disable_epd
     if args.enable_epd:
         enable_epd = True
+
+    use_textual = not args.curses
+
+    if use_textual:
+        run_textual = None
+        try:
+            from .cli_unified_textual import run_textual
+        except Exception:
+            try:
+                from cli_unified_textual import run_textual
+            except Exception as exc:
+                if args.textual:
+                    print(f"[TUI] Textual mode unavailable: {exc}", file=sys.stderr)
+                    sys.exit(1)
+                print(
+                    f"[TUI] Textual unavailable ({exc}); falling back to curses. "
+                    "Use --curses to select it explicitly.",
+                    file=sys.stderr,
+                )
+        if run_textual is not None:
+            run_textual(
+                load_snapshot_fn=load_snapshot,
+                send_command_fn=send_command,
+                update_epd_fn=update_epd,
+                epd_fingerprint_fn=_epd_fingerprint,
+                unicode_mode=unicode_mode,
+                enable_epd=enable_epd,
+                start_menu=args.menu,
+            )
+            return
+
+    if args.menu:
+        print("[TUI] --menu is Textual-only and is ignored in curses mode.", file=sys.stderr)
+
+    snap = load_snapshot()
     
     # Initial EPD update
     last_epd_fp: Optional[Tuple[str, str, str, Optional[int], str]] = None
@@ -1547,6 +1608,17 @@ def main():
                 snap.evidence.append("• action: contain command sent")
             elif ch in (ord("l"), ord("L")):
                 details_view(stdscr, snap, unicode_mode)
+            elif ch in (ord("m"), ord("M")):
+                try:
+                    menu_script = DEFAULT_ROOT / "py" / "azazel_menu.py"
+                    cmd = ["python3", str(menu_script), "--textual"]
+                    if enable_epd:
+                        cmd.append("--enable-epd")
+                    else:
+                        cmd.append("--disable-epd")
+                    subprocess.call(cmd)
+                except Exception:
+                    pass
             snap = snap  # no-op to keep reference
 
     curses.wrapper(_loop)
@@ -1554,17 +1626,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-def _parse_log_ts(line: str) -> float:
-    """Parse leading timestamp from log line; return epoch or 0."""
-    # Expect format like: "2025-01-29 09:29:42,123 INFO {...}"
-    try:
-        parts = line.split(None, 2)
-        if len(parts) >= 2:
-            ts_part = f"{parts[0]} {parts[1]}"
-            try:
-                return time.mktime(time.strptime(ts_part, "%Y-%m-%d %H:%M:%S,%f"))
-            except ValueError:
-                return time.mktime(time.strptime(ts_part, "%Y-%m-%d %H:%M:%S"))
-    except Exception:
-        return 0
-    return 0

@@ -1,4 +1,4 @@
-# Azazel-Zero セットアップガイド（Raspberry Pi OS Lite Trixie / 64bit）
+# Azazel-Gadget セットアップガイド（Raspberry Pi OS Lite Trixie / 64bit）
 
 [English](/docs/dev-archive/setup-zero.md) | 日本語
 
@@ -13,11 +13,11 @@
 
 することで、
 
-> 上流インターネット（Wi-Fi） → ラズパイ（Azazel-Zero） → ラップトップ（USB 経由）
+> 上流インターネット（Wi-Fi） → ラズパイ（Azazel-Gadget） → ラップトップ（USB 経由）
 
 という経路を構築する手順を示します。
 
-ラップトップ側は、Azazel-Zero からの DHCP（USB テザリング相当）で自動設定される前提です。手動の経路変更は不要です。
+ラップトップ側は、Azazel-Gadget からの DHCP（USB テザリング相当）で自動設定される前提です。手動の経路変更は不要です。
 
 ---
 
@@ -246,7 +246,7 @@ sudo nmcli con mod "SSID_NAME" connection.autoconnect yes
 - 上流インターフェース: `wlan0`（Wi-Fi）
 - 下流インターフェース: `usb0`（USB ガジェット / ラップトップ側）
 
-デフォルトゲートウェイと DNS は Azazel-Zero 側 `dnsmasq` から自動配布されます。
+デフォルトゲートウェイと DNS は Azazel-Gadget 側 `dnsmasq` から自動配布されます。
 
 ### 5-1. IP フォワーディングを永続化
 
@@ -329,7 +329,7 @@ sudo iptables -L FORWARD -n -v
 
 ## 6. ラップトップ側の自動ルーティング確認
 
-ラップトップ側 USB NIC が DHCP 利用のままなら、Azazel-Zero から以下が自動配布されます。
+ラップトップ側 USB NIC が DHCP 利用のままなら、Azazel-Gadget から以下が自動配布されます。
 
 - IP アドレス: `10.55.0.x/24`
 - デフォルトゲートウェイ: `10.55.0.10`
@@ -358,9 +358,9 @@ sudo iptables -L FORWARD -n -v
 
 ---
 
-## 7. 今後 Azazel-Zero として発展させる際の位置づけ
+## 7. 今後 Azazel-Gadget として発展させる際の位置づけ
 
-本ガイドの構成は、Azazel-Zero を
+本ガイドの構成は、Azazel-Gadget を
 
 - `usb0`: 下流クライアント（ユーザー端末）からの入口
 - `wlan0`: 上流インターネットへの出口
@@ -374,4 +374,4 @@ sudo iptables -L FORWARD -n -v
 - OpenCanary などのデコイサービス
 - Mock-LLM / LLM によるスコアリング
 
-を積み上げることで、Azazel-Zero のフル機能ゲートウェイ構成へ発展させることができます。
+を積み上げることで、Azazel-Gadget のフル機能ゲートウェイ構成へ発展させることができます。

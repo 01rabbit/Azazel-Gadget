@@ -1,6 +1,6 @@
-# Azazel-Zero DHCP/DNS トラブルシューティングガイド
+# Azazel-Gadget DHCP/DNS トラブルシューティングガイド
 
-**問題**: ラップトップがAzazel-ZeroのusB経由のネットワーク接続を確立できず、DHCPでIPアドレスを取得できない。
+**問題**: ラップトップがAzazel-GadgetのusB経由のネットワーク接続を確立できず、DHCPでIPアドレスを取得できない。
 
 ## 原因分析
 
@@ -32,7 +32,7 @@
 ### 第 1 ステップ：診断ツール実行
 
 ```bash
-sudo bash /home/azazel/Azazel-Zero/bin/diagnose_dhcp.sh
+sudo bash /home/azazel/azazel/bin/diagnose_dhcp.sh
 ```
 
 このスクリプトが以下を確認します：
@@ -48,7 +48,7 @@ sudo bash /home/azazel/Azazel-Zero/bin/diagnose_dhcp.sh
 
 ```bash
 # インストールスクリプトを再実行（設定ファイルと権限を修正）
-sudo bash /home/azazel/Azazel-Zero/bin/install_systemd.sh
+sudo bash /home/azazel/azazel/bin/install_systemd.sh
 
 # systemd 設定を再読込
 sudo systemctl daemon-reload
@@ -146,7 +146,7 @@ sudo apt-get install dnsmasq
 ls -la /etc/azazel-zero/dnsmasq-first_minute.conf
 
 # なければインストール再実行
-sudo bash /home/azazel/Azazel-Zero/bin/install_systemd.sh
+sudo bash /home/azazel/azazel/bin/install_systemd.sh
 ```
 
 **原因③**: ポートが既に使用中
@@ -213,7 +213,7 @@ sudo systemctl restart azazel-first-minute.service
 
 ```bash
 # フォアグラウンド実行（DEBUG ログ出力）
-AZAZEL_DEBUG=1 python3 /home/azazel/Azazel-Zero/py/azazel-first-minute.py start --config /etc/azazel-zero/first_minute.yaml --foreground
+AZAZEL_DEBUG=1 python3 /home/azazel/azazel/py/azazel-first-minute.py start --config /etc/azazel-zero/first_minute.yaml --foreground
 ```
 
 これで以下が表示されます：
@@ -263,7 +263,7 @@ Set-DnsClientServerAddress -InterfaceAlias "Ethernet" -ServerAddresses 10.55.0.1
 修正後、以下コマンドで再インストール・再起動：
 
 ```bash
-sudo bash /home/azazel/Azazel-Zero/bin/install_systemd.sh
+sudo bash /home/azazel/azazel/bin/install_systemd.sh
 sudo systemctl daemon-reload
 sudo systemctl restart usb0-static.service
 sudo systemctl restart azazel-first-minute.service

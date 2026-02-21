@@ -17,9 +17,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from azazel_zero.sensors.wifi_safety import evaluate_wifi_safety
-from azazel_zero.tactics_engine import ConfigHash, DecisionLogger
-from azazel_zero.tactics_engine.decision_logger import (
+from azazel_gadget.sensors.wifi_safety import evaluate_wifi_safety
+from azazel_gadget.tactics_engine import ConfigHash, DecisionLogger
+from azazel_gadget.tactics_engine.decision_logger import (
     StateSnapshot, InputSnapshot, ScoreDelta, ChosenAction, DecisionRecord,
 )
 
@@ -31,6 +31,7 @@ from .probes import ProbeOutcome, run_all
 from .state_machine import FirstMinuteStateMachine, Stage
 from .tc import TcManager
 from .web_api import add_history_event
+from azazel_gadget.path_schema import snapshot_path_candidates, warn_if_legacy_path
 
 
 # Global lock for status_ctx to ensure thread-safe access
@@ -230,7 +231,8 @@ class FirstMinuteController:
         self._last_dnsmasq_restart: float = 0.0
         self._legacy_dnsmasq_warned = False
         self.last_console = 0.0
-        self.snapshot_path = cfg.runtime_dir / "ui_snapshot.json"
+        self.snapshot_paths = snapshot_path_candidates(home=Path.home())
+        self.snapshot_path = self.snapshot_paths[0]
         self.snapshot_path.parent.mkdir(parents=True, exist_ok=True)
         # Keep Wi-Fi connection state in memory to preserve across snapshots
         self.persistent_connection_state: Dict[str, object] = {}
@@ -949,7 +951,7 @@ class FirstMinuteController:
         channel_ap_count = 0
         if self._is_wireless_iface(self.cfg.interfaces.get("upstream", "")):
             try:
-                from azazel_zero.sensors.wifi_channel_scanner import scan_wifi_channels
+                from azazel_gadget.sensors.wifi_channel_scanner import scan_wifi_channels
                 scan_result = scan_wifi_channels(self.cfg.interfaces.get("upstream", ""))
                 if scan_result.get("scan_success"):
                     channel_congestion = scan_result.get("congestion_level", "unknown")
@@ -1037,27 +1039,20 @@ class FirstMinuteController:
             # This allows wifi_connect.py to update connection info without being overwritten
             # Check both primary and fallback paths to ensure we don't lose data
             existing_connection = None
-            fallback_snapshot_path = Path.home() / ".azazel-zero/run/ui_snapshot.json"
-            
-            try:
-                if self.snapshot_path.exists():
-                    existing = json.loads(self.snapshot_path.read_text(encoding="utf-8"))
+            for snap_path in self.snapshot_paths:
+                try:
+                    if not snap_path.exists():
+                        continue
+                    warn_if_legacy_path(snap_path, logger=self.logger)
+                    existing = json.loads(snap_path.read_text(encoding="utf-8"))
                     existing_connection = existing.get("connection")
                     if existing_connection:
-                        self.logger.debug(f"snapshot: preserving connection state from primary path: {existing_connection}")
-            except Exception as e:
-                self.logger.debug(f"snapshot: failed to read primary path: {e}")
-            
-            # If primary has no connection, try fallback path
-            if not existing_connection:
-                try:
-                    if fallback_snapshot_path.exists():
-                        existing = json.loads(fallback_snapshot_path.read_text(encoding="utf-8"))
-                        existing_connection = existing.get("connection")
-                        if existing_connection:
-                            self.logger.debug(f"snapshot: preserving connection state from fallback path: {existing_connection}")
+                        self.logger.debug(
+                            f"snapshot: preserving connection state from {snap_path}: {existing_connection}"
+                        )
+                        break
                 except Exception as e:
-                    self.logger.debug(f"snapshot: failed to read fallback path: {e}")
+                    self.logger.debug(f"snapshot: failed to read {snap_path}: {e}")
             
             # Merge persistent connection state (from memory or file)
             # This ensures Wi-Fi connection data is never lost across snapshot writes
@@ -1072,20 +1067,14 @@ class FirstMinuteController:
                 self.logger.debug("snapshot: no connection state available")
             self.persistent_connection_state = snap["connection"].copy()
             
-            # Write snapshot to BOTH paths to ensure synchronization
-            # Primary path: /run/azazel-zero/ui_snapshot.json
-            try:
-                self.snapshot_path.write_text(json.dumps(snap, ensure_ascii=False), encoding="utf-8")
-            except Exception as e:
-                self.logger.debug(f"snapshot: failed to write primary path: {e}")
-            
-            # Fallback path: ~/.azazel-zero/run/ui_snapshot.json
-            fallback_snapshot_path = Path.home() / ".azazel-zero/run/ui_snapshot.json"
-            try:
-                fallback_snapshot_path.parent.mkdir(parents=True, exist_ok=True)
-                fallback_snapshot_path.write_text(json.dumps(snap, ensure_ascii=False), encoding="utf-8")
-            except Exception as e:
-                self.logger.debug(f"snapshot: failed to write fallback path: {e}")
+            # Write snapshot to primary + fallback path for compatibility.
+            for snap_path in self.snapshot_paths[:2] + [self.snapshot_paths[-1]]:
+                try:
+                    snap_path.parent.mkdir(parents=True, exist_ok=True)
+                    snap_path.write_text(json.dumps(snap, ensure_ascii=False), encoding="utf-8")
+                    warn_if_legacy_path(snap_path, logger=self.logger)
+                except Exception as e:
+                    self.logger.debug(f"snapshot: failed to write {snap_path}: {e}")
         except Exception as e:
             self.logger.warning(f"snapshot: failed overall: {e}")
 
@@ -1097,16 +1086,12 @@ class FirstMinuteController:
         because write_snapshot() executes every 2 seconds and would otherwise
         overwrite the connection section that wifi_connect.py just wrote.
         """
-        # Check primary and fallback paths for any updates
-        state_path = Path("/run/azazel-zero/ui_snapshot.json")
-        fallback_path = Path.home() / ".azazel-zero/run/ui_snapshot.json"
-        
         self.logger.debug(f"sync: checking for connection state updates (current: {self.persistent_connection_state})")
         
-        # Check BOTH paths - either one might have the latest connection data
-        for path in [state_path, fallback_path]:
+        for path in self.snapshot_paths:
             try:
                 if path.exists():
+                    warn_if_legacy_path(path, logger=self.logger)
                     data = json.loads(path.read_text(encoding="utf-8"))
                     conn = data.get("connection")
                     self.logger.debug(f"sync: read from {path}: {conn}")
@@ -1348,8 +1333,8 @@ class FirstMinuteController:
         tags = link_meta.get("wifi_tags", []) if link_meta else []
 
         try:
-            from azazel_zero.core.mock_llm_core import MockLLMCore
-            from azazel_zero.sensors.wifi_health_monitor import health_paths
+            from azazel_gadget.core.mock_llm_core import MockLLMCore
+            from azazel_gadget.sensors.wifi_health_monitor import health_paths
         except Exception:
             return
 
@@ -2216,7 +2201,7 @@ class FirstMinuteController:
         tags = link_meta.get("wifi_tags", []) if link_meta else []
         out = []
         out.append("\033[2J\033[H")  # clear screen
-        out.append("Azazel-Zero First-Minute Control")
+        out.append("Azazel-Gadget First-Minute Control")
         out.append(f"State: {state.value:8}  Suspicion: {summary.get('suspicion', 0):5} [{bar}]")
         out.append(f"Reason: {summary.get('reason','')}")
         out.append(f"Wi-Fi: ssid={ssid} bssid={bssid}")

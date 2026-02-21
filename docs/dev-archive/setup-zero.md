@@ -1,4 +1,4 @@
-# Azazel-Zero Setup Guide (Raspberry Pi OS Lite Trixie / 64-bit)
+# Azazel-Gadget Setup Guide (Raspberry Pi OS Lite Trixie / 64-bit)
 
 English | [日本語](/docs/dev-archive/setup-zero_ja.md)
 
@@ -13,9 +13,9 @@ This guide explains how to install Raspberry Pi OS Lite (Trixie 64-bit) on a Ras
 
 so that you can build the following path:
 
-> Upstream Internet (Wi-Fi) → Raspberry Pi (Azazel-Zero) → Laptop (via USB)
+> Upstream Internet (Wi-Fi) → Raspberry Pi (Azazel-Gadget) → Laptop (via USB)
 
-Laptop-side configuration is expected to be automatic via DHCP from Azazel-Zero (USB tethering style), without manual route edits.
+Laptop-side configuration is expected to be automatic via DHCP from Azazel-Gadget (USB tethering style), without manual route edits.
 
 ---
 
@@ -247,7 +247,7 @@ The following steps turn the Pi into a **USB–Wi-Fi router**.
 - Upstream interface: `wlan0` (Wi-Fi)  
 - Downstream interface: `usb0` (USB gadget / laptop side)
 
-The default gateway and DNS are handed out automatically by dnsmasq on Azazel-Zero.
+The default gateway and DNS are handed out automatically by dnsmasq on Azazel-Gadget.
 
 ### 5-1. Persist IPv4 forwarding
 
@@ -330,7 +330,7 @@ If you see a `MASQUERADE` rule in `POSTROUTING` and `usb0` ↔ `wlan0` rules in 
 
 ## 6. Laptop-side auto-routing check
 
-With DHCP enabled on the laptop USB NIC, Azazel-Zero provides:
+With DHCP enabled on the laptop USB NIC, Azazel-Gadget provides:
 
 - IP address: `10.55.0.x/24`
 - Default gateway: `10.55.0.10`
@@ -357,18 +357,18 @@ Example connectivity checks:
 
 ---
 
-## 7. Positioning for future Azazel-Zero development
+## 7. Positioning for future Azazel-Gadget development
 
-The configuration in this guide provides the **minimal router foundation** for treating Azazel-Zero as:
+The configuration in this guide provides the **minimal router foundation** for treating Azazel-Gadget as:
 
 - `usb0`: ingress from downstream clients (user devices)  
 - `wlan0`: egress to the upstream Internet  
 
-On top of this, you can build the full Azazel-Zero gateway by layering:
+On top of this, you can build the full Azazel-Gadget gateway by layering:
 
 - Traffic detection with Suricata  
 - Delay-to-Win behavior using tc / iptables / nftables  
 - Decoy services such as OpenCanary  
 - Scoring with Mock-LLM / real LLMs  
 
-to achieve the complete Azazel-Zero feature set.
+to achieve the complete Azazel-Gadget feature set.

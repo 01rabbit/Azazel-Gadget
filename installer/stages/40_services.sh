@@ -15,13 +15,16 @@ WITH_WEBUI="${WITH_WEBUI:-0}"
 
 configure_sshd_usb_only() {
     local mgmt_ip="10.55.0.10"
-    if [[ -f /etc/default/azazel-zero ]]; then
-        # shellcheck disable=SC1091
-        source /etc/default/azazel-zero
-        if [[ -n "${MGMT_IP:-}" ]]; then
-            mgmt_ip="$MGMT_IP"
+    for defaults in /etc/default/azazel-gadget /etc/default/azazel-zero; do
+        if [[ -f "$defaults" ]]; then
+            # shellcheck disable=SC1091
+            source "$defaults"
+            if [[ -n "${MGMT_IP:-}" ]]; then
+                mgmt_ip="$MGMT_IP"
+            fi
+            break
         fi
-    fi
+    done
 
     local dropin_dir="/etc/ssh/sshd_config.d"
     local dropin_file="${dropin_dir}/90-azazel-usb0-only.conf"
@@ -221,9 +224,9 @@ main() {
             # Caddy internal CA を配布しやすい場所へコピー
             local caddy_root_ca="/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt"
             if [[ -f "$caddy_root_ca" ]]; then
-                mkdir -p /etc/azazel-zero/certs
-                install -m 0644 "$caddy_root_ca" "/etc/azazel-zero/certs/azazel-webui-local-ca.crt"
-                log_info "  ✓ Web UI ローカルCA: /etc/azazel-zero/certs/azazel-webui-local-ca.crt"
+                mkdir -p /etc/azazel-gadget/certs
+                install -m 0644 "$caddy_root_ca" "/etc/azazel-gadget/certs/azazel-webui-local-ca.crt"
+                log_info "  ✓ Web UI ローカルCA: /etc/azazel-gadget/certs/azazel-webui-local-ca.crt"
             else
                 log_warn "⚠️  Caddy ローカルCAが見つかりません: $caddy_root_ca"
             fi

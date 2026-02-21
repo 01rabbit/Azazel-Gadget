@@ -39,7 +39,7 @@ main() {
     
     # 5. 既存インストール検出
     if [[ -d /etc/azazel-zero ]]; then
-        log_warn "⚠️  既存の Azazel-Zero インストールが検出されました"
+        log_warn "⚠️  既存の Azazel-Gadget インストールが検出されました"
         log_warn "   場所: /etc/azazel-zero"
         
         if systemctl is-active --quiet azazel-first-minute.service >/dev/null 2>&1; then

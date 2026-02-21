@@ -9,8 +9,8 @@ PY_ROOT = REPO_ROOT / "py"
 if str(PY_ROOT) not in sys.path:
     sys.path.insert(0, str(PY_ROOT))
 
-from azazel_zero.first_minute.controller import FirstMinuteController
-from azazel_zero.first_minute.probes import probe_captive_portal
+from azazel_gadget.first_minute.controller import FirstMinuteController
+from azazel_gadget.first_minute.probes import probe_captive_portal
 
 
 class ResolveCaptiveProbeIfaceTests(unittest.TestCase):
@@ -106,7 +106,7 @@ class ProbeCaptivePortalDecisionTests(unittest.TestCase):
         return _run
 
     def test_http_204_means_no(self):
-        with patch("azazel_zero.first_minute.probes._iface_ready_for_probe", return_value=(True, "READY", {})):
+        with patch("azazel_gadget.first_minute.probes._iface_ready_for_probe", return_value=(True, "READY", {})):
             with patch("subprocess.run", side_effect=self._fake_curl_result(0, "204", "HTTP/1.1 204 No Content\r\n", b"")):
                 status, reason, _ = probe_captive_portal("wlan0", "http://connectivitycheck.gstatic.com/generate_204", 3, 0)
         self.assertEqual(status, "NO")
@@ -114,7 +114,7 @@ class ProbeCaptivePortalDecisionTests(unittest.TestCase):
 
     def test_http_302_means_yes(self):
         headers = "HTTP/1.1 302 Found\r\nLocation: http://login.local/\r\n"
-        with patch("azazel_zero.first_minute.probes._iface_ready_for_probe", return_value=(True, "READY", {})):
+        with patch("azazel_gadget.first_minute.probes._iface_ready_for_probe", return_value=(True, "READY", {})):
             with patch("subprocess.run", side_effect=self._fake_curl_result(0, "302", headers, b"")):
                 status, reason, detail = probe_captive_portal("wlan0", "http://connectivitycheck.gstatic.com/generate_204", 3, 0)
         self.assertEqual(status, "YES")
@@ -122,21 +122,21 @@ class ProbeCaptivePortalDecisionTests(unittest.TestCase):
         self.assertEqual(detail.get("location"), "http://login.local/")
 
     def test_http_200_body_means_suspected(self):
-        with patch("azazel_zero.first_minute.probes._iface_ready_for_probe", return_value=(True, "READY", {})):
+        with patch("azazel_gadget.first_minute.probes._iface_ready_for_probe", return_value=(True, "READY", {})):
             with patch("subprocess.run", side_effect=self._fake_curl_result(0, "200", "HTTP/1.1 200 OK\r\n", b"portal-page")):
                 status, reason, _ = probe_captive_portal("wlan0", "http://connectivitycheck.gstatic.com/generate_204", 3, 0)
         self.assertEqual(status, "SUSPECTED")
         self.assertEqual(reason, "HTTP_200_BODY")
 
     def test_apple_success_means_no(self):
-        with patch("azazel_zero.first_minute.probes._iface_ready_for_probe", return_value=(True, "READY", {})):
+        with patch("azazel_gadget.first_minute.probes._iface_ready_for_probe", return_value=(True, "READY", {})):
             with patch("subprocess.run", side_effect=self._fake_curl_result(0, "200", "HTTP/1.1 200 OK\r\n", b"Success")):
                 status, reason, _ = probe_captive_portal("wlan0", "http://captive.apple.com/hotspot-detect.html", 3, 0)
         self.assertEqual(status, "NO")
         self.assertEqual(reason, "HTTP_200_APPLE_SUCCESS")
 
     def test_curl_timeout_means_na(self):
-        with patch("azazel_zero.first_minute.probes._iface_ready_for_probe", return_value=(True, "READY", {})):
+        with patch("azazel_gadget.first_minute.probes._iface_ready_for_probe", return_value=(True, "READY", {})):
             with patch("subprocess.run", side_effect=self._fake_curl_result(28, "000", "", b"")):
                 status, reason, _ = probe_captive_portal("wlan0", "http://connectivitycheck.gstatic.com/generate_204", 3, 0)
         self.assertEqual(status, "NA")

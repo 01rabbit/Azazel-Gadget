@@ -46,7 +46,7 @@ sudo ss -tulpen | grep -E ':(8081|8084)\b'
 
 ### Step 2: 自動インストール
 ```bash
-sudo bash /home/azazel/Azazel-Zero/scripts/install_ntfy.sh
+sudo bash /home/azazel/azazel/scripts/install_ntfy.sh
 ```
 
 スクリプトが実行する内容：
@@ -184,8 +184,8 @@ stage_contain:
 ## ファイル構成
 
 ```
-Azazel-Zero/
-├── py/azazel_zero/first_minute/
+azazel/
+├── py/azazel_gadget/first_minute/
 │   ├── notifier.py                 # ★ ntfy クライアント実装
 │   ├── controller.py               # ★ notifier 統合フック
 │   └── config.py                   # ★ notify 設定スキーマ
@@ -199,7 +199,7 @@ Azazel-Zero/
 
 ### NtfyNotifier の使用例
 ```python
-from azazel_zero.first_minute.notifier import NtfyNotifier
+from azazel_gadget.first_minute.notifier import NtfyNotifier
 
 notifier = NtfyNotifier(
     base_url="http://10.55.0.10:8081",
@@ -297,5 +297,5 @@ sudo journalctl -u azazel-first-minute -f | grep -i "ntfy\|notif"
 ## 参考資料
 
 - **ntfy.sh 公式**: https://ntfy.sh
-- **Azazel-Zero**: https://github.com/01rabbit/Azazel-Zero
+- **Azazel-Gadget**: https://github.com/01rabbit/Azazel-Zero
 - **Issue**: ntfy 通知基盤の実装

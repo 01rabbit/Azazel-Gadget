@@ -1,10 +1,10 @@
-# Azazel-Zero Boot Splash
+# Azazel-Gadget Boot Splash
 
 [English](/docs/dev-archive/Boot_E-Paper_Splash.md) | [日本語](/docs/dev-archive/Boot_E-Paper_Splash_ja.md)
 
 ## Overview
 
-Azazel-Zero provides a "boot splash" feature that displays the wireless LAN SSID and IP address on an electronic paper (E-Paper) display at startup, allowing you to easily check the network status at a glance. This feature runs on a Raspberry Pi and is designed to quickly grasp access information without any physical operation.
+Azazel-Gadget provides a "boot splash" feature that displays the wireless LAN SSID and IP address on an electronic paper (E-Paper) display at startup, allowing you to easily check the network status at a glance. This feature runs on a Raspberry Pi and is designed to quickly grasp access information without any physical operation.
 
 ## Required Dependencies
 
@@ -36,7 +36,7 @@ The following packages and libraries are required. The steps below reflect the o
 ### Automated Installation (Recommended)
 
 ```bash
-sudo bash ~/Azazel-Zero/bin/install_waveshare_epd.sh
+sudo bash ~/azazel/bin/install_waveshare_epd.sh
 ```
 
 The installer runs the entire sequence (apt, pip, git clone, demo archive download, optional demo run). Use `--run-demo` if you want it to launch the test script automatically.
@@ -84,7 +84,7 @@ sudo chown -R pi:pi /opt/waveshare-epd
 
 #### Setting Import Path
 
-To ensure that the library can be referenced from `/home/pi/Azazel-Zero/py/boot_splash_epd.py`, please set one of the following.
+To ensure that the library can be referenced from `/home/pi/azazel/py/boot_splash_epd.py`, please set one of the following.
 
 - **A) Manage environment variables for systemd in `/etc/default/azazel-zero` (Recommended)**  
   Instead of specifying PYTHONPATH directly in the systemd unit file, set it to read the environment file as follows:
@@ -110,7 +110,7 @@ To ensure that the library can be referenced from `/home/pi/Azazel-Zero/py/boot_
 The main script for this feature is placed as follows.
 
 ```txt
-/home/pi/Azazel-Zero/py/boot_splash_epd.py
+/home/pi/azazel/py/boot_splash_epd.py
 ```
 
 ### One-Time Test Method
@@ -118,7 +118,7 @@ The main script for this feature is placed as follows.
 Run the following command to execute the script once and check the display operation.
 
 ```sh
-cd /home/pi/Azazel-Zero/py
+cd /home/pi/azazel/py
 python3 boot_splash_epd.py
 ```
 
@@ -136,7 +136,7 @@ To run automatically at startup, register as a systemd service.
 
 ```ini
 [Unit]
-Description=Azazel-Zero E-Paper Display Service
+Description=Azazel-Gadget E-Paper Display Service
 After=network-online.target
 Wants=network-online.target
 

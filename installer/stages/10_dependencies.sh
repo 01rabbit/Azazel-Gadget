@@ -39,6 +39,14 @@ main() {
     
     install_packages "${base_packages[@]}"
     log_info "✓ 基本パッケージ完了"
+
+    # 2.5 Textual TUI 依存（環境差分を考慮して best-effort 導入）
+    log_info "Textual TUI 依存をインストール..."
+    if install_package python3-textual; then
+        log_info "✓ python3-textual インストール完了"
+    else
+        log_warn "python3-textual が未提供です。TUIは起動時に自動で curses フォールバックします"
+    fi
     
     # 3. iptables-persistent 有効化
     log_info "iptables-persistent を有効化..."

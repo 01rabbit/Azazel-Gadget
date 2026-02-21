@@ -1,24 +1,26 @@
 [Unit]
-Description=Azazel-Zero First-Minute Control
+Description=Azazel-Gadget First-Minute Control
 After=network-online.target usb0-static.service
 Wants=network-online.target
 Requires=usb0-static.service
 
 [Service]
 Type=simple
-WorkingDirectory=/home/azazel/Azazel-Zero
+WorkingDirectory=/
 Environment="AZAZEL_DEBUG=0"
+EnvironmentFile=-/etc/default/azazel-gadget
+EnvironmentFile=-/etc/default/azazel-zero
 ExecStartPre=-/usr/bin/systemctl stop dnsmasq.service
 # usb0 インターフェースが UP するまで待機
 ExecStartPre=/bin/bash -c 'for i in {1..30}; do ip link show usb0 | grep -q UP && exit 0; sleep 0.5; done; exit 1'
-ExecStart=/usr/bin/python3 /home/azazel/Azazel-Zero/py/azazel-first-minute.py start --config /etc/azazel-zero/first_minute.yaml --foreground
-ExecStop=/usr/bin/python3 /home/azazel/Azazel-Zero/py/azazel-first-minute.py stop --config /etc/azazel-zero/first_minute.yaml
+ExecStart=/bin/bash -lc 'ROOT="${AZAZEL_ROOT:-/home/azazel/Azazel-Gadget}"; exec /usr/bin/python3 "$ROOT/py/azazel-first-minute.py" start --config /etc/azazel-gadget/first_minute.yaml --foreground'
+ExecStop=/bin/bash -lc 'ROOT="${AZAZEL_ROOT:-/home/azazel/Azazel-Gadget}"; exec /usr/bin/python3 "$ROOT/py/azazel-first-minute.py" stop --config /etc/azazel-gadget/first_minute.yaml'
 ExecStartPre=/usr/sbin/sysctl -w net.ipv4.ip_forward=1
 Restart=on-failure
 RestartSec=3
 User=root
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
-RuntimeDirectory=azazel-zero
+RuntimeDirectory=azazel-gadget
 KillMode=process
 
 [Install]

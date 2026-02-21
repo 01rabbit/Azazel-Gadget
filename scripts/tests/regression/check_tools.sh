@@ -82,8 +82,9 @@ echo "=== テストスクリプト ==="
 check_file "test_redesign_verification.py" || ((FAIL_COUNT++))
 check_file "azazel_test.py" || ((FAIL_COUNT++))
 check_file "py/azazel_epd.py" || ((FAIL_COUNT++))
-check_file "py/azazel_zero/cli_unified.py" || ((FAIL_COUNT++))
+check_file "py/azazel_gadget/cli_unified.py" || ((FAIL_COUNT++))
 check_file "scripts/tests/regression/run_test7_router_regression.sh" || ((FAIL_COUNT++))
+check_file "scripts/tests/e2e/run_ui_stack_smoke.sh" || ((FAIL_COUNT++))
 
 echo ""
 echo "=== 設定ファイル ==="

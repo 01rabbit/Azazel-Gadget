@@ -1,15 +1,15 @@
-# Azazel-Zero Web UI Installation Guide
+# Azazel-Gadget Web UI Installation Guide
 
 ## 概要
 
-このガイドは、Azazel-Zero の Web UI を新しい Raspberry Pi Zero 2 W にインストールする手順を説明します。
+このガイドは、Azazel-Gadget の Web UI を新しい Raspberry Pi Zero 2 W にインストールする手順を説明します。
 
 ## 前提条件
 
 - Raspberry Pi Zero 2 W
 - Raspberry Pi OS Lite (64-bit) インストール済み
 - USB ガジェットモード設定済み（`dtoverlay=dwc2` および `modules-load=dwc2,g_ether`）
-- Azazel-Zero コアシステムのインストール済み
+- Azazel-Gadget コアシステムのインストール済み
 
 ## インストール方法
 
@@ -18,7 +18,7 @@
 完全なシステムセットアップ（Web UI 含む）を一括で実行：
 
 ```bash
-cd ~/Azazel-Zero
+cd ~/azazel
 sudo ./install.sh --with-webui
 ```
 
@@ -31,10 +31,10 @@ sudo ./install.sh --with-webui
 
 ### オプション 2: Web UI のみ追加
 
-既存の Azazel-Zero システムに Web UI のみを追加する場合は、再度 `./install.sh` を実行してください：
+既存の Azazel-Gadget システムに Web UI のみを追加する場合は、再度 `./install.sh` を実行してください：
 
 ```bash
-cd ~/Azazel-Zero
+cd ~/azazel
 sudo ./install.sh --with-webui
 ```
 
@@ -47,7 +47,7 @@ sudo ./install.sh --with-webui
 
 ### 2. ディレクトリ構造
 ```
-~/Azazel-Zero/
+~/azazel/
 ├── azazel_web/
 │   ├── app.py                    # Flask アプリケーション
 │   ├── templates/
@@ -212,10 +212,10 @@ python3 -c "import flask; print(flask.__version__)"
 journalctl -u azazel-control-daemon -n 50
 
 # パーミッションを確認
-ls -la ~/Azazel-Zero/py/azazel_control/daemon.py
+ls -la ~/azazel/py/azazel_control/daemon.py
 
 # 手動起動でエラーを確認
-sudo python3 ~/Azazel-Zero/py/azazel_control/daemon.py
+sudo python3 ~/azazel/py/azazel_control/daemon.py
 ```
 
 ### 問題 3: システムメトリクスが表示されない
@@ -305,7 +305,7 @@ sudo systemctl restart caddy
 ## 参考資料
 
 - [Web UI アーキテクチャ](./WEB_UI.md)
-- [Azazel-Zero セットアップガイド](./setup-zero.md)
+- [Azazel-Gadget セットアップガイド](./setup-zero.md)
 - [README](../README.md)
 
 ## 更新履歴

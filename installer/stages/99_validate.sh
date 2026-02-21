@@ -10,6 +10,7 @@ source "$(dirname "$0")/../_lib.sh"
 
 WITH_CANARY="${WITH_CANARY:-0}"
 WITH_WEBUI="${WITH_WEBUI:-0}"
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
 main() {
     log_info "════════════════════════════════════════════"
@@ -158,13 +159,16 @@ main() {
     done
 
     local mgmt_ip="10.55.0.10"
-    if [[ -f /etc/default/azazel-zero ]]; then
-        # shellcheck disable=SC1091
-        source /etc/default/azazel-zero
-        if [[ -n "${MGMT_IP:-}" ]]; then
-            mgmt_ip="$MGMT_IP"
+    for defaults in /etc/default/azazel-gadget /etc/default/azazel-zero; do
+        if [[ -f "$defaults" ]]; then
+            # shellcheck disable=SC1091
+            source "$defaults"
+            if [[ -n "${MGMT_IP:-}" ]]; then
+                mgmt_ip="$MGMT_IP"
+            fi
+            break
         fi
-    fi
+    done
 
     if [[ "$fm_dnsmasq_detected" == "true" ]]; then
         log_info "  ✓ first-minute 管理 dnsmasq プロセスを確認"
@@ -226,13 +230,17 @@ main() {
     if systemctl is-enabled --quiet azazel-portal-viewer.service 2>/dev/null; then
         local portal_port="6080"
         local portal_bind=""
-        if [[ -f /etc/azazel-zero/portal-viewer.env ]]; then
+        local portal_env="/etc/azazel-gadget/portal-viewer.env"
+        if [[ ! -f "$portal_env" ]]; then
+            portal_env="/etc/azazel-zero/portal-viewer.env"
+        fi
+        if [[ -f "$portal_env" ]]; then
             local parsed_port
-            parsed_port="$(awk -F= '/^[[:space:]]*PORTAL_NOVNC_PORT[[:space:]]*=/{gsub(/[[:space:]"\047]/, "", $2); print $2; exit}' /etc/azazel-zero/portal-viewer.env || true)"
+            parsed_port="$(awk -F= '/^[[:space:]]*PORTAL_NOVNC_PORT[[:space:]]*=/{gsub(/[[:space:]"\047]/, "", $2); print $2; exit}' "$portal_env" || true)"
             if [[ -n "$parsed_port" ]]; then
                 portal_port="$parsed_port"
             fi
-            portal_bind="$(awk -F= '/^[[:space:]]*PORTAL_NOVNC_BIND[[:space:]]*=/{gsub(/[[:space:]"\047]/, "", $2); print $2; exit}' /etc/azazel-zero/portal-viewer.env || true)"
+            portal_bind="$(awk -F= '/^[[:space:]]*PORTAL_NOVNC_BIND[[:space:]]*=/{gsub(/[[:space:]"\047]/, "", $2); print $2; exit}' "$portal_env" || true)"
         fi
 
         if check_service "azazel-portal-viewer.service"; then
@@ -273,8 +281,12 @@ main() {
         log_warn "  ⚠️  nftables テーブル azazel_fmc が見つかりません（後で設定可能）"
     fi
 
-    if [[ -f /etc/azazel-zero/nftables/first_minute.nft ]]; then
-        if grep -Eq 'elements = \{[^}]*6080' /etc/azazel-zero/nftables/first_minute.nft; then
+    local nft_cfg="/etc/azazel-gadget/nftables/first_minute.nft"
+    if [[ ! -f "$nft_cfg" ]]; then
+        nft_cfg="/etc/azazel-zero/nftables/first_minute.nft"
+    fi
+    if [[ -f "$nft_cfg" ]]; then
+        if grep -Eq 'elements = \{[^}]*6080' "$nft_cfg"; then
             log_info "  ✓ nftables 管理ポートに 6080(noVNC) を確認"
         else
             log_error "  ✗ nftables 管理ポートに 6080(noVNC) が含まれていません"
@@ -307,18 +319,30 @@ main() {
     log_info ""
     log_info "【7】設定ファイル確認:"
     
-    local config_files=(
+    local required_config_files=(
+        "/etc/azazel-gadget/first_minute.yaml"
+        "/etc/azazel-gadget/dnsmasq-first_minute.conf"
+        "/etc/default/azazel-gadget"
+    )
+    local legacy_compat_files=(
         "/etc/azazel-zero/first_minute.yaml"
         "/etc/azazel-zero/dnsmasq-first_minute.conf"
         "/etc/default/azazel-zero"
     )
     
-    for conf in "${config_files[@]}"; do
+    for conf in "${required_config_files[@]}"; do
         if [[ -f "$conf" ]]; then
             log_info "  ✓ $conf"
         else
             log_error "  ✗ $conf が見つかりません"
             all_passed=false
+        fi
+    done
+    for conf in "${legacy_compat_files[@]}"; do
+        if [[ -e "$conf" ]]; then
+            log_info "  ✓ (compat) $conf"
+        else
+            log_warn "  ⚠️  (compat) $conf は未配置（新構成のみで運用中）"
         fi
     done
     
@@ -329,7 +353,7 @@ main() {
     if [[ "$all_passed" == "true" ]]; then
         log_info "✓✓✓ INSTALLATION SUCCESSFUL ✓✓✓"
         log_info ""
-        log_info "Azazel-Zero のインストールが完了しました！"
+        log_info "Azazel-Gadget のインストールが完了しました！"
         log_info ""
         log_info "【次のステップ】"
         log_info ""
@@ -338,7 +362,7 @@ main() {
         log_info "   IP は自動ダウンロード (DHCP) されます"
         log_info ""
         log_info "2) 設定をカスタマイズ（必要に応じて）:"
-        log_info "   /etc/azazel-zero/first_minute.yaml"
+        log_info "   /etc/azazel-gadget/first_minute.yaml"
         log_info "   - 既知 SSID リスト"
         log_info "   - 状態遷移閾値"
         log_info ""
@@ -349,7 +373,7 @@ main() {
         log_info ""
         log_info "4) Web UI へアクセス:"
         log_info "   https://10.55.0.10 (Web UI オプション有効時)"
-        log_info "   ※ ローカルCA証明書: /etc/azazel-zero/certs/azazel-webui-local-ca.crt"
+        log_info "   ※ ローカルCA証明書: /etc/azazel-gadget/certs/azazel-webui-local-ca.crt"
         if systemctl is-enabled --quiet azazel-portal-viewer.service 2>/dev/null; then
             log_info "   Captive Portal Viewer: http://10.55.0.10:6080/vnc.html"
         fi
@@ -358,7 +382,7 @@ main() {
         fi
         log_info ""
         log_info "【ログ確認】"
-        log_info "  tail -f /var/log/azazel-zero/first_minute.log"
+        log_info "  tail -f /var/log/azazel-gadget/first_minute.log"
         log_info "  tail -f /var/log/azazel-dnsmasq.log"
         log_info ""
         log_info "インストール詳細ログ:"
@@ -376,7 +400,7 @@ main() {
         log_error "  • サービスステータス: systemctl status azazel-first-minute.service"
         log_error ""
         log_error "詳細は以下を参照:"
-        log_error "  /home/azazel/Azazel-Zero/installer/README.md"
+        log_error "  ${REPO_ROOT}/installer/README.md"
         log_error ""
         return 1
     fi

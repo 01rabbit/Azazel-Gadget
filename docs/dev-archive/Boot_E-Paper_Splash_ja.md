@@ -1,10 +1,10 @@
-# Azazel-Zero 起動スプラッシュ
+# Azazel-Gadget 起動スプラッシュ
 
 [English](/docs/dev-archive/Boot_E-Paper_Splash.md) | [日本語](/docs/dev-archive/Boot_E-Paper_Splash_ja.md)
 
 ## 概要
 
-Azazel-Zeroでは、起動時に無線LANのSSIDとIPアドレスを電子ペーパー（E-Paper）ディスプレイに表示することで、ネットワークの状態を一目で確認できる「起動スプラッシュ」機能を提供します。この機能はRaspberry Pi上で動作し、物理的な操作なしにアクセス情報を素早く把握できるよう設計されています。
+Azazel-Gadgetでは、起動時に無線LANのSSIDとIPアドレスを電子ペーパー（E-Paper）ディスプレイに表示することで、ネットワークの状態を一目で確認できる「起動スプラッシュ」機能を提供します。この機能はRaspberry Pi上で動作し、物理的な操作なしにアクセス情報を素早く把握できるよう設計されています。
 
 ## 必要な依存関係
 
@@ -36,7 +36,7 @@ Azazel-Zeroでは、起動時に無線LANのSSIDとIPアドレスを電子ペー
 ### 自動インストール（推奨）
 
 ```bash
-sudo bash ~/Azazel-Zero/bin/install_waveshare_epd.sh
+sudo bash ~/azazel/bin/install_waveshare_epd.sh
 ```
 
 このスクリプトで apt / pip / git clone / demo アーカイブの取得、必要に応じたデモ実行（`--run-demo`）まで一括で再現できます。
@@ -84,7 +84,7 @@ sudo chown -R pi:pi /opt/waveshare-epd
 
 #### インポートパスの設定
 
-`/home/pi/Azazel-Zero/py/boot_splash_epd.py` から確実にライブラリを参照できるよう、以下のいずれかを設定してください。
+`/home/pi/azazel/py/boot_splash_epd.py` から確実にライブラリを参照できるよう、以下のいずれかを設定してください。
 
 - **A) systemd での環境変数は `/etc/default/azazel-zero` で管理（推奨）**  
   systemd ユニットファイル内で直接 PYTHONPATH を指定せず、以下のように環境ファイルを読み込む設定にします。
@@ -110,7 +110,7 @@ sudo chown -R pi:pi /opt/waveshare-epd
 本機能のメインスクリプトは以下に配置されています。
 
 ```txt
-/home/pi/Azazel-Zero/py/boot_splash_epd.py
+/home/pi/azazel/py/boot_splash_epd.py
 ```
 
 ### 単発テスト方法
@@ -118,7 +118,7 @@ sudo chown -R pi:pi /opt/waveshare-epd
 以下のコマンドでスクリプトを単発実行し、表示動作を確認できます。
 
 ```sh
-cd /home/pi/Azazel-Zero/py
+cd /home/pi/azazel/py
 python3 boot_splash_epd.py
 ```
 
@@ -136,7 +136,7 @@ python3 boot_splash_epd.py
 
 ```ini
 [Unit]
-Description=Azazel-Zero E-Paper Display Service
+Description=Azazel-Gadget E-Paper Display Service
 After=network-online.target
 Wants=network-online.target
 

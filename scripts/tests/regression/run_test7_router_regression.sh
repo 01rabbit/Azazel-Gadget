@@ -10,6 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 CFG_CANDIDATES=(
+  "/etc/azazel-gadget/first_minute.yaml"
   "/etc/azazel-zero/first_minute.yaml"
   "$PROJECT_ROOT/configs/first_minute.yaml"
 )
@@ -159,7 +160,7 @@ else
   pass "テンプレート: forward は ct mark vmap 非依存"
 fi
 
-if rg -n 'stage_switch.*meta", "mark", "set"' py/azazel_zero/first_minute/nft.py >/dev/null 2>&1; then
+if rg -n 'stage_switch.*meta", "mark", "set"' py/azazel_gadget/first_minute/nft.py >/dev/null 2>&1; then
   pass "実装: set_stage() は meta mark set を使用"
 else
   fail "実装: set_stage() が meta mark set を使用していません"

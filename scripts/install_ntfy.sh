@@ -1,6 +1,6 @@
 #!/bin/bash
 ################################################################################
-# Install and configure ntfy server for Azazel-Zero
+# Install and configure ntfy server for Azazel-Gadget
 ################################################################################
 
 set -euo pipefail

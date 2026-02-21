@@ -15,12 +15,23 @@ main() {
     log_info "Stage 30: Configuration Files"
     log_info "════════════════════════════════════════════"
     
+    local cfg_dir="/etc/azazel-gadget"
+    local legacy_cfg_dir="/etc/azazel-zero"
+    local log_dir="/var/log/azazel-gadget"
+    local legacy_log_dir="/var/log/azazel-zero"
+
     # 1. ディレクトリ作成
     log_info "設定ディレクトリを作成..."
-    mkdir -p /etc/azazel-zero
-    mkdir -p /etc/azazel-zero/nftables
+    mkdir -p "$cfg_dir"
+    mkdir -p "$cfg_dir/nftables"
     mkdir -p /etc/default
-    mkdir -p /var/log/azazel-zero
+    mkdir -p "$log_dir"
+
+    # 旧設定ディレクトリが実体で残っている場合は新ディレクトリへ取り込み
+    if [[ -d "$legacy_cfg_dir" && ! -L "$legacy_cfg_dir" ]]; then
+        cp -a "$legacy_cfg_dir"/. "$cfg_dir"/ 2>/dev/null || true
+        log_info "✓ 旧設定を移行: $legacy_cfg_dir -> $cfg_dir"
+    fi
     
     # 2. メイン設定ファイル配置
     log_info "設定テンプレートを配置..."
@@ -35,7 +46,7 @@ main() {
     
     for config in "${config_files[@]}"; do
         if [[ -f "$DEFAULTS_DIR/$config" ]]; then
-            install_config "$DEFAULTS_DIR/$config" "/etc/azazel-zero/$config"
+            install_config "$DEFAULTS_DIR/$config" "$cfg_dir/$config"
             log_debug "✓ $config"
         else
             log_warn "⚠️  テンプレルが見つかりません: $config"
@@ -45,21 +56,26 @@ main() {
     # 3. nftables テンプレート（existing から symlink）
     if [[ -f "$PROJECT_ROOT/nftables/first_minute.nft" ]]; then
         log_info "nftables テンプレートをリンク..."
-        ln -sf "$PROJECT_ROOT/nftables/first_minute.nft" "/etc/azazel-zero/nftables/first_minute.nft" || true
+        ln -sf "$PROJECT_ROOT/nftables/first_minute.nft" "$cfg_dir/nftables/first_minute.nft" || true
     fi
     
-    # 4. 環境ファイル作成 (/etc/default/azazel-zero)
+    # 4. 環境ファイル作成 (/etc/default/azazel-gadget)
     local mgmt_ip="10.55.0.10"
     local web_backend_host="127.0.0.1"
     local web_backend_port="8084"
     local web_https_port="443"
 
+    local defaults_file="/etc/default/azazel-gadget"
+    local legacy_defaults_file="/etc/default/azazel-zero"
+
     log_info "環境ファイルを作成..."
-    cat > /etc/default/azazel-zero <<EOF
-# Azazel-Zero 統合環境設定
+    cat > "$defaults_file" <<EOF
+# Azazel-Gadget 統合環境設定
 # このファイルは systemd サービスから source される
 
 AZAZEL_ROOT=$PROJECT_ROOT
+AZAZEL_PATH_SCHEMA=v2
+AZAZEL_LEGACY_PATHS_DEPRECATE_AFTER=2026-12-31
 AZAZEL_CANARY_VENV=/home/azazel/canary-venv
 AZAZEL_WEBUI_VENV=/home/azazel/azazel-webui-venv
 
@@ -84,13 +100,26 @@ AZAZEL_WEB_HTTPS_ENABLED=1
 SUBNET=192.168.7.0/24
 OUTIF=\${WAN_IF}
 EOF
-    log_info "✓ 環境ファイル作成: /etc/default/azazel-zero"
+    ln -sfn "$defaults_file" "$legacy_defaults_file"
+    if [[ -L "$legacy_cfg_dir" || ! -e "$legacy_cfg_dir" ]]; then
+        ln -sfn "$cfg_dir" "$legacy_cfg_dir"
+    else
+        log_warn "⚠️  旧設定ディレクトリは実体を維持: $legacy_cfg_dir"
+    fi
+    if [[ -L "$legacy_log_dir" || ! -e "$legacy_log_dir" ]]; then
+        ln -sfn "$log_dir" "$legacy_log_dir"
+    else
+        log_warn "⚠️  旧ログディレクトリは実体を維持: $legacy_log_dir"
+    fi
+    log_info "✓ 環境ファイル作成: $defaults_file"
+    log_info "✓ 互換リンク作成: $legacy_defaults_file -> $defaults_file"
+    log_info "✓ 互換処理完了: $legacy_cfg_dir / $legacy_log_dir"
 
     # 4.2 zram-tools 設定（利用可能環境のみ）
     if dpkg-query -W -f='${Status}' zram-tools 2>/dev/null | grep -q "install ok installed"; then
         log_info "zram 設定を作成..."
         cat > /etc/default/zramswap <<'EOF'
-# Azazel-Zero: Pi Zero 2 向け zram 設定
+# Azazel-Gadget: Pi Zero 2 向け zram 設定
 # 低メモリ環境でOOM耐性を上げる
 ALGO=lz4
 PERCENT=50
@@ -131,7 +160,7 @@ EOF
     fi
 
     # 4.6 Captive Portal Viewer 環境ファイル作成
-    local portal_env="/etc/azazel-zero/portal-viewer.env"
+    local portal_env="$cfg_dir/portal-viewer.env"
     if [[ ! -f "$portal_env" ]]; then
         log_info "Captive Portal Viewer 用環境ファイルを作成..."
         cat > "$portal_env" <<EOF
@@ -182,17 +211,17 @@ EOF
     fi
     
     # 6. ログディレクトリ権限
-    if [[ -d /var/log/azazel-zero ]]; then
-        chmod 755 /var/log/azazel-zero
+    if [[ -d "$log_dir" ]]; then
+        chmod 755 "$log_dir"
     fi
     
     # 7. 秘匿情報チェック（オプション警告）
     log_info "設定内容を確認中..."
     
-    if grep -q "MASKED" /etc/azazel-zero/first_minute.yaml 2>/dev/null; then
+    if grep -q "MASKED" "$cfg_dir/first_minute.yaml" 2>/dev/null; then
         log_warn "⚠️  設定ファイルに秘匿情報（SSID, PSK）のマスク記号が含まれています"
         log_warn "   以下を編集して実際の値を設定してください："
-        log_warn "   /etc/azazel-zero/first_minute.yaml"
+        log_warn "   $cfg_dir/first_minute.yaml"
         log_warn ""
         log_warn "   特に以下のセクションを確認："
         log_warn "   - known_wifi_ssids"
@@ -200,9 +229,9 @@ EOF
     fi
     
     # 8. dnsmasq 設定確認
-    if ! grep -q "interface=usb0" /etc/azazel-zero/dnsmasq-first_minute.conf 2>/dev/null; then
+    if ! grep -q "interface=usb0" "$cfg_dir/dnsmasq-first_minute.conf" 2>/dev/null; then
         log_warn "⚠️  dnsmasq 設定が不完全な可能性があります"
-        log_warn "   /etc/azazel-zero/dnsmasq-first_minute.conf を確認してください"
+        log_warn "   $cfg_dir/dnsmasq-first_minute.conf を確認してください"
     fi
     
     log_info ""
