@@ -45,7 +45,7 @@ main() {
     if install_package python3-textual; then
         log_info "✓ python3-textual インストール完了"
     else
-        log_warn "python3-textual がリポジトリに見つからないため、curses UI を継続利用します"
+        log_warn "python3-textual が未提供です。TUIは起動時に自動で curses フォールバックします"
     fi
     
     # 3. iptables-persistent 有効化

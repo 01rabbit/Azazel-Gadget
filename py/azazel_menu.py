@@ -24,9 +24,16 @@ def main() -> int:
         action="store_true",
         help="Kept for backward compatibility (ignored; Textual is always used).",
     )
+    parser.add_argument(
+        "--curses",
+        action="store_true",
+        help="Ignored for this launcher (menu requires Textual).",
+    )
     parser.add_argument("--enable-epd", action="store_true", help="Enable E-Paper display updates")
     parser.add_argument("--disable-epd", action="store_true", help="Disable E-Paper display updates")
     args, passthrough = parser.parse_known_args()
+    if args.curses:
+        print("[Menu] --curses is ignored; launching Textual monitor menu.", file=sys.stderr)
 
     here = Path(__file__).resolve().parent
     monitor = here / "azazel_zero" / "cli_unified.py"
