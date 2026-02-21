@@ -20,6 +20,7 @@ from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+from urllib.request import urlopen
 
 DEFAULT_ROOT = Path(__file__).resolve().parent.parent.parent
 SNAPSHOT_PATH = Path("/run/azazel-zero/ui_snapshot.json")
@@ -62,6 +63,8 @@ class Snapshot:
     probe: Dict[str, object]
     evidence: List[str]
     internal: Dict[str, object]
+    connection: Dict[str, object]
+    monitoring: Dict[str, str]
     age: str = "00:00:00"
     snapshot_epoch: float = 0.0
     source: str = "SNAPSHOT"
@@ -104,6 +107,16 @@ class Snapshot:
             self.latency_trend = []
         if self.top_blocked is None:
             self.top_blocked = []
+        if self.connection is None:
+            self.connection = {
+                "wifi_state": "DISCONNECTED",
+                "usb_nat": "OFF",
+                "internet_check": "UNKNOWN",
+                "captive_portal": "NA",
+                "captive_portal_reason": "NOT_CHECKED",
+            }
+        if self.monitoring is None:
+            self.monitoring = {"suricata": "UNKNOWN", "opencanary": "UNKNOWN", "ntfy": "UNKNOWN"}
 
 
 def detect_unicode(force_ascii: bool, force_unicode: bool) -> bool:
@@ -123,9 +136,34 @@ def build_snapshot(data: Dict[str, object], source: str = "SNAPSHOT") -> Snapsho
         delta = max(0, int(time.time() - ts))
         age = time.strftime("%H:%M:%S", time.gmtime(delta))
     
-    # 脅威レベル計算 (0-5)
-    suspicion = data.get("internal", {}).get("suspicion", 0) if isinstance(data.get("internal"), dict) else 0
+    internal = data.get("internal", {}) if isinstance(data.get("internal"), dict) else {}
+    try:
+        suspicion = int(float(internal.get("suspicion", 0)))
+    except Exception:
+        suspicion = 0
     threat_level = min(5, max(0, int(suspicion / 20)))  # 0-100 -> 0-5
+    connection = data.get("connection", {}) if isinstance(data.get("connection"), dict) else {}
+    monitoring = data.get("monitoring", {}) if isinstance(data.get("monitoring"), dict) else {}
+
+    user_state = str(data.get("user_state", "") or "").strip().upper()
+    state_name = str(internal.get("state_name", "") or "").strip().upper()
+    if not user_state and state_name:
+        user_state = _user_state_from_stage_name(state_name)
+    if not user_state:
+        user_state = "CHECKING"
+
+    normalized_connection = {
+        "wifi_state": str(connection.get("wifi_state", "DISCONNECTED") or "DISCONNECTED").upper(),
+        "usb_nat": str(connection.get("usb_nat", "OFF") or "OFF").upper(),
+        "internet_check": str(connection.get("internet_check", "UNKNOWN") or "UNKNOWN").upper(),
+        "captive_portal": str(connection.get("captive_portal", "NA") or "NA").upper(),
+        "captive_portal_reason": str(connection.get("captive_portal_reason", "NOT_CHECKED") or "NOT_CHECKED"),
+    }
+    normalized_monitoring = {
+        "suricata": str(monitoring.get("suricata", "UNKNOWN") or "UNKNOWN").upper(),
+        "opencanary": str(monitoring.get("opencanary", "UNKNOWN") or "UNKNOWN").upper(),
+        "ntfy": str(monitoring.get("ntfy", "UNKNOWN") or "UNKNOWN").upper(),
+    }
     
     return Snapshot(
         now_time=data.get("now_time", time.strftime("%H:%M:%S")),
@@ -138,7 +176,7 @@ def build_snapshot(data: Dict[str, object], source: str = "SNAPSHOT") -> Snapsho
         down_ip=data.get("down_ip", "-"),
         up_if=data.get("up_if", "-"),
         up_ip=data.get("up_ip", "-"),
-        user_state=data.get("user_state", "CHECKING"),
+        user_state=user_state,
         recommendation=data.get("recommendation", "Checking"),
         reasons=data.get("reasons", [])[:3],
         next_action_hint=data.get("next_action_hint", ""),
@@ -148,7 +186,9 @@ def build_snapshot(data: Dict[str, object], source: str = "SNAPSHOT") -> Snapsho
         degrade=data.get("degrade", {"on": False, "rtt_ms": 0, "rate_mbps": 0}),
         probe=data.get("probe", {"tls_ok": 0, "tls_total": 0, "blocked": 0}),
         evidence=data.get("evidence", [])[-6:],  # oldest→newest想定
-        internal=data.get("internal", {}),
+        internal=internal,
+        connection=normalized_connection,
+        monitoring=normalized_monitoring,
         age=age,
         snapshot_epoch=float(ts) if ts else 0.0,
         source=source,
@@ -237,6 +277,86 @@ def _parse_signal_dbm(raw_val) -> Optional[int]:
         return int(float(text))
     except Exception:
         return None
+
+
+def _coerce_int(value: object, default: int = 0) -> int:
+    try:
+        return int(float(value))
+    except Exception:
+        return default
+
+
+def _service_active(name: str) -> bool:
+    try:
+        res = subprocess.run(
+            ["systemctl", "is-active", name],
+            capture_output=True,
+            text=True,
+            timeout=1.0,
+        )
+        return res.returncode == 0 and res.stdout.strip() == "active"
+    except Exception:
+        return False
+
+
+def _pid_running(pid_file: Path) -> bool:
+    try:
+        if not pid_file.exists():
+            return False
+        pid = int(pid_file.read_text(encoding="utf-8").strip())
+        os.kill(pid, 0)
+        return True
+    except Exception:
+        return False
+
+
+def _ntfy_health_ok() -> bool:
+    mgmt_ip = os.environ.get("MGMT_IP", "10.55.0.10")
+    ntfy_port = os.environ.get("NTFY_PORT", "8081")
+    url = f"http://{mgmt_ip}:{ntfy_port}/v1/health"
+    try:
+        with urlopen(url, timeout=1.0) as resp:
+            if resp.status != 200:
+                return False
+            body = resp.read(256).decode("utf-8", errors="ignore")
+            return '"healthy":true' in body
+    except Exception:
+        return False
+
+
+def _collect_monitoring_state() -> Dict[str, str]:
+    opencanary_ok = _service_active("opencanary.service")
+    suricata_ok = _service_active("suricata.service")
+    ntfy_ok = _service_active("ntfy.service") and _ntfy_health_ok()
+    opencanary_pid = Path("/home/azazel/canary-venv/bin/opencanaryd.pid")
+    suricata_pid = Path("/run/suricata.pid")
+    return {
+        "opencanary": "ON" if (opencanary_ok or _pid_running(opencanary_pid)) else "OFF",
+        "suricata": "ON" if (suricata_ok or _pid_running(suricata_pid)) else "OFF",
+        "ntfy": "ON" if ntfy_ok else "OFF",
+    }
+
+
+def _threat_label_from_suspicion(suspicion: int) -> str:
+    if suspicion >= 50:
+        return "CRITICAL"
+    if suspicion >= 30:
+        return "HIGH"
+    if suspicion >= 15:
+        return "MEDIUM"
+    return "LOW"
+
+
+def _filled_segments_from_suspicion(suspicion: int) -> int:
+    if suspicion <= 0:
+        return 0
+    if suspicion >= 50:
+        return 5
+    if suspicion >= 30:
+        return 4
+    if suspicion >= 15:
+        return 3
+    return 2
 
 
 def _user_state_from_stage_name(stage_name: str) -> str:
@@ -662,6 +782,12 @@ def load_snapshot() -> Snapshot:
     
     # セッション稼働時間（優先度：低）
     snap.session_uptime = int(time.time() - _session_start_time)
+
+    # WebUIと同じ監視サービス状態を補完
+    try:
+        snap.monitoring = _collect_monitoring_state()
+    except Exception:
+        pass
     
     # リスクスコア計算（優先度：低）
     snap.risk_score = calculate_risk_score(snap)
@@ -705,6 +831,14 @@ def default_snapshot() -> Dict[str, object]:
         "probe": {"tls_ok": 2, "tls_total": 3, "blocked": 1},
         "evidence": ["waiting for snapshot"],
         "internal": {"state_name": "PROBE", "suspicion": 0, "decay": 0},
+        "connection": {
+            "wifi_state": "DISCONNECTED",
+            "usb_nat": "OFF",
+            "internet_check": "UNKNOWN",
+            "captive_portal": "NA",
+            "captive_portal_reason": "NOT_CHECKED",
+        },
+        "monitoring": {"suricata": "UNKNOWN", "opencanary": "UNKNOWN", "ntfy": "UNKNOWN"},
         "snapshot_epoch": time.time(),
     }
 
@@ -947,11 +1081,16 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
 
     # Conclusion card
     card_w = w - 2
-    card_h = 7  # リスクスコア追加で1行増
+    card_h = 8
     card_y = 2  # 元々3だったが、ステータスが2行になったので2に
     draw_box(stdscr, card_y, 0, card_h, card_w, not unicode_mode)
-    
-    # リスクスコア表示（優先度：低）
+
+    internal = snap.internal if isinstance(snap.internal, dict) else {}
+    suspicion = _coerce_int(internal.get("suspicion", 0), 0)
+    state_name = str(internal.get("state_name", "") or "").upper()
+    web_state = _user_state_from_stage_name(state_name) if state_name else snap.user_state.upper()
+
+    # リスク/疑わしさ表示（WebUI準拠）
     risk_color = cp(1)  # default green
     risk_icon = "🟢" if unicode_mode else "LOW"
     if snap.risk_score >= 70:
@@ -963,36 +1102,38 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
     elif snap.risk_score >= 30:
         risk_color = cp(4)  # yellow
         risk_icon = "🟡" if unicode_mode else "MED"
-    
-    risk_line = f"Risk Score: {risk_icon} {snap.risk_score}/100"
+
+    risk_line = f"Suspicion: {suspicion}  |  Risk Score: {risk_icon} {snap.risk_score}/100"
     stdscr.addnstr(card_y + 1, 2, risk_line, risk_color | curses.A_BOLD)
-    
+
     # State badge（2行目に移動）
-    state_color, state_icon = color_for_state(snap.user_state, unicode_mode)
-    
-    # 状態ラベル（「安全」は常に緑の太字で強調）
+    state_color, state_icon = color_for_state(web_state, unicode_mode)
+
+    # 状態ラベル
     state_labels = {
         "CHECKING": "CHECKING",
-        "SAFE": "安全",
-        "LIMITED": "制限中",
-        "CONTAINED": "隔離",
-        "DECEPTION": "観測誘導",
+        "SAFE": "SAFE",
+        "LIMITED": "LIMITED",
+        "CONTAINED": "CONTAINED",
+        "DECEPTION": "DECEPTION",
     }
-    state_label = state_labels.get(snap.user_state.upper(), "CHECKING")
+    state_label = state_labels.get(web_state.upper(), "CHECKING")
     badge = f" {state_icon} {state_label} "  # 括弧除去、前後にスペース
-    
-    # 脅威レベルインジケーター (0-5)
-    threat_icons = ["🟢", "🟢", "🟡", "🟡", "🔴", "🔴"] if unicode_mode else ["O", "O", "!", "!", "X", "X"]
-    threat_bar = "".join([threat_icons[i] if i < snap.threat_level else ("⚪" if unicode_mode else ".") for i in range(5)])
-    threat_text = f"脅威度: [{threat_bar}] {['Low', 'Low', 'Med', 'Med', 'High', 'Critical'][min(snap.threat_level, 5)]}"
-    
+
+    # 脅威レベル（WebUIのしきい値: 15/30/50）
+    threat_icons = ["🟢", "🟡", "🟠", "🔴", "🔴"] if unicode_mode else ["O", "!", "!", "X", "X"]
+    filled = _filled_segments_from_suspicion(suspicion)
+    threat_bar = "".join([threat_icons[i] if i < filled else ("⚪" if unicode_mode else ".") for i in range(5)])
+    threat_label = _threat_label_from_suspicion(suspicion)
+    threat_text = f"Threat: [{threat_bar}] {threat_label}"
+
     # 状態バッジを反転表示で強調（SAFE=緑背景、CONTAINED=赤背景など）
     # SAFEの場合は特に緑の太字を強調
-    if snap.user_state.upper() == "SAFE":
+    if web_state.upper() == "SAFE":
         badge_attr = cp(1) | curses.A_REVERSE | curses.A_BOLD if colors_on else curses.A_REVERSE | curses.A_BOLD
     else:
         badge_attr = cp(state_color) | curses.A_REVERSE | curses.A_BOLD if colors_on else curses.A_REVERSE
-    
+
     stdscr.addnstr(card_y + 2, 2, badge, min(len(badge), card_w - 4), badge_attr)
     rec_text = f"  推奨：{snap.recommendation}"
     # 推奨文も状態に応じて強調
@@ -1003,13 +1144,22 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
     reasons = "理由：" + " / ".join(snap.reasons or ["-"])
     # 理由を状態に応じた色で表示
     stdscr.addnstr(card_y + 3, 2, reasons[: card_w - 4], cp(state_color))
-    
+
     # 脅威レベル表示
-    threat_color = cp(1) if snap.threat_level < 2 else cp(4) if snap.threat_level < 4 else cp(2)
+    threat_color = cp(2) if threat_label == "CRITICAL" else cp(4) if threat_label in ("HIGH", "MEDIUM") else cp(1)
     stdscr.addnstr(card_y + 4, 2, threat_text[: card_w - 4], threat_color | curses.A_BOLD)
-    
+
     next_line = "次：" + (snap.next_action_hint or "再評価を待機")
     stdscr.addnstr(card_y + 5, 2, next_line[: card_w - 4], cp(6))
+
+    monitoring = snap.monitoring if isinstance(snap.monitoring, dict) else {}
+    monitor_line = (
+        "Monitoring: "
+        f"Suricata={monitoring.get('suricata', 'UNKNOWN')}  "
+        f"OpenCanary={monitoring.get('opencanary', 'UNKNOWN')}  "
+        f"ntfy={monitoring.get('ntfy', 'UNKNOWN')}"
+    )
+    stdscr.addnstr(card_y + 6, 2, monitor_line[: card_w - 4], cp(6))
 
     # Middle panes
     mid_y = card_y + card_h + 1
@@ -1019,11 +1169,16 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
     draw_box(stdscr, mid_y, 0, pane_h, pane_w, not unicode_mode)
     stdscr.addnstr(mid_y, 2, "Connection", curses.color_pair(3) | curses.A_BOLD)
     
-    # Captive Portal状態を判定
-    portal_detected = "portal" in " ".join(snap.reasons).lower()
-    portal_status = "⚠ SUSPECTED" if portal_detected else "✓ none" if unicode_mode else "SUSPECTED" if portal_detected else "none"
-    portal_color = 2 if portal_detected else 1  # 赤 or 緑
-    
+    connection = snap.connection if isinstance(snap.connection, dict) else {}
+    wifi_state = str(connection.get("wifi_state", "DISCONNECTED") or "DISCONNECTED").upper()
+    internet_check = str(connection.get("internet_check", "UNKNOWN") or "UNKNOWN").upper()
+    captive_portal = str(connection.get("captive_portal", "NA") or "NA").upper()
+    captive_reason = str(connection.get("captive_portal_reason", "") or "")
+
+    portal_detected = captive_portal in ("YES", "SUSPECTED")
+    portal_color = 2 if captive_portal == "YES" else 4 if captive_portal == "SUSPECTED" else 1
+    captive_display = captive_portal if not portal_detected else f"{captive_portal} ({captive_reason})"
+
     # Gateway IP色分け (プライベートIP=緑、パブリック=黄)
     gw_ip = snap.gateway_ip
     gw_color = 3  # cyan default
@@ -1035,69 +1190,37 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
         gw_display = f"⚠️ {gw_ip}" if unicode_mode else f"PUB: {gw_ip}"
     else:
         gw_display = gw_ip
-    
-    # Channel混雑度判定（実際のスキャン結果を使用）
-    ch_display = snap.channel
-    ch_color = 3
-    congestion = snap.channel_congestion
-    ap_count = snap.channel_ap_count
-    
-    # 混雑度に基づく色分けとアイコン
-    if congestion == "none":
-        ch_icon = "🟢"  # green
-        ch_color = 1
-        ch_text = "Clear"
-    elif congestion == "low":
-        ch_icon = "🟢"  # green
-        ch_color = 1
-        ch_text = "Low"
-    elif congestion == "medium":
-        ch_icon = "🟡"  # yellow
-        ch_color = 4
-        ch_text = "Medium"
-    elif congestion == "high":
-        ch_icon = "🟧"  # orange
-        ch_color = 4
-        ch_text = "High"
-    elif congestion == "critical":
-        ch_icon = "🔴"  # red
-        ch_color = 2
-        ch_text = "Critical"
+
+    if wifi_state in ("CONNECTED", "ONLINE"):
+        wifi_state_color = 1
+    elif wifi_state == "DISCONNECTED":
+        wifi_state_color = 2
     else:
-        ch_icon = "⚪"  # white
-        ch_color = 6
-        ch_text = "Unknown"
-    
-    try:
-        ch_num = int(snap.channel)
-        # 常にアイコンと混雑度を表示
-        if unicode_mode:
-            ch_display = f"{ch_icon} Ch{ch_num} - {ch_text} ({ap_count} APs)"
-        else:
-            ch_display = f"Ch{ch_num} - {ch_text} ({ap_count} APs)"
-    except ValueError:
-        ch_display = snap.channel
-    
-    # 推奨チャンネルがある場合、表示を追加
-    rec_ch_line = ""
-    if snap.recommended_channel > 0 and snap.recommended_channel != int(snap.channel or -1):
-        if unicode_mode:
-            rec_ch_line = f"→ Ch{snap.recommended_channel} 推奨"
-        else:
-            rec_ch_line = f"-> Ch{snap.recommended_channel}"
-    
+        wifi_state_color = 4
+
+    if internet_check in ("OK", "YES", "ONLINE"):
+        internet_color = 1
+    elif internet_check in ("NO", "OFFLINE"):
+        internet_color = 2
+    elif internet_check in ("CAPTIVE", "SUSPECTED"):
+        internet_color = 4
+    else:
+        internet_color = 6
+
+    congestion = str(snap.channel_congestion or "unknown")
+    ap_count = _coerce_int(snap.channel_ap_count, 0)
+    scan_status = f"{ap_count} APs ({congestion})" if ap_count > 0 else "-"
+
     conn_lines = [
+        ("SSID", snap.ssid, 6),
         ("BSSID", snap.bssid, 6),
-        ("Channel", ch_display, ch_color),
         ("Signal", f"{snap.signal_dbm} dBm", 6),
         ("Gateway", gw_display, gw_color),
+        ("State", wifi_state, wifi_state_color),
+        ("Internet", internet_check, internet_color),
+        ("Captive", captive_display, portal_color),
     ]
-    
-    # 推奨チャンネルがあれば追加
-    if rec_ch_line:
-        conn_lines.append(("", rec_ch_line, 1))  # green
-    else:
-        conn_lines.append(("Captive Portal", portal_status, portal_color))
+
     # Signal強度を🟥🟧🟨🟩で視覚的に表現
     try:
         sig = float(snap.signal_dbm)
@@ -1124,10 +1247,10 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
         conn_lines[2] = ("Signal", f"{sig_icon} {snap.signal_dbm} dBm", sig_color)
     except Exception:
         pass
-    
+
     for i, (label, val, color_idx) in enumerate(conn_lines[: pane_h - 2]):
         line_text = f"{label}: {val}"[: pane_w - 4]
-        attr = cp(color_idx) | curses.A_BOLD if i == 4 and portal_detected else cp(color_idx)
+        attr = cp(color_idx) | curses.A_BOLD if label == "Captive" and portal_detected else cp(color_idx)
         stdscr.addnstr(mid_y + 1 + i, 2, line_text, attr)
     # Right: Control/Safety
     draw_box(stdscr, mid_y, pane_w + 1, pane_h, pane_w, not unicode_mode)
@@ -1147,27 +1270,29 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
     doh_symbol = "⛔" if "block" in doh_status else "✓" if unicode_mode else "X" if "block" in doh_status else "OK"
     doh_display = f"{doh_symbol} {snap.doh.upper()}"
     
-    # Degrade状態の色分け (active=黄、off=緑)
-    deg_active = degrade.get("on", False)
-    deg_color = 4 if deg_active else 1  # yellow or green
-    if deg_active:
-        deg_txt = f"⚡ ON: RTT +{degrade.get('rtt_ms',0)}ms, Rate {degrade.get('rate_mbps',0)}Mbps" if unicode_mode else f"ON: +{degrade.get('rtt_ms',0)}ms, {degrade.get('rate_mbps',0)}Mbps"
-    else:
-        deg_txt = "✓ OFF" if unicode_mode else "OFF"
-    
-    # Probe結果の色分け (blocked>0=赤、all OK=緑、それ以外=黄)
-    blocked_count = probe.get('blocked', 0)
-    tls_ok = probe.get('tls_ok', 0)
-    tls_total = probe.get('tls_total', 0)
+    # Degradeと速度（WebUI項目）
+    deg_active = bool(degrade.get("on", False))
+    deg_color = 4 if deg_active else 1
+    deg_txt = "ON" if deg_active else "OFF"
+    try:
+        rate_mbps = float(degrade.get("rate_mbps", 0) or 0)
+    except Exception:
+        rate_mbps = 0.0
+    speed_txt = f"{rate_mbps:.1f} / {rate_mbps:.1f} Mbps"
+
+    # Probe（WebUI項目）
+    blocked_count = _coerce_int(probe.get("blocked", 0), 0)
+    tls_ok = _coerce_int(probe.get("tls_ok", 0), 0)
+    tls_total = _coerce_int(probe.get("tls_total", 0), 0)
     if blocked_count > 0:
         probe_color = 2  # red
-        probe_txt = f"⚠ {tls_ok}/{tls_total} OK, {blocked_count} BLOCKED" if unicode_mode else f"{tls_ok}/{tls_total} OK, {blocked_count} BLOCKED"
+        probe_txt = f"{tls_ok}/{tls_total} OK ({blocked_count} blocked)"
     elif tls_total > 0 and tls_ok == tls_total:
         probe_color = 1  # green
-        probe_txt = f"✓ {tls_ok}/{tls_total} ALL OK" if unicode_mode else f"{tls_ok}/{tls_total} ALL OK"
+        probe_txt = f"{tls_ok}/{tls_total} OK"
     else:
         probe_color = 4  # yellow
-        probe_txt = f"~ {tls_ok}/{tls_total} OK" if unicode_mode else f"{tls_ok}/{tls_total} OK"
+        probe_txt = f"{tls_ok}/{tls_total} OK"
     
     # DNS統計の色分け
     dns_ok = snap.dns_stats.get("ok", 0)
@@ -1237,16 +1362,14 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
         traffic_cum_text = f"Total: {snap.traffic_total_mb:.1f}MB (↓{snap.traffic_download_mb:.1f} ↑{snap.traffic_upload_mb:.1f})"
     
     ctl_items = [
-        ("QUIC(UDP/443)", quic_display, quic_color),
-        ("DoH(TCP/443)", doh_display, doh_color),
+        ("QUIC", quic_display, quic_color),
+        ("DoH", doh_display, doh_color),
         ("Degrade", deg_txt, deg_color),
+        ("Down/Up", speed_txt, 6),
         ("Probe", probe_txt, probe_color),
-        ("Stats", dns_stat_text, dns_stat_color),
-        ("", suri_text, suri_color),  # Suricataアラート
-        ("", traffic_text, traffic_color),  # トラフィック
-        ("", loss_text, loss_color) if loss_text else ("", "", 6),  # パケットロス
-        ("", dns_perf_text, dns_perf_color) if dns_perf_text else ("", "", 6),  # DNS性能
-        ("", traffic_cum_text, 6) if traffic_cum_text else ("", "", 6),  # 累計トラフィック
+        ("IDS", suri_text.replace("IDS: ", ""), suri_color),
+        ("DNS", dns_stat_text.replace("DNS: ", ""), dns_stat_color),
+        ("Traffic", traffic_text.replace("Traffic: ", ""), traffic_color),
     ]
     
     for i, (label, val, color_idx) in enumerate(ctl_items[: pane_h - 2]):
@@ -1261,9 +1384,20 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
         available = 3
     ev_h = min(max(5, available), h - ev_y - 1)
     draw_box(stdscr, ev_y, 0, ev_h, w, not unicode_mode)
-    stdscr.addnstr(ev_y, 2, "Evidence (last 90s)", cp(3) | curses.A_BOLD)
-    ev_lines = snap.evidence[-(ev_h - 3) :] if not compact else snap.evidence[-3:]
-    
+    stdscr.addnstr(ev_y, 2, "Evidence & State", cp(3) | curses.A_BOLD)
+
+    state_metrics = (
+        f"State: {state_label}  Suspicion: {suspicion}  "
+        f"CPU Temp: {snap.temp_c:.1f}C  CPU: {snap.cpu_percent:.1f}%  Memory: {snap.mem_percent}%"
+    )
+    stdscr.addnstr(ev_y + 1, 2, state_metrics[: w - 4], cp(6))
+    stdscr.addnstr(ev_y + 2, 2, f"Scan Results: {scan_status}"[: w - 4], cp(6))
+
+    max_event_lines = max(0, ev_h - 5)
+    if compact:
+        max_event_lines = min(max_event_lines, 2)
+    ev_lines = snap.evidence[-max_event_lines:] if max_event_lines > 0 else []
+
     # キーワードベースの色分け + 重要度マーク
     for i, ev in enumerate(ev_lines):
         ev_lower = ev.lower()
@@ -1291,10 +1425,9 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
         
         # タイムスタンプ付き表示（簡易版：先頭に追加）
         ev_display = f"{severity_mark} {ev}"[: w - 4]
-        stdscr.addnstr(ev_y + 1 + i, 2, ev_display, color)
+        stdscr.addnstr(ev_y + 3 + i, 2, ev_display, color)
     # decision line
-    dec = snap.internal or {}
-    decision = f"↳ decision: state={dec.get('state_name','-')} suspicion={dec.get('suspicion','-')} decay={dec.get('decay','-')}"
+    decision = f"Decision: State: {state_label}, Suspicion: {suspicion}"
     stdscr.addnstr(ev_y + ev_h - 2, 2, decision[: w - 4], cp(6))
 
     # 追加パネル：State遷移タイムラインとブロックドメイン（優先度：中）
