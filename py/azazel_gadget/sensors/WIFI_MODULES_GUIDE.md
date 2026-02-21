@@ -4,7 +4,7 @@
 
 ```
 py/
-├── azazel_zero/
+├── azazel_gadget/
 │   └── sensors/              # センサーモジュール（データ収集・分析）
 │       ├── wifi_scanner.py          ✅ [共通] iw scan パーサー
 │       ├── wifi_safety.py           ✅ [センサー] 脅威検知（MITM/Evil Twin/DNS）
@@ -120,19 +120,19 @@ py/
 **移行済みコマンド**:
 ```bash
 # 新規（同等機能）
-python3 py/azazel_zero/sensors/wifi_health_monitor.py --iface wlan0 --interval 10 --write
+python3 py/azazel_gadget/sensors/wifi_health_monitor.py --iface wlan0 --interval 10 --write
 ```
 
 ### 🗑️ wifi_health.py（削除済み）
 **統合先**: `sensors/wifi_health_monitor.py`  
 **削除理由**:
-- センサー機能なのに azazel_zero/ 直下にあった（sensors/が適切）
+- センサー機能なのに azazel_gadget/ 直下にあった（sensors/が適切）
 - wifi_health_monitor.py が同等機能を提供
 
 **移行済みインポート**:
 ```python
 # 新規（同等機能）
-from azazel_zero.sensors.wifi_health_monitor import evaluate_wifi_health, write_health_snapshot
+from azazel_gadget.sensors.wifi_health_monitor import evaluate_wifi_health, write_health_snapshot
 ```
 
 **移行完了日**: 2026年1月30日  
@@ -202,9 +202,9 @@ from azazel_zero.sensors.wifi_health_monitor import evaluate_wifi_health, write_
 
 ```python
 # ✅ GOOD: センサー層からの直接インポート
-from azazel_zero.sensors.wifi_scanner import scan_and_parse
-from azazel_zero.sensors.wifi_safety import evaluate_wifi_safety
-from azazel_zero.sensors.wifi_health_monitor import evaluate_wifi_health
+from azazel_gadget.sensors.wifi_scanner import scan_and_parse
+from azazel_gadget.sensors.wifi_safety import evaluate_wifi_safety
+from azazel_gadget.sensors.wifi_health_monitor import evaluate_wifi_health
 
 # ✅ GOOD: 制御層の利用（Web UI バックエンド）
 from azazel_control.wifi_scan import scan_wifi

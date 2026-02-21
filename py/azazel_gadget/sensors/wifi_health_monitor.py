@@ -65,7 +65,7 @@ def evaluate_wifi_health(
     try:
         # Import here to avoid circular dependency
         sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-        from azazel_zero.app.threat_judge import judge_zero
+        from azazel_gadget.app.threat_judge import judge_zero
         
         verdict = judge_zero(prompt, iface, known_db, gateway_ip)
     except Exception as e:

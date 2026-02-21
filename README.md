@@ -62,16 +62,16 @@ It brings the Azazel System’s **delaying action** into a practical form while 
 Uses a deterministic two-layer engine that runs even on Pi Zero 2 W.
 
 - **Layer 1: Wi-Fi Safety Sensor**  
-  - `py/azazel_zero/sensors/wifi_safety.py` inspects `iw dev … link` and short `tcpdump` captures to detect ARP/DHCP/DNS anomalies.  
+  - `py/azazel_gadget/sensors/wifi_safety.py` inspects `iw dev … link` and short `tcpdump` captures to detect ARP/DHCP/DNS anomalies.  
   - Emits tags and metadata such as `evil_ap`, `mitm`, `arp_spoof`, `dhcp_spoof`, `dns_spoof`, `tls_downgrade`, `captive_portal`, `phish`.
 
 - **Layer 2: Mock-LLM Core**  
-  - `py/azazel_zero/core/mock_llm_core.py` maps inputs to legacy categories (`scan`, `bruteforce`, `exploit`, `malware`, `sqli`, `dos`, `unknown`).  
+  - `py/azazel_gadget/core/mock_llm_core.py` maps inputs to legacy categories (`scan`, `bruteforce`, `exploit`, `malware`, `sqli`, `dos`, `unknown`).  
   - Modernized from regex + randomness to hash-based deterministic replies, outputting risk (1–5) and rationale consistently.  
   - Profile `"zero"` raises risk when Evil AP / MITM tags exist, ensuring Danger/Disconnect decisions.
 
 - **Threat Judge wrapper**  
-  - `py/azazel_zero/app/threat_judge.py` bundles tags and final decisions into JSON that UI/automation can consume (e.g., immediate disconnect for `risk >= 4` or `evil_ap`).
+  - `py/azazel_gadget/app/threat_judge.py` bundles tags and final decisions into JSON that UI/automation can consume (e.g., immediate disconnect for `risk >= 4` or `evil_ap`).
 
 Heavyweight ML remains a future research theme; the current deterministic stack alone provides the automation needed for a portable shield.
 
@@ -80,7 +80,7 @@ Heavyweight ML remains a future research theme; the current deterministic stack 
 ## Operator Console & Automation
 
 - **TUI (terminal UI)**  
-  - `py/azazel_zero/cli_unified.py` is the unified monitoring TUI showing Wi-Fi state, threat level, channel congestion, control rules in real time.
+  - `py/azazel_gadget/cli_unified.py` is the unified monitoring TUI showing Wi-Fi state, threat level, channel congestion, control rules in real time.
   - Colorful icons and color-coding for intuitive situational awareness.
   - Textual mode is the primary operator UI (default with no UI flag).
   - Use `--curses` only when fallback is needed.
@@ -101,11 +101,11 @@ Heavyweight ML remains a future research theme; the current deterministic stack 
 |-----------|-------------|-------|
 | Unified installer | `install.sh`, `installer/stages/*.sh` | Single installation flow with Stage 00/10/20/30/40/99 |
 | First-Minute controller | `py/azazel-first-minute.py` | Core state machine (`PROBE/NORMAL/DEGRADED/CONTAIN/DECEPTION`) |
-| Status API | `py/azazel_zero/first_minute/controller.py` | JSON + actions on `10.55.0.10:8082` |
+| Status API | `py/azazel_gadget/first_minute/controller.py` | JSON + actions on `10.55.0.10:8082` |
 | Control daemon | `py/azazel_control/daemon.py` | Unix socket `/run/azazel/control.sock`, executes action scripts and Wi-Fi scan/connect |
 | Web UI (optional) | `azazel_web/app.py` | HTTPS dashboard via Caddy (`https://10.55.0.10`) + Flask backend (`127.0.0.1:8084`) |
 | Captive Portal Viewer (optional) | `scripts/azazel-portal-viewer.sh` | Chromium on virtual display + noVNC via `azazel-portal-viewer.service` (`:6080/vnc.html`) |
-| TUI monitor | `py/azazel_zero/cli_unified.py` | Manual-refresh terminal monitor |
+| TUI monitor | `py/azazel_gadget/cli_unified.py` | Manual-refresh terminal monitor |
 | E-Paper tools | `py/azazel_epd.py`, `py/boot_splash_epd.py` | Status/alert rendering and boot/shutdown splash |
 
 ---
@@ -135,31 +135,31 @@ suppress_auto_wifi: true
 ### Launch
 
 ```bash
-sudo python3 py/azazel_zero/cli_unified.py
+sudo python3 py/azazel_gadget/cli_unified.py
 ```
 
 Legacy explicit Textual flag (still supported for compatibility):
 
 ```bash
-sudo python3 py/azazel_zero/cli_unified.py --textual
+sudo python3 py/azazel_gadget/cli_unified.py --textual
 ```
 
 Menu-first launch (opens control menu immediately):
 
 ```bash
-sudo python3 py/azazel_zero/cli_unified.py --menu
+sudo python3 py/azazel_gadget/cli_unified.py --menu
 ```
 
 EPD is enabled by default. Disable only when needed:
 
 ```bash
-sudo python3 py/azazel_zero/cli_unified.py --disable-epd
+sudo python3 py/azazel_gadget/cli_unified.py --disable-epd
 ```
 
 Curses fallback:
 
 ```bash
-sudo python3 py/azazel_zero/cli_unified.py --curses
+sudo python3 py/azazel_gadget/cli_unified.py --curses
 ```
 
 ### Layout

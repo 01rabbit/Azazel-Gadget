@@ -37,10 +37,10 @@ if str(ROOT / "py") not in sys.path:
     sys.path.insert(0, str(ROOT / "py"))
 
 # Import common Wi-Fi scanner
-from azazel_zero.sensors.wifi_scanner import scan_and_parse, get_security_label
+from azazel_gadget.sensors.wifi_scanner import scan_and_parse, get_security_label
 
 try:
-    from azazel_zero.sensors.wifi_safety import evaluate_wifi_safety
+    from azazel_gadget.sensors.wifi_safety import evaluate_wifi_safety
 except Exception:
     evaluate_wifi_safety = None  # fallback if deps missing
 
@@ -83,7 +83,7 @@ def run_health_check_once(iface: str) -> None:
     if evaluate_wifi_safety is None:
         return
     try:
-        from azazel_zero.app.threat_judge import judge_zero
+        from azazel_gadget.app.threat_judge import judge_zero
         verdict = judge_zero("wifi_health_check", iface, "", None)
     except Exception:
         return

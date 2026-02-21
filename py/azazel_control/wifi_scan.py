@@ -16,7 +16,7 @@ from typing import List, Dict, Any, Optional
 
 # Import common scanner module
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from azazel_zero.sensors.wifi_scanner import scan_and_parse, get_security_label
+from azazel_gadget.sensors.wifi_scanner import scan_and_parse, get_security_label
 
 logger = logging.getLogger("wifi_scan")
 

@@ -193,9 +193,9 @@ sudo systemctl restart azazel-first-minute
 ## アーキテクチャ
 
 ### バックエンド
-- **モジュール**: [py/azazel_zero/first_minute/web_api.py](../py/azazel_zero/first_minute/web_api.py)
+- **モジュール**: [py/azazel_gadget/first_minute/web_api.py](../py/azazel_gadget/first_minute/web_api.py)
 - **ベース**: Python 標準ライブラリ `http.server.HTTPServer`
-- **統合**: [controller.py](../py/azazel_zero/first_minute/controller.py) の `start_status_api()` で起動
+- **統合**: [controller.py](../py/azazel_gadget/first_minute/controller.py) の `start_status_api()` で起動
 - **リモートアクセス**: `web_host: 0.0.0.0` で全インターフェースでリッスン
 
 ### フロントエンド
@@ -226,7 +226,7 @@ sudo systemctl restart azazel-first-minute
 ```
 
 ### 履歴保持件数
-[py/azazel_zero/first_minute/web_api.py](../py/azazel_zero/first_minute/web_api.py) の `max_history` を変更：
+[py/azazel_gadget/first_minute/web_api.py](../py/azazel_gadget/first_minute/web_api.py) の `max_history` を変更：
 
 ```python
 class WebAPIHandler(BaseHTTPRequestHandler):
@@ -262,14 +262,14 @@ class WebAPIHandler(BaseHTTPRequestHandler):
 - ステージ遷移が発生していない可能性
 - テスト用に手動でイベントを追加：
   ```python
-  from azazel_zero.first_minute.web_api import add_history_event
+  from azazel_gadget.first_minute.web_api import add_history_event
   add_history_event("NORMAL", "PROBE", 15, "テストイベント")
   ```
 
 ## 開発
 
 ### カスタマイズ
-- **スタイル変更**: [web_api.py](../py/azazel_zero/first_minute/web_api.py) の `<style>` セクションを編集
+- **スタイル変更**: [web_api.py](../py/azazel_gadget/first_minute/web_api.py) の `<style>` セクションを編集
 - **新規 API 追加**: `WebAPIHandler.do_GET()` に新しいエンドポイントを追加
 - **グラフ追加**: Chart.js などのライブラリを `<head>` に追加
 
@@ -282,8 +282,8 @@ class WebAPIHandler(BaseHTTPRequestHandler):
 
 ## 関連ファイル
 
-- **Web API 実装**: [py/azazel_zero/first_minute/web_api.py](../py/azazel_zero/first_minute/web_api.py)
-- **コントローラー統合**: [py/azazel_zero/first_minute/controller.py](../py/azazel_zero/first_minute/controller.py)
+- **Web API 実装**: [py/azazel_gadget/first_minute/web_api.py](../py/azazel_gadget/first_minute/web_api.py)
+- **コントローラー統合**: [py/azazel_gadget/first_minute/controller.py](../py/azazel_gadget/first_minute/controller.py)
 - **設定ファイル**: [configs/first_minute.yaml](../configs/first_minute.yaml)
 - **テストスクリプト**: [test_web_ui.py](../test_web_ui.py)
 

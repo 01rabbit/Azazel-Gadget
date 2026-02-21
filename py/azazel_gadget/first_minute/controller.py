@@ -17,9 +17,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from azazel_zero.sensors.wifi_safety import evaluate_wifi_safety
-from azazel_zero.tactics_engine import ConfigHash, DecisionLogger
-from azazel_zero.tactics_engine.decision_logger import (
+from azazel_gadget.sensors.wifi_safety import evaluate_wifi_safety
+from azazel_gadget.tactics_engine import ConfigHash, DecisionLogger
+from azazel_gadget.tactics_engine.decision_logger import (
     StateSnapshot, InputSnapshot, ScoreDelta, ChosenAction, DecisionRecord,
 )
 
@@ -949,7 +949,7 @@ class FirstMinuteController:
         channel_ap_count = 0
         if self._is_wireless_iface(self.cfg.interfaces.get("upstream", "")):
             try:
-                from azazel_zero.sensors.wifi_channel_scanner import scan_wifi_channels
+                from azazel_gadget.sensors.wifi_channel_scanner import scan_wifi_channels
                 scan_result = scan_wifi_channels(self.cfg.interfaces.get("upstream", ""))
                 if scan_result.get("scan_success"):
                     channel_congestion = scan_result.get("congestion_level", "unknown")
@@ -1348,8 +1348,8 @@ class FirstMinuteController:
         tags = link_meta.get("wifi_tags", []) if link_meta else []
 
         try:
-            from azazel_zero.core.mock_llm_core import MockLLMCore
-            from azazel_zero.sensors.wifi_health_monitor import health_paths
+            from azazel_gadget.core.mock_llm_core import MockLLMCore
+            from azazel_gadget.sensors.wifi_health_monitor import health_paths
         except Exception:
             return
 

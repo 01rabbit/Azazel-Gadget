@@ -17,12 +17,12 @@ PY_ROOT = REPO_ROOT / "py"
 if str(PY_ROOT) not in sys.path:
     sys.path.insert(0, str(PY_ROOT))
 
-from azazel_zero.first_minute.config import FirstMinuteConfig
-from azazel_zero.first_minute.controller import FirstMinuteController
-from azazel_zero.first_minute.nft import NftManager
-from azazel_zero.first_minute.probes import run_all
-from azazel_zero.first_minute.state_machine import Stage
-from azazel_zero.first_minute.tc import TcManager
+from azazel_gadget.first_minute.config import FirstMinuteConfig
+from azazel_gadget.first_minute.controller import FirstMinuteController
+from azazel_gadget.first_minute.nft import NftManager
+from azazel_gadget.first_minute.probes import run_all
+from azazel_gadget.first_minute.state_machine import Stage
+from azazel_gadget.first_minute.tc import TcManager
 
 
 def parse_args() -> argparse.Namespace:

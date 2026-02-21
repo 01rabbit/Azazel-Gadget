@@ -1,4 +1,4 @@
-# azazel_zero/core/mock_llm_core.py
+# azazel_gadget/core/mock_llm_core.py
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple

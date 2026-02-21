@@ -46,7 +46,7 @@
 | ファイル | 変更 |
 |---------|------|
 | `systemd/azazel-first-minute.service` | usb0-static への依存追加 |
-| `py/azazel_zero/first_minute/controller.py` | dnsmasq デバッグ出力強化 |
+| `py/azazel_gadget/first_minute/controller.py` | dnsmasq デバッグ出力強化 |
 | `configs/dnsmasq-first_minute.conf` | DHCP ログ設定追加 |
 
 ### 📦 統合テンプレート

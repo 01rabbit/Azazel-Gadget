@@ -665,7 +665,7 @@ def run_textual(
 if __name__ == "__main__":
     print(
         "This module is a backend for cli_unified.\n"
-        "Run: python3 py/azazel_zero/cli_unified.py",
+        "Run: python3 py/azazel_gadget/cli_unified.py",
         file=sys.stderr,
     )
     sys.exit(2)

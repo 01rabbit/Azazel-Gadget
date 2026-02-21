@@ -1,8 +1,8 @@
-# azazel_zero/app/threat_judge.py
+# azazel_gadget/app/threat_judge.py
 from __future__ import annotations
 from typing import Dict, Any, Optional
-from azazel_zero.core.mock_llm_core import MockLLMCore
-from azazel_zero.sensors.wifi_safety import evaluate_wifi_safety
+from azazel_gadget.core.mock_llm_core import MockLLMCore
+from azazel_gadget.sensors.wifi_safety import evaluate_wifi_safety
 
 def judge_zero(prompt: str, iface: str, known_db_path: str, gateway_ip: Optional[str]) -> Dict[str, Any]:
     tags, meta = evaluate_wifi_safety(iface, known_db_path, gateway_ip)

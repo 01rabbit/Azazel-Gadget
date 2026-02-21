@@ -185,7 +185,7 @@ stage_contain:
 
 ```
 azazel/
-├── py/azazel_zero/first_minute/
+├── py/azazel_gadget/first_minute/
 │   ├── notifier.py                 # ★ ntfy クライアント実装
 │   ├── controller.py               # ★ notifier 統合フック
 │   └── config.py                   # ★ notify 設定スキーマ
@@ -200,7 +200,7 @@ azazel/
 
 ### NtfyNotifier の使用例
 ```python
-from azazel_zero.first_minute.notifier import NtfyNotifier
+from azazel_gadget.first_minute.notifier import NtfyNotifier
 
 notifier = NtfyNotifier(
     base_url="http://10.55.0.10:8081",

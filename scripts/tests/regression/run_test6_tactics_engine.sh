@@ -29,9 +29,9 @@ repo_root = os.environ.get("REPO_ROOT", "")
 if repo_root:
     sys.path.insert(0, os.path.join(repo_root, "py"))
 
-modules = ["azazel_zero.tactics_engine.config_hash", 
-           "azazel_zero.tactics_engine.eve_parser",
-           "azazel_zero.tactics_engine.decision_logger"]
+modules = ["azazel_gadget.tactics_engine.config_hash", 
+           "azazel_gadget.tactics_engine.eve_parser",
+           "azazel_gadget.tactics_engine.decision_logger"]
 
 for mod in modules:
     try:
@@ -55,7 +55,7 @@ if repo_root:
     sys.path.insert(0, os.path.join(repo_root, "py"))
 
 try:
-    from azazel_zero.tactics_engine import ConfigHash
+    from azazel_gadget.tactics_engine import ConfigHash
     from pathlib import Path
     
     config_path = Path('/etc/azazel-zero/first_minute.yaml')
@@ -121,7 +121,7 @@ if repo_root:
     sys.path.insert(0, os.path.join(repo_root, "py"))
 
 try:
-    from azazel_zero.tactics_engine import EVEParser
+    from azazel_gadget.tactics_engine import EVEParser
     from pathlib import Path
     
     eve_path = Path('/var/log/suricata/eve.json')
@@ -168,8 +168,8 @@ if repo_root:
 from pathlib import Path
 
 try:
-    from azazel_zero.tactics_engine import DecisionLogger
-    from azazel_zero.tactics_engine.decision_logger import (
+    from azazel_gadget.tactics_engine import DecisionLogger
+    from azazel_gadget.tactics_engine.decision_logger import (
         StateSnapshot, InputSnapshot, ScoreDelta, ChosenAction
     )
     

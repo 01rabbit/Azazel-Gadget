@@ -1002,17 +1002,25 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
         stdscr.refresh()
         return
 
-    # Colors
-    curses.start_color()
-    curses.use_default_colors()
-    curses.init_pair(1, curses.COLOR_GREEN, -1)
-    curses.init_pair(2, curses.COLOR_RED, -1)
-    curses.init_pair(3, curses.COLOR_CYAN, -1)
-    curses.init_pair(4, curses.COLOR_YELLOW, -1)
-    curses.init_pair(5, curses.COLOR_MAGENTA, -1)
-    curses.init_pair(6, curses.COLOR_WHITE, -1)
-    curses.init_pair(7, curses.COLOR_BLACK, -1)
+    # Colors (terminalによっては use_default_colors が失敗するため保護する)
     colors_on = curses.has_colors()
+    if colors_on:
+        try:
+            curses.start_color()
+            bg = -1
+            try:
+                curses.use_default_colors()
+            except curses.error:
+                bg = curses.COLOR_BLACK
+            curses.init_pair(1, curses.COLOR_GREEN, bg)
+            curses.init_pair(2, curses.COLOR_RED, bg)
+            curses.init_pair(3, curses.COLOR_CYAN, bg)
+            curses.init_pair(4, curses.COLOR_YELLOW, bg)
+            curses.init_pair(5, curses.COLOR_MAGENTA, bg)
+            curses.init_pair(6, curses.COLOR_WHITE, bg)
+            curses.init_pair(7, curses.COLOR_BLACK, bg)
+        except curses.error:
+            colors_on = False
 
     def cp(idx: int):
         return curses.color_pair(idx) if colors_on else curses.A_BOLD

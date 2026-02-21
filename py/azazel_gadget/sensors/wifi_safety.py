@@ -1,4 +1,4 @@
-# azazel_zero/sensors/wifi_safety.py
+# azazel_gadget/sensors/wifi_safety.py
 from __future__ import annotations
 from typing import Dict, Any, List, Optional, Tuple
 import json, subprocess, time, re, shutil
