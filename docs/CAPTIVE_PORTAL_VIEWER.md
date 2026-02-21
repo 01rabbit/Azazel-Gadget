@@ -12,7 +12,7 @@ This lets a downstream laptop/smartphone operate upstream captive portal pages.
 ## Install
 
 ```bash
-cd /home/azazel/Azazel-Gadget
+cd /home/azazel/azazel
 sudo ./install.sh --with-portal-viewer
 ```
 
