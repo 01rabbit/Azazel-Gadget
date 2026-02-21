@@ -48,14 +48,17 @@ main() {
         ln -sf "$PROJECT_ROOT/nftables/first_minute.nft" "/etc/azazel-zero/nftables/first_minute.nft" || true
     fi
     
-    # 4. 環境ファイル作成 (/etc/default/azazel-zero)
+    # 4. 環境ファイル作成 (/etc/default/azazel-gadget)
     local mgmt_ip="10.55.0.10"
     local web_backend_host="127.0.0.1"
     local web_backend_port="8084"
     local web_https_port="443"
 
+    local defaults_file="/etc/default/azazel-gadget"
+    local legacy_defaults_file="/etc/default/azazel-zero"
+
     log_info "環境ファイルを作成..."
-    cat > /etc/default/azazel-zero <<EOF
+    cat > "$defaults_file" <<EOF
 # Azazel-Gadget 統合環境設定
 # このファイルは systemd サービスから source される
 
@@ -84,7 +87,9 @@ AZAZEL_WEB_HTTPS_ENABLED=1
 SUBNET=192.168.7.0/24
 OUTIF=\${WAN_IF}
 EOF
-    log_info "✓ 環境ファイル作成: /etc/default/azazel-zero"
+    ln -sfn "$defaults_file" "$legacy_defaults_file"
+    log_info "✓ 環境ファイル作成: $defaults_file"
+    log_info "✓ 互換リンク作成: $legacy_defaults_file -> $defaults_file"
 
     # 4.2 zram-tools 設定（利用可能環境のみ）
     if dpkg-query -W -f='${Status}' zram-tools 2>/dev/null | grep -q "install ok installed"; then

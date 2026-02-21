@@ -1,6 +1,6 @@
 #!/bin/bash
 ################################################################################
-# Azazel-Zero Unified Installer
+# Azazel-Gadget Unified Installer
 #
 # メインエントリーポイント - 統合インストーラ
 # 
@@ -38,7 +38,7 @@ DEBUG="${DEBUG:-0}"
 
 print_usage() {
     cat <<EOF
-Azazel-Zero Unified Installer
+Azazel-Gadget Unified Installer
 
 使用法:
   sudo ./install.sh [OPTIONS]
@@ -70,8 +70,8 @@ Azazel-Zero Unified Installer
   - --resume は Stage 30 以降のみ実行（Stage 10 の依存インストールは再実行しない）
 
 詳細:
-  /home/azazel/Azazel-Zero/docs/INSTALLER_UNIFIED_DESIGN.md
-  /home/azazel/Azazel-Zero/docs/DHCP_DNS_TROUBLESHOOTING.md
+  $PROJECT_ROOT/docs/INSTALLER_UNIFIED_DESIGN.md
+  $PROJECT_ROOT/docs/DHCP_DNS_TROUBLESHOOTING.md
 EOF
 }
 
@@ -230,7 +230,7 @@ main() {
     
     echo ""
     echo "═══════════════════════════════════════════════════════════"
-    echo "✓ Azazel-Zero インストール完了"
+    echo "✓ Azazel-Gadget インストール完了"
     echo "═══════════════════════════════════════════════════════════"
     echo ""
     echo "ログファイル: $LOG_FILE"

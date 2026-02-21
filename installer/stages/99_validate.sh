@@ -159,13 +159,16 @@ main() {
     done
 
     local mgmt_ip="10.55.0.10"
-    if [[ -f /etc/default/azazel-zero ]]; then
-        # shellcheck disable=SC1091
-        source /etc/default/azazel-zero
-        if [[ -n "${MGMT_IP:-}" ]]; then
-            mgmt_ip="$MGMT_IP"
+    for defaults in /etc/default/azazel-gadget /etc/default/azazel-zero; do
+        if [[ -f "$defaults" ]]; then
+            # shellcheck disable=SC1091
+            source "$defaults"
+            if [[ -n "${MGMT_IP:-}" ]]; then
+                mgmt_ip="$MGMT_IP"
+            fi
+            break
         fi
-    fi
+    done
 
     if [[ "$fm_dnsmasq_detected" == "true" ]]; then
         log_info "  ✓ first-minute 管理 dnsmasq プロセスを確認"
@@ -311,6 +314,7 @@ main() {
     local config_files=(
         "/etc/azazel-zero/first_minute.yaml"
         "/etc/azazel-zero/dnsmasq-first_minute.conf"
+        "/etc/default/azazel-gadget"
         "/etc/default/azazel-zero"
     )
     

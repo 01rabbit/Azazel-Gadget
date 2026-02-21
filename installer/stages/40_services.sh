@@ -15,13 +15,16 @@ WITH_WEBUI="${WITH_WEBUI:-0}"
 
 configure_sshd_usb_only() {
     local mgmt_ip="10.55.0.10"
-    if [[ -f /etc/default/azazel-zero ]]; then
-        # shellcheck disable=SC1091
-        source /etc/default/azazel-zero
-        if [[ -n "${MGMT_IP:-}" ]]; then
-            mgmt_ip="$MGMT_IP"
+    for defaults in /etc/default/azazel-gadget /etc/default/azazel-zero; do
+        if [[ -f "$defaults" ]]; then
+            # shellcheck disable=SC1091
+            source "$defaults"
+            if [[ -n "${MGMT_IP:-}" ]]; then
+                mgmt_ip="$MGMT_IP"
+            fi
+            break
         fi
-    fi
+    done
 
     local dropin_dir="/etc/ssh/sshd_config.d"
     local dropin_file="${dropin_dir}/90-azazel-usb0-only.conf"

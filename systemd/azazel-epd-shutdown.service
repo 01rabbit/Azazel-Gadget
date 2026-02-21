@@ -6,7 +6,9 @@ Before=poweroff.target halt.target shutdown.target
 [Service]
 Type=oneshot
 User=root
-ExecStart=/bin/bash -lc '/usr/bin/python3 /home/azazel/Azazel-Zero/py/boot_splash_epd.py --mode shutdown || true'
+EnvironmentFile=-/etc/default/azazel-gadget
+EnvironmentFile=-/etc/default/azazel-zero
+ExecStart=/bin/bash -lc 'EPD="${EPD_PY:-${AZAZEL_ROOT:-/home/azazel/Azazel-Gadget}/py/boot_splash_epd.py}"; /usr/bin/python3 "$EPD" --mode shutdown || true'
 TimeoutStartSec=6s
 
 [Install]

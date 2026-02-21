@@ -1,11 +1,13 @@
 #!/bin/sh
 set -eu
 
-AZAZEL_DEFAULTS="/etc/default/azazel-zero"
-if [ -r "$AZAZEL_DEFAULTS" ]; then
-  # shellcheck disable=SC1090
-  . "$AZAZEL_DEFAULTS"
-fi
+for AZAZEL_DEFAULTS in /etc/default/azazel-gadget /etc/default/azazel-zero; do
+  if [ -r "$AZAZEL_DEFAULTS" ]; then
+    # shellcheck disable=SC1090
+    . "$AZAZEL_DEFAULTS"
+    break
+  fi
+done
 
 IN_IF="${USB_IF:-usb0}"
 MGMT_SUBNET_CIDR="${MGMT_SUBNET:-10.55.0.0/24}"

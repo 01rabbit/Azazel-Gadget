@@ -12,10 +12,12 @@ Type=oneshot
 RemainAfterExit=yes
 # SPI/I2C に確実に触れるため root で（RasPi の実情）
 User=root
+EnvironmentFile=-/etc/default/azazel-gadget
+EnvironmentFile=-/etc/default/azazel-zero
 # 起動演出（失敗しても進行の邪魔はしない）
-ExecStart=/bin/bash -lc '/usr/bin/python3 /home/azazel/Azazel-Zero/py/boot_splash_epd.py --mode start --steps=${STEPS:-10} --frame-sec=${FRAME_SEC:-0.25} || true'
+ExecStart=/bin/bash -lc 'EPD="${EPD_PY:-${AZAZEL_ROOT:-/home/azazel/Azazel-Gadget}/py/boot_splash_epd.py}"; /usr/bin/python3 "$EPD" --mode start --steps=${STEPS:-10} --frame-sec=${FRAME_SEC:-0.25} || true'
 # 停止演出（失敗しても電源断の邪魔はしない）
-ExecStop=/bin/bash -lc '/usr/bin/python3 /home/azazel/Azazel-Zero/py/boot_splash_epd.py --mode shutdown || true'
+ExecStop=/bin/bash -lc 'EPD="${EPD_PY:-${AZAZEL_ROOT:-/home/azazel/Azazel-Gadget}/py/boot_splash_epd.py}"; /usr/bin/python3 "$EPD" --mode shutdown || true'
 
 # 観測しやすくハングしない
 StandardOutput=journal
