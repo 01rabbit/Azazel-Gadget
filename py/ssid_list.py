@@ -273,7 +273,7 @@ class SSIDListTextualApp(App):
     Footer {
         background: #16213e;
         color: #aaaaaa;
-        border-top: solid #00d4ff;
+        height: 1;
     }
 
     #status {

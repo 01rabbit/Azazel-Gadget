@@ -62,7 +62,35 @@ class AzazelTextualApp(App):
     Footer {
         background: #16213e;
         color: #aaaaaa;
-        border-top: solid #00d4ff;
+        height: 1;
+    }
+
+    FooterKey {
+        background: #16213e;
+    }
+
+    FooterKey .footer-key--key {
+        background: #00d4ff;
+        color: #05080e;
+        text-style: bold;
+    }
+
+    FooterKey .footer-key--description {
+        background: #16213e;
+        color: #eeeeee;
+    }
+
+    FooterKey:hover {
+        background: #22375f;
+    }
+
+    FooterKey:hover .footer-key--key {
+        background: #2ecc71;
+        color: #05080e;
+    }
+
+    FooterKey:hover .footer-key--description {
+        color: #ffffff;
     }
 
     #status-line {
