@@ -70,8 +70,8 @@ Azazel-Zero Unified Installer
   - --resume は Stage 30 以降のみ実行（Stage 10 の依存インストールは再実行しない）
 
 詳細:
-  /home/azazel/Azazel-Zero/docs/INSTALLER_UNIFIED_DESIGN.md
-  /home/azazel/Azazel-Zero/docs/DHCP_DNS_TROUBLESHOOTING.md
+  /home/azazel/Azazel-Zero/installer/README.md
+  /home/azazel/Azazel-Zero/README.md
 EOF
 }
 

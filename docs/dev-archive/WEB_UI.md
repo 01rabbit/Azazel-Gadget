@@ -24,7 +24,7 @@ Azazel-Zero の Web UI ダッシュボードです。リアルタイムでシス
 
 ## アクセス方法
 
-### 1. 通常運用時（複数の方法）
+### 通常運用時（複数の方法）
 Azazel-Zero が稼働している場合、以下の URL でアクセス可能：
 
 #### ローカル（Raspberry Pi 直接接続）
@@ -44,16 +44,6 @@ http://<Raspberry Pi の Wi-Fi IP>:8083/
 ```
 
 **注**: リモートアクセスは設定ファイルで有効化（デフォルト有効）
-
-### 2. テストサーバー起動
-開発・デバッグ用のテストサーバーを起動：
-
-```bash
-cd /home/azazel/Azazel-Zero
-PYTHONPATH=/home/azazel/Azazel-Zero/py python3 test_web_ui.py
-```
-
-起動後、ブラウザで `http://127.0.0.1:8083/` にアクセス。
 
 ## リモートアクセス設定
 
@@ -258,14 +248,6 @@ class WebAPIHandler(BaseHTTPRequestHandler):
   curl http://10.55.0.10:8083/api/status
   ```
 
-### 履歴が表示されない
-- ステージ遷移が発生していない可能性
-- テスト用に手動でイベントを追加：
-  ```python
-  from azazel_zero.first_minute.web_api import add_history_event
-  add_history_event("NORMAL", "PROBE", 15, "テストイベント")
-  ```
-
 ## 開発
 
 ### カスタマイズ
@@ -285,7 +267,6 @@ class WebAPIHandler(BaseHTTPRequestHandler):
 - **Web API 実装**: [py/azazel_zero/first_minute/web_api.py](../py/azazel_zero/first_minute/web_api.py)
 - **コントローラー統合**: [py/azazel_zero/first_minute/controller.py](../py/azazel_zero/first_minute/controller.py)
 - **設定ファイル**: [configs/first_minute.yaml](../configs/first_minute.yaml)
-- **テストスクリプト**: [test_web_ui.py](../test_web_ui.py)
 
 ## スクリーンショット説明
 

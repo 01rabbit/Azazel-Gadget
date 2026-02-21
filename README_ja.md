@@ -133,30 +133,40 @@ suppress_auto_wifi: true
 sudo python3 py/azazel_zero/cli_unified.py
 ```
 
+端末の色初期化で失敗する場合:
+
+```bash
+TERM=xterm-256color python3 py/azazel_zero/cli_unified.py
+```
+
 ### 画面構成
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Azazel-Zero | 📶 SSID: MyWiFi | ⬇️ usb0 | ⬆️ wlan0 | 🕐 12:34:56 │  ← ステータスバー
-│ View: SNAPSHOT (manual)  Age: 🟢 00:00:15                   │  ← データ新鮮度
+│ Azazel-Zero | 📶 SSID: Wired:eth0 | ⬇️ usb0 | ⬆️ eth0 | 🕐 12:34:56 │
+│ CPU 4.1% | Mem 1173/7820MB (15%) | View: SNAPSHOT (manual) Age:🟢00:00:01 │
 ├─────────────────────────────────────────────────────────────┤
-│ ✅ 安全          推奨：このまま継続                          │  ← 状態バッジ（反転表示）
-│ 理由：プローブ成功 / DNS正常                                │
-│ 脅威度: [🟢🟢⚪⚪⚪] Low                                     │  ← 脅威レベル
-│ 次：再評価を待機                                            │
+│ Suspicion: 0 | Risk Score: 🟢 0/100                         │
+│ ✅ SAFE        推奨：...                                    │
+│ 理由：...                                                   │
+│ Threat: [⚪⚪⚪⚪⚪] LOW                                       │
+│ 次：...                                                     │
+│ Monitoring: Suricata=ON  OpenCanary=ON  ntfy=ON            │
 ├──────────────────────┬──────────────────────────────────────┤
 │ Connection           │ Control / Safety                     │
-│ BSSID: aa:bb:cc:...  │ QUIC(UDP/443): ⛔ BLOCKED           │
-│ Channel: 🟢 Ch124    │ DoH(TCP/443): ⛔ BLOCKED            │
-│    - Low (31 APs)    │ Degrade: ✓ OFF                      │
-│ Signal: 🟩🟩🟩 -55dBm │ Probe: ✓ 5/5 ALL OK                │
-│ Gateway: 🏠 192.168… │ Stats: DNS: ✅ 45 ⚠️ 3 🔴 2         │
+│ SSID: ...            │ QUIC: ⛔ BLOCKED / ✓ ALLOWED        │
+│ BSSID: ...           │ DoH:  ⛔ BLOCKED / ✓ ALLOWED        │
+│ Signal: ... dBm      │ Degrade: ON / OFF                    │
+│ Gateway: ...         │ Down/Up: X.Y / X.Y Mbps              │
+│ State: ...           │ Probe: tls_ok/tls_total (...blocked) │
+│ Internet: ...        │ IDS: C/W/I                            │
+│ Captive: ...         │ DNS: OK/WARN/BLK, Traffic: ↓/↑       │
 ├──────────────────────┴──────────────────────────────────────┤
-│ Evidence (last 90s)                                         │
-│ 🟢 Normal probe completed                                   │
-│ 🟡 DNS query to suspicious domain                          │
-│ 💠 action: reprobe command sent                             │
-│ ↳ decision: state=NORMAL suspicion=5 decay=0.9             │
+│ Evidence & State                                             │
+│ State: SAFE  Suspicion: 0  CPU Temp: 37.0C  CPU: 4.1%  Memory: 15% │
+│ Scan Results: 31 APs (low)                                  │
+│ 🟢 / 🟡 / 🔴 evidence lines ...                              │
+│ Decision: State: SAFE, Suspicion: 0                         │
 ├─────────────────────────────────────────────────────────────┤
 │ Flow: PROBE → DEGRADED → NORMAL → ✅ SAFE                   │
 │ [U] Refresh  [A] Stage-Open  [R] Re-Probe  [C] Contain  [L] Details  [Q] Quit │
@@ -164,90 +174,27 @@ sudo python3 py/azazel_zero/cli_unified.py
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### アイコンと色の意味
+### 主要な読み方
 
-#### 🎯 状態バッジ（メインステータス）
-
-| アイコン | 状態 | 色 | 意味 |
-|---------|------|-----|------|
-| ⟳ | 確認中 | シアン（反転） | 初期スキャン中 |
-| ✅ | **安全** | **緑（反転・太字）** | ネットワークは安全 |
-| ⚠️ | 制限中 | 黄（反転） | 帯域制限などの制約あり |
-| ⛔ | 隔離 | 赤（反転） | 危険と判定、隔離モード |
-| 👁 | 観測誘導 | 紫（反転） | デセプション（囮）モード |
-
-#### 🎯 脅威レベルインジケーター
-
-```
-脅威度: [🟢🟢⚪⚪⚪] Low      ← 安全
-脅威度: [🟡🟡🟡⚪⚪] Med      ← 注意
-脅威度: [🔴🔴🔴🔴🔴] Critical ← 危険
-```
-
-#### 🎯 経過時間（Age）
-
-- 🟢 **0-30秒** : 最新データ、信頼できる
-- 🟡 **30秒-2分** : やや古い、確認推奨
-- 🔴 **2分以上** : 古い、[U]キーで更新が必要
-
-#### 🎯 Signal強度（電波強度）
-
-| 表示 | 強度 | 意味 |
-|------|------|------|
-| 🟩🟩🟩🟩 | -50dBm以上 | 非常に良好 |
-| 🟩🟩🟩 | -50〜-60dBm | 良好 |
-| 🟨🟨 | -60〜-70dBm | 普通 |
-| 🟧 | -70〜-80dBm | 弱い |
-| 🟥 | -80dBm以下 | 非常に弱い |
-
-#### 🎯 Channel混雑度（実測）
-
-| 表示 | 混雑度 | AP数 | 意味 |
-|------|--------|------|------|
-| 🟢 Clear/Low | 低い | 0-2台 | 空いている（快適） |
-| 🟡 Medium | 中程度 | 3-5台 | 普通 |
-| 🟧 High | 高い | 6-10台 | 混雑 |
-| 🔴 Critical | 非常に高い | 11台以上 | 非常に混雑 |
-
-※ [U]キーで更新時に周囲のAPをスキャンして実測
-
-#### 🎯 Gateway IP
-
-- 🏠 **緑** : プライベートIP（正常）
-- ⚠️ **黄** : パブリックIP（要確認）
-
-#### 🎯 制御ルール
-
-| 項目 | アイコン | 色 | 意味 |
-|------|---------|-----|------|
-| QUIC | ⛔ | 赤 | ブロック中 |
-| QUIC | ✓ | 緑 | 許可 |
-| Degrade | ⚡ | 黄 | 帯域制限中 |
-| Degrade | ✓ | 緑 | 制限なし |
-| Probe | ⚠ | 赤 | ブロック検出 |
-| Probe | ✓ | 緑 | 全て正常 |
-
-#### 🎯 DNS統計
-
-- ✅ 正常クエリ数
-- ⚠️ 異常クエリ数
-- 🔴 ブロックされたクエリ数
-
-#### 🎯 Evidence（証拠ログ）
-
-| アイコン | 色 | 意味 |
-|---------|-----|------|
-| 🔴 | 赤（太字） | 異常・エラー（blocked, fail, hijack等） |
-| 🟡 | 黄 | 警告・注意（portal, dns, probe等） |
-| 🟢 | 緑 | 正常・成功（ok, safe, normal等） |
-| 💠 | シアン | アクション（command, transition等） |
-| ⚪ | 白 | その他 |
+- 状態バッジ: `CHECKING / SAFE / LIMITED / CONTAINED / DECEPTION`
+- 脅威レベルは `internal.suspicion` に連動:
+  - `0-14`: `LOW`
+  - `15-29`: `MEDIUM`
+  - `30-49`: `HIGH`
+  - `50以上`: `CRITICAL`
+- Age 表示:
+  - `0-30秒`: 緑
+  - `31-120秒`: 黄
+  - `121秒以上`: 赤
+- Signal は `signal_dbm` からバー表示（取得できる場合）
+- Captive は `connection.captive_portal` と reason を表示
+- `Scan Results` は AP数と混雑度を表示
 
 ### キー操作
 
 | キー | 機能 | 説明 |
 |------|------|------|
-| **[U]** | Refresh | データを手動更新（WiFiスキャン実行） |
+| **[U]** | Refresh | スナップショットを手動更新（チャンネルスキャンも実行） |
 | **[A]** | Stage-Open | 制限状態から通常モードへ移行指示 |
 | **[R]** | Re-Probe | 再度プローブテストを実行 |
 | **[C]** | Contain | 隔離モードへ移行 |
@@ -263,17 +210,6 @@ sudo python3 py/azazel_zero/cli_unified.py
   - `Decay`: 減衰値
   - `Rules`: 制御ルール詳細
 - **[B]キー**でメイン画面に戻る
-
-### 色の基本ルール
-
-| 色 | 意味 | 使用箇所 |
-|----|------|---------|
-| 🟢 緑 | 良好・正常・安全 | SAFE状態、信号強度良、空きチャンネル、正常ログ |
-| 🟡 黄 | 注意・警告・中程度 | LIMITED状態、信号弱、混雑中、警告ログ |
-| 🔴 赤 | 危険・エラー・異常 | CONTAINED状態、信号非常に弱、超混雑、エラーログ |
-| 🟣 紫 | 特殊状態 | DECEPTION状態 |
-| 🔵 シアン | 情報・技術的データ | CHECKING状態、アクションログ、技術情報 |
-| ⚪ 白 | 中立・不明 | その他のログ、不明な状態 |
 
 ---
 
@@ -394,3 +330,36 @@ sudo ntfy access
    ```
 
 詳細な設定変更やトラブルシューティングについては [installer/README.md](installer/README.md) を参照してください。
+
+---
+
+## install.sh 実行後の最小トラブルシュート
+
+`install.sh` 完了後に動作がおかしい場合は、まず以下だけ確認してください。
+
+```bash
+# 1) コアサービス状態
+sudo systemctl status azazel-first-minute.service azazel-control-daemon.service usb0-static.service
+
+# 2) 直近ログ
+sudo journalctl -u azazel-first-minute.service -n 80 --no-pager
+
+# 3) スナップショット/API
+ls -l /run/azazel-zero/ui_snapshot.json
+curl -s http://10.55.0.10:8082/ | jq .
+```
+
+`--with-webui` 有効時:
+
+```bash
+sudo systemctl status azazel-web.service caddy.service
+curl -k https://10.55.0.10/health
+```
+
+`usb0` の DHCP/DNS が不安定な場合:
+
+```bash
+sudo bash bin/diagnose_dhcp.sh
+```
+
+詳細は `installer/README.md` と `docs/dev-archive/` を参照してください。

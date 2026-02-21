@@ -193,7 +193,6 @@ Azazel-Zero/
 │   └── first_minute.yaml           # ★ notify セクション追加
 ├── scripts/
 │   └── install_ntfy.sh             # ★ 自動インストール
-└── test_ntfy_notifier.py           # ★ ユニットテスト (10 cases)
 ```
 
 ## Python API
@@ -280,15 +279,9 @@ sudo journalctl -u azazel-first-minute -f | grep -i "ntfy\|notif"
 ### WebUI（8084）と競合
 ポート 8084 は WebUI 専用です。ntfy は **8081** のみを使用。
 
-## テスト
+## 動作確認
 
-```bash
-# ユニットテスト（10 test cases）
-cd /home/azazel/Azazel-Zero
-python3 test_ntfy_notifier.py
-
-# すべてのテストが `OK` で終了することを確認
-```
+`テスト送信 (curl)` セクションの publish コマンドで通知経路を確認してください。
 
 ## 設計メモ
 
@@ -300,21 +293,6 @@ python3 test_ntfy_notifier.py
   - auth-default-access: read-only（購読は許可、送信はトークン必須）
   - HTTPS 未対応（ローカル限定のため HTTP で十分）
   - トークンは環境変数・ログに出力されない
-
-## 今後の拡張
-
-### Phase C: signals 連動の強化
-- Wi-Fi タグ（evil_twin, rogue_dhcp など）の通知
-- ルート異常の自動検知
-- 温度アラート（CPU >= 75℃）
-
-### Phase D: WebUI との統合
-- ui_snapshot.json に直近通知を記録
-- WebUI ダッシュボードに「アラート履歴」を表示
-
-### 認証強化（将来）
-- ntfy ユーザごとに topic の read/write 権限を分離
-- 複数ユーザ（alerting, monitoring など）のサポート
 
 ## 参考資料
 

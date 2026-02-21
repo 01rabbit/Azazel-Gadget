@@ -1,6 +1,6 @@
 # Azazel-Zero Setup Guide (Raspberry Pi OS Lite Trixie / 64-bit)
 
-English | [日本語](/docs/setup-zero_ja.md)
+English | [日本語](/docs/dev-archive/setup-zero_ja.md)
 
 ## Purpose and Target Architecture
 

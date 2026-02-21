@@ -175,7 +175,7 @@ tail -100 installer/logs/install_YYYYMMDD-HHMMSS.log
 sudo bash bin/diagnose_dhcp.sh
 ```
 
-**詳細**: [docs/DHCP_DNS_TROUBLESHOOTING.md](../docs/DHCP_DNS_TROUBLESHOOTING.md)
+**詳細**: [開発アーカイブ: DHCP_DNS_TROUBLESHOOTING.md](../docs/dev-archive/DHCP_DNS_TROUBLESHOOTING.md)
 
 ### サービスが起動しない
 
@@ -247,9 +247,9 @@ sudo systemctl restart azazel-first-minute.service
 
 ## 📚 詳細ドキュメント
 
-- [INSTALLER_UNIFIED_DESIGN.md](../docs/INSTALLER_UNIFIED_DESIGN.md) - インストーラ全体設計
-- [DHCP_DNS_TROUBLESHOOTING.md](../docs/DHCP_DNS_TROUBLESHOOTING.md) - ネットワーク設定のトラブル
+- [開発アーカイブ: DHCP_DNS_TROUBLESHOOTING.md](../docs/dev-archive/DHCP_DNS_TROUBLESHOOTING.md) - ネットワーク設定のトラブル
 - [SYSTEM_SPECIFICATION.md](../SYSTEM_SPECIFICATION.md) - システム全体仕様
+- [開発アーカイブ: INSTALLER_UNIFIED_DESIGN.md](../docs/dev-archive/INSTALLER_UNIFIED_DESIGN.md) - インストーラ設計（開発資料）
 
 ---
 
