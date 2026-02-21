@@ -56,10 +56,10 @@ try:
 except Exception:
     cp_read_snapshot_payload = None
     cp_watch_snapshots = None
-    first_minute_config_candidates = lambda: [Path("/etc/azazel-zero/first_minute.yaml")]  # type: ignore
-    portal_env_candidates = lambda: [Path("/etc/azazel-zero/portal-viewer.env")]  # type: ignore
-    snapshot_path_candidates = lambda: [Path("/run/azazel-zero/ui_snapshot.json"), Path(".azazel-zero/run/ui_snapshot.json")]  # type: ignore
-    web_token_candidates = lambda: [Path.home() / ".azazel-zero" / "web_token.txt"]  # type: ignore
+    first_minute_config_candidates = lambda: [Path("/etc/azazel-gadget/first_minute.yaml"), Path("/etc/azazel-zero/first_minute.yaml")]  # type: ignore
+    portal_env_candidates = lambda: [Path("/etc/azazel-gadget/portal-viewer.env"), Path("/etc/azazel-zero/portal-viewer.env")]  # type: ignore
+    snapshot_path_candidates = lambda: [Path("/run/azazel-gadget/ui_snapshot.json"), Path("/run/azazel-zero/ui_snapshot.json"), Path(".azazel-gadget/run/ui_snapshot.json"), Path(".azazel-zero/run/ui_snapshot.json")]  # type: ignore
+    web_token_candidates = lambda: [Path.home() / ".azazel-gadget" / "web_token.txt", Path.home() / ".azazel-zero" / "web_token.txt"]  # type: ignore
     warn_if_legacy_path = lambda *args, **kwargs: None  # type: ignore
 
 # Configuration

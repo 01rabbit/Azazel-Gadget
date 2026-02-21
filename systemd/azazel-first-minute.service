@@ -20,7 +20,7 @@ Restart=on-failure
 RestartSec=3
 User=root
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
-RuntimeDirectory=azazel-zero
+RuntimeDirectory=azazel-gadget
 KillMode=process
 
 [Install]

@@ -22,6 +22,12 @@ from datetime import datetime
 from typing import Optional, Tuple
 from pathlib import Path
 
+PY_ROOT = Path(__file__).resolve().parent
+if str(PY_ROOT) not in sys.path:
+    sys.path.insert(0, str(PY_ROOT))
+
+from azazel_gadget.path_schema import runtime_dir_candidates
+
 # ---------- helpers ----------
 
 def _sh(cmd: str, timeout: float = 1.5) -> str:
@@ -122,11 +128,17 @@ def _supports_emoji() -> bool:
 
 
 def _health_path() -> Path:
-    run_dir = Path("/run/azazel-zero")
-    if run_dir.exists() and os.access(run_dir, os.R_OK):
-        return run_dir / "wifi_health.json"
-    fb = Path(__file__).resolve().parent.parent / ".azazel-zero" / "run" / "wifi_health.json"
-    return fb
+    for run_dir in runtime_dir_candidates():
+        if run_dir.exists() and os.access(run_dir, os.R_OK):
+            return run_dir / "wifi_health.json"
+    repo_root = Path(__file__).resolve().parent.parent
+    for fb in (
+        repo_root / ".azazel-gadget" / "run" / "wifi_health.json",
+        repo_root / ".azazel-zero" / "run" / "wifi_health.json",
+    ):
+        if fb.exists():
+            return fb
+    return repo_root / ".azazel-gadget" / "run" / "wifi_health.json"
 
 
 def _health_status() -> str:

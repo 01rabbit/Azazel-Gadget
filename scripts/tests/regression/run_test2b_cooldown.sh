@@ -4,7 +4,10 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
-CONFIG_FILE="/etc/azazel-zero/first_minute.yaml"
+CONFIG_FILE="/etc/azazel-gadget/first_minute.yaml"
+if [ ! -f "$CONFIG_FILE" ]; then
+  CONFIG_FILE="/etc/azazel-zero/first_minute.yaml"
+fi
 if [ ! -f "$CONFIG_FILE" ]; then
   CONFIG_FILE="${REPO_ROOT}/configs/first_minute.yaml"
 fi

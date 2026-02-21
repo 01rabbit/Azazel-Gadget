@@ -10,6 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 CFG_CANDIDATES=(
+  "/etc/azazel-gadget/first_minute.yaml"
   "/etc/azazel-zero/first_minute.yaml"
   "$PROJECT_ROOT/configs/first_minute.yaml"
 )

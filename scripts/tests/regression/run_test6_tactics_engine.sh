@@ -9,7 +9,10 @@ echo ""
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
-CONFIG_FILE="/etc/azazel-zero/first_minute.yaml"
+CONFIG_FILE="/etc/azazel-gadget/first_minute.yaml"
+if [ ! -f "$CONFIG_FILE" ]; then
+  CONFIG_FILE="/etc/azazel-zero/first_minute.yaml"
+fi
 if [ ! -f "$CONFIG_FILE" ]; then
   CONFIG_FILE="${REPO_ROOT}/configs/first_minute.yaml"
 fi
@@ -58,9 +61,12 @@ try:
     from azazel_gadget.tactics_engine import ConfigHash
     from pathlib import Path
     
-    config_path = Path('/etc/azazel-zero/first_minute.yaml')
-    if not config_path.exists():
-        config_path = Path(repo_root) / 'configs' / 'first_minute.yaml'
+    candidates = [
+        Path('/etc/azazel-gadget/first_minute.yaml'),
+        Path('/etc/azazel-zero/first_minute.yaml'),
+        Path(repo_root) / 'configs' / 'first_minute.yaml',
+    ]
+    config_path = next((p for p in candidates if p.exists()), candidates[-1])
     
     config_hash = ConfigHash.compute(config_file=config_path)
     print(config_hash)

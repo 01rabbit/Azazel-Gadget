@@ -230,13 +230,17 @@ main() {
     if systemctl is-enabled --quiet azazel-portal-viewer.service 2>/dev/null; then
         local portal_port="6080"
         local portal_bind=""
-        if [[ -f /etc/azazel-zero/portal-viewer.env ]]; then
+        local portal_env="/etc/azazel-gadget/portal-viewer.env"
+        if [[ ! -f "$portal_env" ]]; then
+            portal_env="/etc/azazel-zero/portal-viewer.env"
+        fi
+        if [[ -f "$portal_env" ]]; then
             local parsed_port
-            parsed_port="$(awk -F= '/^[[:space:]]*PORTAL_NOVNC_PORT[[:space:]]*=/{gsub(/[[:space:]"\047]/, "", $2); print $2; exit}' /etc/azazel-zero/portal-viewer.env || true)"
+            parsed_port="$(awk -F= '/^[[:space:]]*PORTAL_NOVNC_PORT[[:space:]]*=/{gsub(/[[:space:]"\047]/, "", $2); print $2; exit}' "$portal_env" || true)"
             if [[ -n "$parsed_port" ]]; then
                 portal_port="$parsed_port"
             fi
-            portal_bind="$(awk -F= '/^[[:space:]]*PORTAL_NOVNC_BIND[[:space:]]*=/{gsub(/[[:space:]"\047]/, "", $2); print $2; exit}' /etc/azazel-zero/portal-viewer.env || true)"
+            portal_bind="$(awk -F= '/^[[:space:]]*PORTAL_NOVNC_BIND[[:space:]]*=/{gsub(/[[:space:]"\047]/, "", $2); print $2; exit}' "$portal_env" || true)"
         fi
 
         if check_service "azazel-portal-viewer.service"; then
@@ -277,8 +281,12 @@ main() {
         log_warn "  ⚠️  nftables テーブル azazel_fmc が見つかりません（後で設定可能）"
     fi
 
-    if [[ -f /etc/azazel-zero/nftables/first_minute.nft ]]; then
-        if grep -Eq 'elements = \{[^}]*6080' /etc/azazel-zero/nftables/first_minute.nft; then
+    local nft_cfg="/etc/azazel-gadget/nftables/first_minute.nft"
+    if [[ ! -f "$nft_cfg" ]]; then
+        nft_cfg="/etc/azazel-zero/nftables/first_minute.nft"
+    fi
+    if [[ -f "$nft_cfg" ]]; then
+        if grep -Eq 'elements = \{[^}]*6080' "$nft_cfg"; then
             log_info "  ✓ nftables 管理ポートに 6080(noVNC) を確認"
         else
             log_error "  ✗ nftables 管理ポートに 6080(noVNC) が含まれていません"
@@ -311,21 +319,30 @@ main() {
     log_info ""
     log_info "【7】設定ファイル確認:"
     
-    local config_files=(
+    local required_config_files=(
         "/etc/azazel-gadget/first_minute.yaml"
         "/etc/azazel-gadget/dnsmasq-first_minute.conf"
+        "/etc/default/azazel-gadget"
+    )
+    local legacy_compat_files=(
         "/etc/azazel-zero/first_minute.yaml"
         "/etc/azazel-zero/dnsmasq-first_minute.conf"
-        "/etc/default/azazel-gadget"
         "/etc/default/azazel-zero"
     )
     
-    for conf in "${config_files[@]}"; do
+    for conf in "${required_config_files[@]}"; do
         if [[ -f "$conf" ]]; then
             log_info "  ✓ $conf"
         else
             log_error "  ✗ $conf が見つかりません"
             all_passed=false
+        fi
+    done
+    for conf in "${legacy_compat_files[@]}"; do
+        if [[ -e "$conf" ]]; then
+            log_info "  ✓ (compat) $conf"
+        else
+            log_warn "  ⚠️  (compat) $conf は未配置（新構成のみで運用中）"
         fi
     done
     
@@ -356,7 +373,7 @@ main() {
         log_info ""
         log_info "4) Web UI へアクセス:"
         log_info "   https://10.55.0.10 (Web UI オプション有効時)"
-        log_info "   ※ ローカルCA証明書: /etc/azazel-zero/certs/azazel-webui-local-ca.crt"
+        log_info "   ※ ローカルCA証明書: /etc/azazel-gadget/certs/azazel-webui-local-ca.crt"
         if systemctl is-enabled --quiet azazel-portal-viewer.service 2>/dev/null; then
             log_info "   Captive Portal Viewer: http://10.55.0.10:6080/vnc.html"
         fi

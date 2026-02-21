@@ -11,6 +11,7 @@ Group=azazel
 WorkingDirectory=/home/azazel
 EnvironmentFile=-/etc/default/azazel-gadget
 EnvironmentFile=-/etc/default/azazel-zero
+EnvironmentFile=-/etc/azazel-gadget/portal-viewer.env
 EnvironmentFile=-/etc/azazel-zero/portal-viewer.env
 Environment="PORTAL_RUNTIME_DIR=/run/azazel-portal-viewer"
 RuntimeDirectory=azazel-portal-viewer

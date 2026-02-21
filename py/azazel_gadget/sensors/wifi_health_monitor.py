@@ -18,20 +18,26 @@ import time
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
+PY_ROOT = Path(__file__).resolve().parents[2]
+if str(PY_ROOT) not in sys.path:
+    sys.path.insert(0, str(PY_ROOT))
+
+from azazel_gadget.path_schema import runtime_dir_candidates
+
 
 def _fallback_dir() -> Path:
     """Get fallback directory for health state files"""
     here = Path(__file__).resolve().parents[3]  # repo root
-    fb = here / ".azazel-zero" / "run"
+    fb = here / ".azazel-gadget" / "run"
     fb.mkdir(parents=True, exist_ok=True)
     return fb
 
 
 def health_paths() -> Tuple[Path, Path]:
-    """Return (summary_path, legacy_pid_path) with /run preferred and fallback under repo/.azazel-zero/run."""
-    run_dir = Path("/run/azazel-zero")
-    if run_dir.exists() and os.access(run_dir, os.W_OK):
-        return run_dir / "wifi_health.json", run_dir / "wifi_health.pid"
+    """Return (summary_path, pid_path) with schema-aware /run preferred."""
+    for run_dir in runtime_dir_candidates():
+        if run_dir.exists() and os.access(run_dir, os.W_OK):
+            return run_dir / "wifi_health.json", run_dir / "wifi_health.pid"
     fb = _fallback_dir()
     return fb / "wifi_health.json", fb / "wifi_health.pid"
 
