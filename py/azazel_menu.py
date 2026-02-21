@@ -8,15 +8,24 @@ Azazel-Zero - Minimal curses menu launcher
 """
 
 import curses
+import argparse
+import asyncio
 import os
 import shutil
 import subprocess
 import sys
 import time
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Any
 
 # ===== Network status helpers and header renderer =====
 import shlex
+try:
+    from textual.app import App, ComposeResult
+    from textual.binding import Binding
+    from textual.widgets import Footer, Header, Static
+    TEXTUAL_AVAILABLE = True
+except Exception:
+    TEXTUAL_AVAILABLE = False
 
 def _sh(cmd: str) -> str:
     try:
@@ -192,6 +201,114 @@ MENU = [
 ]
 
 
+class AzazelMenuTextualApp(App):
+    """Textual menu UI with key behavior aligned to the curses menu."""
+
+    BINDINGS = [
+        Binding("up", "move_up", "Up"),
+        Binding("down", "move_down", "Down"),
+        Binding("k", "move_up", "Up"),
+        Binding("j", "move_down", "Down"),
+        Binding("enter", "select", "Run"),
+        Binding("r", "refresh_status", "Refresh"),
+        Binding("q", "quit_menu", "Quit"),
+        Binding("escape", "quit_menu", "Quit"),
+        Binding("d", "detach", "Detach"),
+        Binding("ctrl+q", "detach", "Detach"),
+    ]
+
+    CSS = """
+    Screen {
+        layout: vertical;
+    }
+
+    #status {
+        border: round cyan;
+        height: 6;
+        padding: 0 1;
+    }
+
+    #menu {
+        border: round $accent;
+        height: 1fr;
+        padding: 0 1;
+    }
+
+    #message {
+        height: 1;
+        color: black;
+        background: $accent;
+        content-align: left middle;
+        padding: 0 1;
+    }
+    """
+
+    def __init__(self, idx: int = 0, message: str = "") -> None:
+        super().__init__()
+        self._idx = max(0, min(idx, len(MENU) - 1))
+        self._message = message or "Ready"
+        self._net_status: dict[str, Any] = {}
+
+    def compose(self) -> ComposeResult:
+        yield Header(show_clock=True)
+        yield Static("Loading status...", id="status")
+        yield Static("Loading menu...", id="menu")
+        yield Static(self._message, id="message")
+        yield Footer()
+
+    async def on_mount(self) -> None:
+        await self.action_refresh_status()
+
+    def _render_status(self) -> None:
+        ns = self._net_status or {}
+        status_line = (
+            f"SSID={ns.get('ssid', '—')}  BSSID={ns.get('bssid', '—')}  RSSI={ns.get('rssi_dbm', '—')} dBm\n"
+            f"wlan0={ns.get('wlan_ip', '—')}  usb0={ns.get('usb_ip', '—')}  laptop={ns.get('laptop_ip', '—')}\n"
+            f"gw_if={ns.get('gw_if', '—')}  net_ok={ns.get('net_ok', False)}  captive={ns.get('captive', None)}"
+        )
+        self.query_one("#status", Static).update(status_line)
+
+    def _render_menu(self) -> None:
+        lines = ["Azazel-Zero Console", ""]
+        for i, (label, cmd) in enumerate(MENU):
+            marker = ">" if i == self._idx else " "
+            enabled = _exists(cmd) if cmd else True
+            line = f"{marker} {label}"
+            if not enabled and cmd is not None:
+                line += "  [missing]"
+            lines.append(line)
+        self.query_one("#menu", Static).update("\n".join(lines))
+
+    def _render(self) -> None:
+        self._render_status()
+        self._render_menu()
+        self.query_one("#message", Static).update(self._message)
+
+    async def action_refresh_status(self) -> None:
+        self._message = "Refreshing status..."
+        self._render()
+        self._net_status = await asyncio.to_thread(get_net_status)
+        self._message = "Status updated"
+        self._render()
+
+    def action_move_up(self) -> None:
+        self._idx = (self._idx - 1) % len(MENU)
+        self._render_menu()
+
+    def action_move_down(self) -> None:
+        self._idx = (self._idx + 1) % len(MENU)
+        self._render_menu()
+
+    def action_select(self) -> None:
+        self.exit(("run", self._idx))
+
+    def action_quit_menu(self) -> None:
+        self.exit(("quit", self._idx))
+
+    def action_detach(self) -> None:
+        self.exit(("detach", self._idx))
+
+
 def _exists(cmd: List[str]) -> bool:
     if cmd is None:
         return False
@@ -319,8 +436,64 @@ def _message(stdscr, msg: str, timeout_ms: int = 1200) -> None:
     curses.napms(timeout_ms)
 
 
-if __name__ == "__main__":
+def _run_menu_textual() -> None:
+    if not TEXTUAL_AVAILABLE:
+        print("[menu] Textual is not available. Install python3-textual.", file=sys.stderr)
+        sys.exit(1)
+
+    idx = 0
+    message = "Ready"
+
+    # Optional grace to avoid overriding EPD boot animation (seconds)
     try:
-        curses.wrapper(_run_menu)
-    except KeyboardInterrupt:
+        grace = float(os.getenv("BOOT_EPD_GRACE", "0"))
+        if grace > 0:
+            time.sleep(grace)
+    except Exception:
         pass
+
+    _update_epaper()
+
+    while True:
+        result = AzazelMenuTextualApp(idx=idx, message=message).run()
+        if not result:
+            break
+        action, idx = result
+
+        if action == "quit":
+            break
+        if action == "detach":
+            if "TMUX" in os.environ:
+                try:
+                    subprocess.call(["tmux", "detach-client"])
+                except Exception:
+                    pass
+            break
+        if action != "run":
+            continue
+
+        label, cmd = MENU[idx]
+        if cmd is None:
+            break
+        # In Textual menu mode, launch the Textual Wi-Fi selector as well.
+        if idx == 0 and cmd == SSID_TOOL:
+            cmd = cmd + ["--textual"]
+        if not _exists(cmd):
+            message = f"Command not found: {cmd[-1]}"
+            continue
+        code = _safe_run(cmd)
+        message = f"Exited '{label}' (code {code})"
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Azazel-Zero menu launcher")
+    parser.add_argument("--textual", action="store_true", help="Run Textual UI instead of curses")
+    args = parser.parse_args()
+
+    if args.textual:
+        _run_menu_textual()
+    else:
+        try:
+            curses.wrapper(_run_menu)
+        except KeyboardInterrupt:
+            pass
