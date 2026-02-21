@@ -4,7 +4,7 @@
 Azazel-Gadget menu compatibility launcher.
 
 The control menu is now integrated in the unified monitor:
-  python3 py/azazel_zero/cli_unified.py --textual --menu
+  python3 py/azazel_zero/cli_unified.py --menu
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ def main() -> int:
 
     here = Path(__file__).resolve().parent
     monitor = here / "azazel_zero" / "cli_unified.py"
-    cmd = [sys.executable, str(monitor), "--textual", "--menu"]
+    cmd = [sys.executable, str(monitor), "--menu"]
     if args.enable_epd:
         cmd.append("--enable-epd")
     if args.disable_epd:

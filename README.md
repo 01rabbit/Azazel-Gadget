@@ -82,11 +82,12 @@ Heavyweight ML remains a future research theme; the current deterministic stack 
 - **TUI (terminal UI)**  
   - `py/azazel_zero/cli_unified.py` is the unified monitoring TUI showing Wi-Fi state, threat level, channel congestion, control rules in real time.
   - Colorful icons and color-coding for intuitive situational awareness.
-  - Textual mode is the primary operator UI (`--textual`).
+  - Textual mode is the primary operator UI (default with no UI flag).
+  - Use `--curses` only when fallback is needed.
   - Open the integrated control menu with `[M]` (execute actions from the monitor screen).
   
 - **tmux console**  
-  - `py/azazel_menu.py` is now a compatibility launcher to the integrated monitor menu (`cli_unified.py --textual --menu`).  
+  - `py/azazel_menu.py` is now a compatibility launcher to the integrated monitor menu (`cli_unified.py --menu`).  
   - `py/azazel_status.py` is a telemetry panel showing SSID/BSSID, USB gadget IP, RSSI, captive-portal indicators, etc.
   - Textual mode:
     - `python3 py/azazel_menu.py` (compat launcher)
@@ -137,7 +138,7 @@ suppress_auto_wifi: true
 sudo python3 py/azazel_zero/cli_unified.py
 ```
 
-Textual mode:
+Legacy explicit Textual flag (still supported for compatibility):
 
 ```bash
 sudo python3 py/azazel_zero/cli_unified.py --textual
@@ -146,13 +147,19 @@ sudo python3 py/azazel_zero/cli_unified.py --textual
 Menu-first launch (opens control menu immediately):
 
 ```bash
-sudo python3 py/azazel_zero/cli_unified.py --textual --menu
+sudo python3 py/azazel_zero/cli_unified.py --menu
 ```
 
 EPD is enabled by default. Disable only when needed:
 
 ```bash
-sudo python3 py/azazel_zero/cli_unified.py --textual --disable-epd
+sudo python3 py/azazel_zero/cli_unified.py --disable-epd
+```
+
+Curses fallback:
+
+```bash
+sudo python3 py/azazel_zero/cli_unified.py --curses
 ```
 
 ### Layout

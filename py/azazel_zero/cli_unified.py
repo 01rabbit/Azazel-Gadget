@@ -1505,7 +1505,9 @@ def main():
     parser = argparse.ArgumentParser(description="Azazel-Gadget manual-refresh TUI")
     parser.add_argument("--ascii", action="store_true", help="Force ASCII fallback")
     parser.add_argument("--unicode", action="store_true", help="Force Unicode box/icons")
-    parser.add_argument("--textual", action="store_true", help="Run Textual UI instead of curses")
+    ui_group = parser.add_mutually_exclusive_group()
+    ui_group.add_argument("--textual", action="store_true", help="Run Textual UI (default)")
+    ui_group.add_argument("--curses", action="store_true", help="Run legacy curses UI")
     parser.add_argument("--menu", action="store_true", help="Open control menu on startup (Textual mode)")
     parser.add_argument("--enable-epd", action="store_true", help="Enable E-Paper display updates")
     parser.add_argument("--disable-epd", action="store_true", help="Disable E-Paper display updates")
@@ -1518,25 +1520,38 @@ def main():
     if args.enable_epd:
         enable_epd = True
 
-    if args.textual:
+    use_textual = not args.curses
+
+    if use_textual:
+        run_textual = None
         try:
             from .cli_unified_textual import run_textual
         except Exception:
             try:
                 from cli_unified_textual import run_textual
             except Exception as exc:
-                print(f"[TUI] Textual mode unavailable: {exc}", file=sys.stderr)
-                sys.exit(1)
-        run_textual(
-            load_snapshot_fn=load_snapshot,
-            send_command_fn=send_command,
-            update_epd_fn=update_epd,
-            epd_fingerprint_fn=_epd_fingerprint,
-            unicode_mode=unicode_mode,
-            enable_epd=enable_epd,
-            start_menu=args.menu,
-        )
-        return
+                if args.textual:
+                    print(f"[TUI] Textual mode unavailable: {exc}", file=sys.stderr)
+                    sys.exit(1)
+                print(
+                    f"[TUI] Textual unavailable ({exc}); falling back to curses. "
+                    "Use --curses to select it explicitly.",
+                    file=sys.stderr,
+                )
+        if run_textual is not None:
+            run_textual(
+                load_snapshot_fn=load_snapshot,
+                send_command_fn=send_command,
+                update_epd_fn=update_epd,
+                epd_fingerprint_fn=_epd_fingerprint,
+                unicode_mode=unicode_mode,
+                enable_epd=enable_epd,
+                start_menu=args.menu,
+            )
+            return
+
+    if args.menu:
+        print("[TUI] --menu is Textual-only and is ignored in curses mode.", file=sys.stderr)
 
     snap = load_snapshot()
     
