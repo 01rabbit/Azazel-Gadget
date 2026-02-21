@@ -317,7 +317,7 @@ sudo python3 py/azazel_zero/cli_unified.py --curses
   - `/boot/config.txt` に `dtoverlay=dwc2` を追記
   - `/boot/cmdline.txt` に `modules-load=dwc2,g_ether` を追記
   - 再起動後、`usb0` が使用可能
-- リポジトリを `/home/azazel/Azazel-Zero` に展開
+- リポジトリを `/home/azazel/Azazel-Gadget` に展開
 
 ### クイックスタート（推奨）
 

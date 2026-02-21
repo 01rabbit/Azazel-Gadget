@@ -407,7 +407,7 @@ init_installer() {
     check_os
     
     echo "═══════════════════════════════════════════════════════════"
-    echo "Azazel-Zero Unified Installer"
+    echo "Azazel-Gadget Unified Installer"
     echo "Start: $(date)"
     echo "Log: $LOG_FILE"
     echo "═══════════════════════════════════════════════════════════"

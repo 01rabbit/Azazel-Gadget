@@ -329,7 +329,7 @@ main() {
     if [[ "$all_passed" == "true" ]]; then
         log_info "✓✓✓ INSTALLATION SUCCESSFUL ✓✓✓"
         log_info ""
-        log_info "Azazel-Zero のインストールが完了しました！"
+        log_info "Azazel-Gadget のインストールが完了しました！"
         log_info ""
         log_info "【次のステップ】"
         log_info ""

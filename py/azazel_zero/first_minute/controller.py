@@ -2216,7 +2216,7 @@ class FirstMinuteController:
         tags = link_meta.get("wifi_tags", []) if link_meta else []
         out = []
         out.append("\033[2J\033[H")  # clear screen
-        out.append("Azazel-Zero First-Minute Control")
+        out.append("Azazel-Gadget First-Minute Control")
         out.append(f"State: {state.value:8}  Suspicion: {summary.get('suspicion', 0):5} [{bar}]")
         out.append(f"Reason: {summary.get('reason','')}")
         out.append(f"Wi-Fi: ssid={ssid} bssid={bssid}")

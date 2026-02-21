@@ -284,7 +284,7 @@ sudo journalctl -u azazel-first-minute -f | grep -i "ntfy\|notif"
 
 ```bash
 # ユニットテスト（10 test cases）
-cd /home/azazel/Azazel-Zero
+cd /home/azazel/Azazel-Gadget
 python3 test_ntfy_notifier.py
 
 # すべてのテストが `OK` で終了することを確認
@@ -319,5 +319,5 @@ python3 test_ntfy_notifier.py
 ## 参考資料
 
 - **ntfy.sh 公式**: https://ntfy.sh
-- **Azazel-Zero**: https://github.com/01rabbit/Azazel-Zero
+- **Azazel-Gadget**: https://github.com/01rabbit/Azazel-Zero
 - **Issue**: ntfy 通知基盤の実装

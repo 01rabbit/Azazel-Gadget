@@ -1,10 +1,10 @@
-# Azazel-Zero 起動スプラッシュ
+# Azazel-Gadget 起動スプラッシュ
 
 [English](/docs/Boot_E-Paper_Splash.md) | [日本語](/docs/Boot_E-Paper_Splash_ja.md)
 
 ## 概要
 
-Azazel-Zeroでは、起動時に無線LANのSSIDとIPアドレスを電子ペーパー（E-Paper）ディスプレイに表示することで、ネットワークの状態を一目で確認できる「起動スプラッシュ」機能を提供します。この機能はRaspberry Pi上で動作し、物理的な操作なしにアクセス情報を素早く把握できるよう設計されています。
+Azazel-Gadgetでは、起動時に無線LANのSSIDとIPアドレスを電子ペーパー（E-Paper）ディスプレイに表示することで、ネットワークの状態を一目で確認できる「起動スプラッシュ」機能を提供します。この機能はRaspberry Pi上で動作し、物理的な操作なしにアクセス情報を素早く把握できるよう設計されています。
 
 ## 必要な依存関係
 
@@ -136,7 +136,7 @@ python3 boot_splash_epd.py
 
 ```ini
 [Unit]
-Description=Azazel-Zero E-Paper Display Service
+Description=Azazel-Gadget E-Paper Display Service
 After=network-online.target
 Wants=network-online.target
 

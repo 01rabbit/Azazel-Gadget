@@ -2,7 +2,7 @@
 
 ## Overview
 
-Azazel-Zero can expose a browser running on Raspberry Pi as a noVNC screen.
+Azazel-Gadget can expose a browser running on Raspberry Pi as a noVNC screen.
 This lets a downstream laptop/smartphone operate upstream captive portal pages.
 
 - Browser on Pi: Chromium (virtual X display)
@@ -12,7 +12,7 @@ This lets a downstream laptop/smartphone operate upstream captive portal pages.
 ## Install
 
 ```bash
-cd /home/azazel/Azazel-Zero
+cd /home/azazel/Azazel-Gadget
 sudo ./install.sh --with-portal-viewer
 ```
 

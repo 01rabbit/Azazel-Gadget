@@ -1,10 +1,10 @@
-# Azazel-Zero Boot Splash
+# Azazel-Gadget Boot Splash
 
 [English](/docs/Boot_E-Paper_Splash.md) | [日本語](/docs/Boot_E-Paper_Splash_ja.md)
 
 ## Overview
 
-Azazel-Zero provides a "boot splash" feature that displays the wireless LAN SSID and IP address on an electronic paper (E-Paper) display at startup, allowing you to easily check the network status at a glance. This feature runs on a Raspberry Pi and is designed to quickly grasp access information without any physical operation.
+Azazel-Gadget provides a "boot splash" feature that displays the wireless LAN SSID and IP address on an electronic paper (E-Paper) display at startup, allowing you to easily check the network status at a glance. This feature runs on a Raspberry Pi and is designed to quickly grasp access information without any physical operation.
 
 ## Required Dependencies
 
@@ -136,7 +136,7 @@ To run automatically at startup, register as a systemd service.
 
 ```ini
 [Unit]
-Description=Azazel-Zero E-Paper Display Service
+Description=Azazel-Gadget E-Paper Display Service
 After=network-online.target
 Wants=network-online.target
 

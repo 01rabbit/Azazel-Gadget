@@ -1,7 +1,7 @@
-# Azazel-Zero Web UI
+# Azazel-Gadget Web UI
 
 ## 概要
-Azazel-Zero の Web UI ダッシュボードです。リアルタイムでシステムの状態、疑わしさスコア、ネットワーク情報、検知シグナルを可視化します。
+Azazel-Gadget の Web UI ダッシュボードです。リアルタイムでシステムの状態、疑わしさスコア、ネットワーク情報、検知シグナルを可視化します。
 
 **リモートアクセス対応**：ラップトップやスマートフォンから Wi-Fi 経由でリモート監視可能。
 
@@ -25,7 +25,7 @@ Azazel-Zero の Web UI ダッシュボードです。リアルタイムでシス
 ## アクセス方法
 
 ### 1. 通常運用時（複数の方法）
-Azazel-Zero が稼働している場合、以下の URL でアクセス可能：
+Azazel-Gadget が稼働している場合、以下の URL でアクセス可能：
 
 #### ローカル（Raspberry Pi 直接接続）
 ```
@@ -49,7 +49,7 @@ http://<Raspberry Pi の Wi-Fi IP>:8083/
 開発・デバッグ用のテストサーバーを起動：
 
 ```bash
-cd /home/azazel/Azazel-Zero
+cd /home/azazel/Azazel-Gadget
 PYTHONPATH=/home/azazel/Azazel-Zero/py python3 test_web_ui.py
 ```
 
@@ -289,7 +289,7 @@ class WebAPIHandler(BaseHTTPRequestHandler):
 
 ## スクリーンショット説明
 
-- **ヘッダー**: Azazel-Zero ロゴと「身代わり結界セキュリティゲートウェイ」
+- **ヘッダー**: Azazel-Gadget ロゴと「身代わり結界セキュリティゲートウェイ」
 - **カード1**: 現在のステージ、疑わしさスコア（プログレスバー）、理由、稼働時間
 - **カード2**: ネットワーク情報（SSID、BSSID、信号強度、インターフェース）
 - **カード3**: トラフィック整形状態（遅延、帯域制限）
@@ -298,4 +298,4 @@ class WebAPIHandler(BaseHTTPRequestHandler):
 - **カード6**: ステージ遷移履歴（時系列リスト）
 
 ## ライセンス
-Azazel-Zero プロジェクトと同一ライセンス
+Azazel-Gadget プロジェクトと同一ライセンス

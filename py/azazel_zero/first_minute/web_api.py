@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Azazel-Zero Web UI API Server
+Azazel-Gadget Web UI API Server
 リアルタイムダッシュボード用の HTTP API エンドポイント
 """
 
@@ -150,7 +150,7 @@ class WebAPIHandler(BaseHTTPRequestHandler):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Azazel-Zero Web UI</title>
+    <title>Azazel-Gadget Web UI</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -282,7 +282,7 @@ class WebAPIHandler(BaseHTTPRequestHandler):
 <body>
     <div class="container">
         <header>
-            <h1>🛡️ Azazel-Zero Dashboard</h1>
+            <h1>🛡️ Azazel-Gadget Dashboard</h1>
             <div class="subtitle">身代わり結界セキュリティゲートウェイ</div>
         </header>
         
@@ -439,7 +439,7 @@ class WebAPIHandler(BaseHTTPRequestHandler):
         </div>
         
         <div class="footer">
-            <p>Azazel-Zero v1.0 | 最終更新: <span id="lastUpdate">-</span></p>
+            <p>Azazel-Gadget v1.0 | 最終更新: <span id="lastUpdate">-</span></p>
         </div>
     </div>
     

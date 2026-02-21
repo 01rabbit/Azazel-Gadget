@@ -1,5 +1,5 @@
 """
-ntfy (self-hosted push notification) client for Azazel-Zero.
+ntfy (self-hosted push notification) client for Azazel-Gadget.
 
 Provides simple HTTP-based notification for state transitions and critical signals.
 Deduplication prevents notification spam via cooldown windows per event key.

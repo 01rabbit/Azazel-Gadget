@@ -1,15 +1,15 @@
-# Azazel-Zero Web UI Installation Guide
+# Azazel-Gadget Web UI Installation Guide
 
 ## 概要
 
-このガイドは、Azazel-Zero の Web UI を新しい Raspberry Pi Zero 2 W にインストールする手順を説明します。
+このガイドは、Azazel-Gadget の Web UI を新しい Raspberry Pi Zero 2 W にインストールする手順を説明します。
 
 ## 前提条件
 
 - Raspberry Pi Zero 2 W
 - Raspberry Pi OS Lite (64-bit) インストール済み
 - USB ガジェットモード設定済み（`dtoverlay=dwc2` および `modules-load=dwc2,g_ether`）
-- Azazel-Zero コアシステムのインストール済み
+- Azazel-Gadget コアシステムのインストール済み
 
 ## インストール方法
 
@@ -31,7 +31,7 @@ sudo ./install.sh --with-webui
 
 ### オプション 2: Web UI のみ追加
 
-既存の Azazel-Zero システムに Web UI のみを追加する場合は、再度 `./install.sh` を実行してください：
+既存の Azazel-Gadget システムに Web UI のみを追加する場合は、再度 `./install.sh` を実行してください：
 
 ```bash
 cd ~/Azazel-Zero
@@ -305,7 +305,7 @@ sudo systemctl restart caddy
 ## 参考資料
 
 - [Web UI アーキテクチャ](../docs/WEB_UI.md)
-- [Azazel-Zero セットアップガイド](../docs/setup-zero.md)
+- [Azazel-Gadget セットアップガイド](../docs/setup-zero.md)
 - [README](../README.md)
 
 ## 更新履歴

@@ -1,7 +1,7 @@
 # NetworkManager への移行ガイド
 
 ## 概要
-Azazel-Zero は Wi-Fi 制御を **wpa_supplicant から NetworkManager に完全移行**しました。
+Azazel-Gadget は Wi-Fi 制御を **wpa_supplicant から NetworkManager に完全移行**しました。
 
 ## 変更内容
 
@@ -88,7 +88,7 @@ sudo apt-get remove wpasupplicant
    sudo nmcli dev wifi connect "SSID" password "PASSWORD"
    ```
 
-5. **Azazel-Zero サービスの再起動**
+5. **Azazel-Gadget サービスの再起動**
    ```bash
    sudo systemctl restart azazel-control-daemon
    sudo systemctl restart azazel-first-minute
@@ -186,7 +186,7 @@ from wifi_connect import (
 
 - [NetworkManager 公式ドキュメント](https://networkmanager.dev/)
 - [nmcli マニュアル](https://networkmanager.dev/docs/api/latest/nmcli.html)
-- [Azazel-Zero プロジェクトガイド](../.github/copilot-instructions.md)
+- [Azazel-Gadget プロジェクトガイド](../.github/copilot-instructions.md)
 
 ---
 

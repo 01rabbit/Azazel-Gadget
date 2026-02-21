@@ -1,6 +1,6 @@
-# Azazel-Zero DHCP/DNS トラブルシューティングガイド
+# Azazel-Gadget DHCP/DNS トラブルシューティングガイド
 
-**問題**: ラップトップがAzazel-ZeroのusB経由のネットワーク接続を確立できず、DHCPでIPアドレスを取得できない。
+**問題**: ラップトップがAzazel-GadgetのusB経由のネットワーク接続を確立できず、DHCPでIPアドレスを取得できない。
 
 ## 原因分析
 

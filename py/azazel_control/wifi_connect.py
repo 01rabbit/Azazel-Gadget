@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Wi-Fi Connect Module for Azazel-Zero Control Daemon
+Wi-Fi Connect Module for Azazel-Gadget Control Daemon
 
 Connects to target SSID and enables USB client NAT:
 - Uses NetworkManager/nmcli for Wi-Fi management

@@ -1,5 +1,5 @@
 """
-Tactics Engine - Azazel-Zero 意思決定の形式化・監査化・再現化
+Tactics Engine - Azazel-Gadget 意思決定の形式化・監査化・再現化
 完成形B：同一入力→同一決定が再現でき、根拠が機械可読に永続化される
 """
 

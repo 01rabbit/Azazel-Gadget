@@ -59,7 +59,7 @@ sudo ./install.sh --all
 
 ### なぜプロファイルシステムは廃止か
 
-Azazel-Zero のインフラは **完全に固定** です：
+Azazel-Gadget のインフラは **完全に固定** です：
 - IP アドレス：10.55.0.10（ハードコード）
 - インターフェース：usb0（ダウンストリーム）、wlan0（アップストリーム）
 - ホスト名：raspberrypi（Raspberry Pi OS デフォルト）
@@ -148,7 +148,7 @@ tar czf ~/old_profiles.tar.gz installer/profiles/
 - インフラ監査・ドキュメント化
 - API 統合自動化
 
-ただし Azazel-Zero では固定インフラなため不要。
+ただし Azazel-Gadget では固定インフラなため不要。
 
 ---
 

@@ -118,7 +118,7 @@ $ sudo ./install.sh [OPTIONS]
 
 ```bash
 #!/bin/bash
-# install.sh - Azazel-Zero Unified Installer
+# install.sh - Azazel-Gadget Unified Installer
 # 
 # 使用法:
 #   sudo ./install.sh                              # 標準インストール
@@ -331,7 +331,7 @@ installer/defaults/
 - `installer/validate.sh`: スナップショット検証ツールとして単体保持
 
 ### 棄却根拠
-- Azazel-Zero は固定インフラ（IP, IF 固定）
+- Azazel-Gadget は固定インフラ（IP, IF 固定）
 - プロファイル は複数マシン適用ユースケース向け（本プロジェクトに不要）
 - スナップショット採取も本番運用では不要（基本テンプレートで事足りる）
 

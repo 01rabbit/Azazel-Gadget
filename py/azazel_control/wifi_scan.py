@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Wi-Fi Scan Module for Azazel-Zero Control Daemon
+Wi-Fi Scan Module for Azazel-Gadget Control Daemon
 
 Performs Wi-Fi AP scan using NetworkManager/nmcli:
 - Returns deduplicated AP list (strongest per SSID)

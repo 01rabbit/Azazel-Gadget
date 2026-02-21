@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Azazel-Zero: tmux top-pane status renderer
+Azazel-Gadget: tmux top-pane status renderer
 - Prints concise network and service status, refreshing periodically
 - Designed to run in a plain terminal (no curses) so it can live in its own tmux pane
 - Exit with Ctrl-C (SIGINT)
@@ -166,7 +166,7 @@ def _print_status():
     emoji = _supports_emoji()
 
     ap = '📶 AP' if emoji else '[AP]'
-    aza = '🜲 Azazel-Zero' if emoji else '[Azazel-Zero]'
+    aza = '🜲 Azazel-Gadget' if emoji else '[Azazel-Gadget]'
     dhcp = '🧩 DHCP' if emoji else '[DHCP]'
     lap = '💻 Laptop' if emoji else '[Laptop]'
     arw = ' ➜ ' if emoji else ' -> '
@@ -195,7 +195,7 @@ def _print_status():
     health = _health_status()
 
     # Print
-    print(f"==== Azazel-Zero Status  |  {now} ====")
+    print(f"==== Azazel-Gadget Status  |  {now} ====")
     print(line1 + badges)
     print(f"AP(wlan0): {wlan_ip}   |   Pi(usb0): {usb_ip}   |   Laptop: {lap_ip}")
     print(f"GW-IF: {gw_if}    BSSID: {bssid}")

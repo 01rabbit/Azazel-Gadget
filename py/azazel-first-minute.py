@@ -36,7 +36,7 @@ def parse_args() -> argparse.Namespace:
 
     parser = argparse.ArgumentParser(
         parents=[common],
-        description="Azazel-Zero First-Minute Control runner (systemd不要のデバッグ・開発用)。ステージ切替・プローブ・クリーンアップをCLIで操作できます。",
+        description="Azazel-Gadget First-Minute Control runner (systemd不要のデバッグ・開発用)。ステージ切替・プローブ・クリーンアップをCLIで操作できます。",
     )
     sub = parser.add_subparsers(dest="command")
     sub.add_parser("start", parents=[common], add_help=False, help="コントローラ起動")

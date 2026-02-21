@@ -337,4 +337,4 @@ tar -czf /tmp/azazel_regression_artifacts_$(date +%Y%m%d_%H%M).tar.gz /tmp/azaze
 
 ## 📝 ライセンス
 
-Azazel-Zero プロジェクトに準拠
+Azazel-Gadget プロジェクトに準拠

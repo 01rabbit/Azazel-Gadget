@@ -56,7 +56,7 @@ main() {
 
     log_info "環境ファイルを作成..."
     cat > /etc/default/azazel-zero <<EOF
-# Azazel-Zero 統合環境設定
+# Azazel-Gadget 統合環境設定
 # このファイルは systemd サービスから source される
 
 AZAZEL_ROOT=$PROJECT_ROOT
@@ -90,7 +90,7 @@ EOF
     if dpkg-query -W -f='${Status}' zram-tools 2>/dev/null | grep -q "install ok installed"; then
         log_info "zram 設定を作成..."
         cat > /etc/default/zramswap <<'EOF'
-# Azazel-Zero: Pi Zero 2 向け zram 設定
+# Azazel-Gadget: Pi Zero 2 向け zram 設定
 # 低メモリ環境でOOM耐性を上げる
 ALGO=lz4
 PERCENT=50

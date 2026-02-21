@@ -74,7 +74,7 @@ EOF
     log_info "USB ガジェット互換設定を適用..."
     mkdir -p /etc/modprobe.d
     cat > /etc/modprobe.d/g_ether.conf <<'EOF'
-# Azazel-Zero: improve host-side compatibility for USB tethering
+# Azazel-Gadget: improve host-side compatibility for USB tethering
 options g_ether use_eem=0
 EOF
     

@@ -174,7 +174,7 @@ def draw_logo_panel(width, height, title_font, invert=True, subtitle: Optional[s
     logo_h = (height * 2) // 3
     if invert:
         d.rectangle([(0, 0), (width, logo_h)], fill=0)
-    title = "Azazel-Zero"
+    title = "Azazel-Gadget"
     tw, th = d.textsize(title, font=title_font)
     d.text(((width - tw)//2, (logo_h - th)//2), title, font=title_font, fill=(255 if invert else 0))
     if subtitle:
@@ -250,7 +250,7 @@ def draw_info_panel(ssid: str, ip: str, session: Optional[str], width: int, heig
     font_m = pick_font(MONO_FONT_CANDIDATES, 16)
 
     # タイトル帯（反転）
-    t="Azazel-Zero"; tw,th=d.textsize(t,font=font_b); margin=6
+    t="Azazel-Gadget"; tw,th=d.textsize(t,font=font_b); margin=6
     d.rectangle([(0,0),(width,th+margin*2)],fill=0)
     d.text(((width-tw)//2,margin),t,font=font_b,fill=255)
 
@@ -287,7 +287,7 @@ def show_info_panel(epd, bicolor, ssid, ip, session: Optional[str], debug: bool 
 
 # ---------- CLI ----------
 def main():
-    ap = argparse.ArgumentParser(description="Azazel-Zero EPD splash & animations")
+    ap = argparse.ArgumentParser(description="Azazel-Gadget EPD splash & animations")
     ap.add_argument("--mode", choices=["start","info","shutdown"], default="info",
                     help="start: 起動アニメ, info: 情報パネル, shutdown: 終了アニメ")
     ap.add_argument("--steps", type=int, default=int(os.getenv("STEPS", "10")),

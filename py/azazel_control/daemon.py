@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Azazel-Zero Control Daemon
+Azazel-Gadget Control Daemon
 Listens on Unix socket /run/azazel/control.sock and executes actions
 """
 
@@ -489,7 +489,7 @@ def main():
     flags = load_control_flags()
     ensure_socket_dir()
     suppress_auto_wifi(enabled=bool(flags.get("suppress_auto_wifi", True)))
-    logger.info("Azazel-Zero Control Daemon started")
+    logger.info("Azazel-Gadget Control Daemon started")
     
     # Create Unix socket
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)

@@ -1,4 +1,4 @@
-# Azazel-Zero First-Minute Control default configuration
+# Azazel-Gadget First-Minute Control default configuration
 # Copy to /etc/azazel-zero/first_minute.yaml and adjust for your environment.
 
 interfaces:
