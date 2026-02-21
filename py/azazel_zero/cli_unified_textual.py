@@ -7,7 +7,6 @@ cli_unified.py for snapshot loading, command dispatch, and optional EPD updates.
 """
 from __future__ import annotations
 
-import argparse
 import asyncio
 import time
 from typing import Any, Callable, Optional, Tuple
@@ -44,7 +43,7 @@ class AzazelTextualApp(App):
     }
 
     #summary {
-        height: 6;
+        height: 8;
         border: round $accent;
         padding: 0 1;
     }
@@ -71,8 +70,24 @@ class AzazelTextualApp(App):
         padding: 0 1;
     }
 
+    #flow {
+        height: 1;
+        background: $panel;
+        color: $text;
+        content-align: left middle;
+        padding: 0 1;
+    }
+
+    #actions {
+        height: 1;
+        background: $boost;
+        color: $text;
+        content-align: left middle;
+        padding: 0 1;
+    }
+
     #details {
-        height: 7;
+        height: 8;
         border: round magenta;
         padding: 0 1;
         display: none;
@@ -119,6 +134,8 @@ class AzazelTextualApp(App):
             yield Static("Loading connection...", id="connection")
             yield Static("Loading control...", id="control")
         yield Static("Loading evidence...", id="evidence")
+        yield Static("Flow: PROBE -> DEGRADED -> NORMAL -> SAFE", id="flow")
+        yield Static("[U] Refresh  [A] Stage-Open  [R] Re-Probe  [C] Contain  [L] Details  [Q] Quit", id="actions")
         yield Static("Details hidden. Press [L] to toggle.", id="details")
         yield Footer()
 
@@ -158,6 +175,43 @@ class AzazelTextualApp(App):
         )
         self.query_one("#status-line", Static).update(line)
 
+    def _state_label(self, state: str) -> str:
+        labels = {
+            "CHECKING": "CHECKING",
+            "SAFE": "SAFE",
+            "LIMITED": "LIMITED",
+            "CONTAINED": "CONTAINED",
+            "DECEPTION": "DECEPTION",
+        }
+        return labels.get(str(state).upper(), "CHECKING")
+
+    def _state_icon(self, state: str) -> str:
+        state = str(state).upper()
+        if not self._unicode_mode:
+            return {"SAFE": "OK", "LIMITED": "!", "CONTAINED": "X", "DECEPTION": "D"}.get(state, "~")
+        return {
+            "SAFE": "✅",
+            "LIMITED": "⚠️",
+            "CONTAINED": "⛔",
+            "DECEPTION": "👁",
+        }.get(state, "⟳")
+
+    def _threat_bar(self, level: int) -> str:
+        level = max(0, min(int(level), 5))
+        if self._unicode_mode:
+            return "".join("🔴" if i < level else "⚪" for i in range(5))
+        return "".join("X" if i < level else "." for i in range(5))
+
+    def _severity_prefix(self, line: str) -> str:
+        lowered = line.lower()
+        if any(x in lowered for x in ("blocked", "error", "fail", "contain", "anomaly", "hijack")):
+            return "🔴" if self._unicode_mode else "X"
+        if any(x in lowered for x in ("warning", "suspect", "portal", "dns", "degrade", "limited")):
+            return "🟡" if self._unicode_mode else "!"
+        if any(x in lowered for x in ("ok", "safe", "normal", "success")):
+            return "🟢" if self._unicode_mode else "O"
+        return "•"
+
     def _render_panels(self) -> None:
         if self._snapshot is None:
             return
@@ -171,19 +225,28 @@ class AzazelTextualApp(App):
         top_blocked = self._safe_get(snap, "top_blocked", []) or []
         evidence = self._safe_get(snap, "evidence", []) or []
 
+        state = self._safe_get(snap, "user_state", "CHECKING")
+        state_icon = self._state_icon(state)
+        state_label = self._state_label(state)
+        threat_level = self._safe_get(snap, "threat_level", 0)
+        threat_bar = self._threat_bar(threat_level)
+        reasons = " / ".join(self._safe_get(snap, "reasons", []) or ["-"])
         summary = (
-            f"Recommendation: {self._safe_get(snap, 'recommendation', '-')}\n"
-            f"Reason: {' / '.join(self._safe_get(snap, 'reasons', []) or ['-'])}\n"
-            f"Threat Level: {self._safe_get(snap, 'threat_level', 0)}  "
+            f"{state_icon} {state_label}   Recommendation: {self._safe_get(snap, 'recommendation', '-')}\n"
+            f"Reason: {reasons}\n"
+            f"Threat: [{threat_bar}] level={threat_level}   "
             f"Risk Score: {self._safe_get(snap, 'risk_score', 0)}/100\n"
+            f"Next: {self._safe_get(snap, 'next_action_hint', '-')}\n"
             f"CPU: {self._safe_get(snap, 'cpu_percent', 0.0)}%  "
             f"Mem: {self._safe_get(snap, 'mem_used_mb', 0)}/{self._safe_get(snap, 'mem_total_mb', 0)}MB "
-            f"({self._safe_get(snap, 'mem_percent', 0)}%)  "
-            f"Temp: {self._safe_get(snap, 'temp_c', 0.0)}C"
+            f"({self._safe_get(snap, 'mem_percent', 0)}%)  Temp: {self._safe_get(snap, 'temp_c', 0.0)}C\n"
+            f"Monitoring: Suricata={monitoring.get('suricata', 'UNKNOWN')}  "
+            f"OpenCanary={monitoring.get('opencanary', 'UNKNOWN')}  ntfy={monitoring.get('ntfy', 'UNKNOWN')}"
         )
         self.query_one("#summary", Static).update(summary)
 
         connection_text = (
+            "Connection\n"
             f"SSID: {self._safe_get(snap, 'ssid', '-')}\n"
             f"BSSID: {self._safe_get(snap, 'bssid', '-')}\n"
             f"Signal: {self._safe_get(snap, 'signal_dbm', '-')} dBm\n"
@@ -199,6 +262,7 @@ class AzazelTextualApp(App):
         self.query_one("#connection", Static).update(connection_text)
 
         control_text = (
+            "Control / Safety\n"
             f"QUIC: {self._safe_get(snap, 'quic', 'unknown')}  "
             f"DoH: {self._safe_get(snap, 'doh', 'unknown')}  "
             f"DNS mode: {self._safe_get(snap, 'dns_mode', 'unknown')}\n"
@@ -216,10 +280,16 @@ class AzazelTextualApp(App):
         self.query_one("#control", Static).update(control_text)
 
         ev_lines = evidence[-12:] if len(evidence) > 12 else evidence
-        evidence_text = "Evidence (last entries)\n" + "\n".join(f"- {line}" for line in ev_lines)
+        evidence_text = "Evidence (last entries)\n" + "\n".join(f"{self._severity_prefix(line)} {line}" for line in ev_lines)
         if not ev_lines:
             evidence_text += "\n- (no evidence)"
         self.query_one("#evidence", Static).update(evidence_text)
+
+        flow_text = (
+            f"Flow: PROBE -> DEGRADED -> NORMAL -> SAFE"
+            f" | state_timeline: {self._safe_get(snap, 'state_timeline', '-')}"
+        )
+        self.query_one("#flow", Static).update(flow_text)
 
         if self._details_open:
             blocked_text = ", ".join(f"{d}({c})" for d, c in top_blocked[:5]) if top_blocked else "-"
@@ -230,7 +300,10 @@ class AzazelTextualApp(App):
                 f"decay={self._safe_get(snap, 'internal', {}).get('decay', '-')}\n"
                 f"state_timeline={self._safe_get(snap, 'state_timeline', '-')}\n"
                 f"top_blocked={blocked_text}\n"
-                f"session_uptime={self._safe_get(snap, 'session_uptime', 0)}s"
+                f"session_uptime={self._safe_get(snap, 'session_uptime', 0)}s\n"
+                f"traffic_total={self._safe_get(snap, 'traffic_total_mb', 0.0)}MB "
+                f"(down={self._safe_get(snap, 'traffic_download_mb', 0.0)}MB "
+                f"up={self._safe_get(snap, 'traffic_upload_mb', 0.0)}MB)"
             )
             self.query_one("#details", Static).update(details_text)
 
@@ -316,9 +389,3 @@ def run_textual(
         enable_epd=enable_epd,
     )
     app.run()
-
-
-def parse_textual_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--textual", action="store_true")
-    return parser.parse_known_args(argv)[0]
