@@ -1,10 +1,10 @@
-# Azazel-Zero
+# Azazel-Gadget
 
 English | [日本語](/README_ja.md)
 
 ## Concept
 
-**Azazel-Zero** is a prototype of a **“Substitute Barrier”** running on Raspberry Pi Zero 2 W.  
+**Azazel-Gadget** is a prototype of a **“Substitute Barrier”** running on Raspberry Pi Zero 2 W.  
 It brings the Azazel System’s **delaying action** into a practical form while returning to the roots of the **Substitute Barrier** and **Barrier Maze**.
 
 ### Compared to Azazel-Pi
@@ -14,7 +14,7 @@ It brings the Azazel System’s **delaying action** into a practical form while 
   - A **concept model** to cheaply protect **small temporary networks**  
   - Heavily experimental for trying multiple technical elements
 
-- **Azazel-Zero**  
+- **Azazel-Gadget**  
   - A **trimmed, lightweight edition** with narrowed scope, designed for real operation  
   - A physical barrier focused on portability and practicality  
   - Unlike the concept-model Azazel-Pi, this is a **deployable, practical model**
@@ -82,14 +82,14 @@ Heavyweight ML remains a future research theme; the current deterministic stack 
 - **TUI (terminal UI)**  
   - `py/azazel_zero/cli_unified.py` is the unified monitoring TUI showing Wi-Fi state, threat level, channel congestion, control rules in real time.
   - Colorful icons and color-coding for intuitive situational awareness.
-  - Manual refresh mode ([U] key).
-  - Textual mode is also available with `--textual` (keeps the same action keys).
+  - Textual mode is the primary operator UI (`--textual`).
+  - Open the integrated control menu with `[M]` (execute actions from the monitor screen).
   
 - **tmux console**  
-  - `py/azazel_menu.py` is a curses menu for Wi-Fi selection, OpenCanary start/stop/log tail, and E-Paper test actions.  
+  - `py/azazel_menu.py` is now a compatibility launcher to the integrated monitor menu (`cli_unified.py --textual --menu`).  
   - `py/azazel_status.py` is a telemetry panel showing SSID/BSSID, USB gadget IP, RSSI, captive-portal indicators, etc.
   - Textual mode:
-    - `python3 py/azazel_menu.py --textual`
+    - `python3 py/azazel_menu.py` (compat launcher)
     - `python3 py/ssid_list.py --textual [iface]`
 
 ---
@@ -143,15 +143,23 @@ Textual mode:
 sudo python3 py/azazel_zero/cli_unified.py --textual
 ```
 
-Note:
-- In Textual mode, EPD updates are disabled by default for stability.
-- Enable them explicitly only when needed: `--enable-epd`
+Menu-first launch (opens control menu immediately):
+
+```bash
+sudo python3 py/azazel_zero/cli_unified.py --textual --menu
+```
+
+EPD is enabled by default. Disable only when needed:
+
+```bash
+sudo python3 py/azazel_zero/cli_unified.py --textual --disable-epd
+```
 
 ### Layout
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Azazel-Zero | 📶 SSID: MyWiFi | ⬇️ usb0 | ⬆️ wlan0 | 🕐 12:34:56 │  ← Status bar
+│ Azazel-Gadget | 📶 SSID: MyWiFi | ⬇️ usb0 | ⬆️ wlan0 | 🕐 12:34:56 │  ← Status bar
 │ View: SNAPSHOT (manual)  Age: 🟢 00:00:15                   │  ← Data freshness
 ├─────────────────────────────────────────────────────────────┤
 │ ✅ SAFE        Recommendation: keep as-is                   │  ← State badge (inverted)
@@ -173,7 +181,7 @@ Note:
 │ ↳ decision: state=NORMAL suspicion=5 decay=0.9             │
 ├─────────────────────────────────────────────────────────────┤
 │ Flow: PROBE → DEGRADED → NORMAL → ✅ SAFE                   │
-│ [U] Refresh  [A] Stage-Open  [R] Re-Probe  [C] Contain  [L] Details  [Q] Quit │
+│ [U] Refresh  [A] Stage-Open  [R] Re-Probe  [C] Contain  [L] Details  [M] Menu  [Q] Quit │
 │ Hint: This screen does not auto-refresh. Press [U] when needed.             │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -365,7 +373,7 @@ sudo ./install.sh --dry-run
 
 ### ntfy Channels in Operation
 
-When `--with-ntfy` is enabled, Azazel-Zero uses these two ntfy topics for runtime notifications:
+When `--with-ntfy` is enabled, Azazel-Gadget uses these two ntfy topics for runtime notifications:
 
 - `azg-alert-critical` (critical alerts)
 - `azg-info-status` (status/info updates)
