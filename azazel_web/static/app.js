@@ -416,7 +416,7 @@ async function executeAction(action) {
 }
 
 async function executeShutdown() {
-    const firstConfirm = window.confirm('⚠️ This will shut down Azazel-Zero now. Continue?');
+    const firstConfirm = window.confirm('⚠️ This will shut down Azazel-Gadget now. Continue?');
     if (!firstConfirm) return;
 
     const typed = window.prompt('Type SHUTDOWN to confirm power off');
@@ -429,7 +429,7 @@ async function executeShutdown() {
 }
 
 async function executeReboot() {
-    const firstConfirm = window.confirm('⚠️ This will reboot Azazel-Zero now. Continue?');
+    const firstConfirm = window.confirm('⚠️ This will reboot Azazel-Gadget now. Continue?');
     if (!firstConfirm) return;
 
     const typed = window.prompt('Type REBOOT to confirm restart');

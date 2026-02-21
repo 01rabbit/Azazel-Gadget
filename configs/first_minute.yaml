@@ -1,5 +1,5 @@
-# Azazel-Zero First-Minute Control default configuration
-# Copy to /etc/azazel-zero/first_minute.yaml and adjust for your environment.
+# Azazel-Gadget First-Minute Control default configuration
+# Copy to /etc/azazel-gadget/first_minute.yaml and adjust for your environment.
 
 interfaces:
   upstream: auto            # Auto-select uplink (prefer Wi-Fi when available)
@@ -12,13 +12,13 @@ captive_probe_policy: wifi_prefer  # wifi_prefer | upstream_same | any
 suppress_auto_wifi: true           # 起動時にdaemonがWi-Fi自動接続を抑止
 
 paths:
-  runtime_dir: /run/azazel-zero
-  log_dir: /var/log/azazel-zero
+  runtime_dir: /run/azazel-gadget
+  log_dir: /var/log/azazel-gadget
   dns_log: /var/log/azazel-dnsmasq.log
-  nft_template: /etc/azazel-zero/nftables/first_minute.nft
-  dnsmasq_conf: /etc/azazel-zero/dnsmasq-first_minute.conf
-  known_db: /etc/azazel-zero/known_wifi.json
-  pid_file: /run/azazel-zero/first_minute.pid
+  nft_template: /etc/azazel-gadget/nftables/first_minute.nft
+  dnsmasq_conf: /etc/azazel-gadget/dnsmasq-first_minute.conf
+  known_db: /etc/azazel-gadget/known_wifi.json
+  pid_file: /run/azazel-gadget/first_minute.pid
 
 dnsmasq:
   enable: true

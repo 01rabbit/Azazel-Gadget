@@ -312,6 +312,8 @@ main() {
     log_info "【7】設定ファイル確認:"
     
     local config_files=(
+        "/etc/azazel-gadget/first_minute.yaml"
+        "/etc/azazel-gadget/dnsmasq-first_minute.conf"
         "/etc/azazel-zero/first_minute.yaml"
         "/etc/azazel-zero/dnsmasq-first_minute.conf"
         "/etc/default/azazel-gadget"
@@ -343,7 +345,7 @@ main() {
         log_info "   IP は自動ダウンロード (DHCP) されます"
         log_info ""
         log_info "2) 設定をカスタマイズ（必要に応じて）:"
-        log_info "   /etc/azazel-zero/first_minute.yaml"
+        log_info "   /etc/azazel-gadget/first_minute.yaml"
         log_info "   - 既知 SSID リスト"
         log_info "   - 状態遷移閾値"
         log_info ""
@@ -363,7 +365,7 @@ main() {
         fi
         log_info ""
         log_info "【ログ確認】"
-        log_info "  tail -f /var/log/azazel-zero/first_minute.log"
+        log_info "  tail -f /var/log/azazel-gadget/first_minute.log"
         log_info "  tail -f /var/log/azazel-dnsmasq.log"
         log_info ""
         log_info "インストール詳細ログ:"

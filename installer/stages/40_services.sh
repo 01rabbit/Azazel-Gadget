@@ -224,9 +224,9 @@ main() {
             # Caddy internal CA を配布しやすい場所へコピー
             local caddy_root_ca="/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt"
             if [[ -f "$caddy_root_ca" ]]; then
-                mkdir -p /etc/azazel-zero/certs
-                install -m 0644 "$caddy_root_ca" "/etc/azazel-zero/certs/azazel-webui-local-ca.crt"
-                log_info "  ✓ Web UI ローカルCA: /etc/azazel-zero/certs/azazel-webui-local-ca.crt"
+                mkdir -p /etc/azazel-gadget/certs
+                install -m 0644 "$caddy_root_ca" "/etc/azazel-gadget/certs/azazel-webui-local-ca.crt"
+                log_info "  ✓ Web UI ローカルCA: /etc/azazel-gadget/certs/azazel-webui-local-ca.crt"
             else
                 log_warn "⚠️  Caddy ローカルCAが見つかりません: $caddy_root_ca"
             fi
