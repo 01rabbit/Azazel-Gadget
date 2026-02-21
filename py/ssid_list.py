@@ -255,12 +255,12 @@ class SSIDListTextualApp(App):
     CSS = """
     Screen {
         layout: vertical;
-        background: #1a1a2e;
+        background: #080a0f;
         color: #eeeeee;
     }
 
     Header {
-        background: #16213e;
+        background: #0f131a;
         color: #00d4ff;
         text-style: bold;
     }
@@ -271,21 +271,21 @@ class SSIDListTextualApp(App):
     }
 
     Footer {
-        background: #16213e;
+        background: #0f131a;
         color: #aaaaaa;
         height: 1;
     }
 
     #status {
         border: round #00d4ff;
-        background: #16213e;
+        background: #0f131a;
         height: 4;
         padding: 0 1;
     }
 
     #list {
         border: round #00d4ff;
-        background: #16213e;
+        background: #0f131a;
         height: 1fr;
         padding: 0 1;
     }

@@ -44,12 +44,12 @@ class AzazelTextualApp(App):
     CSS = """
     Screen {
         layout: vertical;
-        background: #1a1a2e;
+        background: #080a0f;
         color: #eeeeee;
     }
 
     Header {
-        background: #16213e;
+        background: #0f131a;
         color: #00d4ff;
         text-style: bold;
     }
@@ -60,13 +60,13 @@ class AzazelTextualApp(App):
     }
 
     Footer {
-        background: #16213e;
+        background: #0f131a;
         color: #aaaaaa;
         height: 1;
     }
 
     FooterKey {
-        background: #16213e;
+        background: #0f131a;
     }
 
     FooterKey .footer-key--key {
@@ -76,7 +76,7 @@ class AzazelTextualApp(App):
     }
 
     FooterKey .footer-key--description {
-        background: #16213e;
+        background: #0f131a;
         color: #eeeeee;
     }
 
@@ -130,7 +130,7 @@ class AzazelTextualApp(App):
     #summary {
         height: 8;
         border: round #00d4ff;
-        background: #16213e;
+        background: #0f131a;
         padding: 0 1;
     }
 
@@ -161,27 +161,27 @@ class AzazelTextualApp(App):
     #connection {
         width: 1fr;
         border: round #00d4ff;
-        background: #16213e;
+        background: #0f131a;
         padding: 0 1;
     }
 
     #control {
         width: 1fr;
         border: round #00d4ff;
-        background: #16213e;
+        background: #0f131a;
         padding: 0 1;
     }
 
     #evidence {
         height: 1fr;
         border: round #f39c12;
-        background: #16213e;
+        background: #0f131a;
         padding: 0 1;
     }
 
     #flow {
         height: 1;
-        background: #16213e;
+        background: #0f131a;
         color: #aaaaaa;
         content-align: left middle;
         padding: 0 1;
@@ -190,7 +190,7 @@ class AzazelTextualApp(App):
     #details {
         height: 8;
         border: round #00d4ff;
-        background: #16213e;
+        background: #0f131a;
         padding: 0 1;
         display: none;
     }
@@ -198,7 +198,7 @@ class AzazelTextualApp(App):
     #menu {
         height: 1fr;
         border: round #00d4ff;
-        background: #16213e;
+        background: #0f131a;
         padding: 0 1;
         display: none;
     }
