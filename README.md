@@ -88,6 +88,9 @@ Heavyweight ML remains a future research theme; the current deterministic stack 
 - **tmux console**  
   - `py/azazel_menu.py` is a curses menu for Wi-Fi selection, OpenCanary start/stop/log tail, and E-Paper test actions.  
   - `py/azazel_status.py` is a telemetry panel showing SSID/BSSID, USB gadget IP, RSSI, captive-portal indicators, etc.
+  - Textual mode:
+    - `python3 py/azazel_menu.py --textual`
+    - `python3 py/ssid_list.py --textual [iface]`
 
 ---
 

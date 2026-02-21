@@ -7,6 +7,8 @@ List nearby Wi-Fi SSIDs with signal, channel, security, and connect to selected 
 """
 
 import re
+import argparse
+import asyncio
 import shutil
 import subprocess
 import sys
@@ -18,6 +20,15 @@ import os
 import atexit
 from collections import defaultdict
 from pathlib import Path
+from typing import Any
+
+try:
+    from textual.app import App, ComposeResult
+    from textual.binding import Binding
+    from textual.widgets import Footer, Header, Static
+    TEXTUAL_AVAILABLE = True
+except Exception:
+    TEXTUAL_AVAILABLE = False
 
 # Ensure repo modules importable for health check
 HERE = Path(__file__).resolve().parent
@@ -32,9 +43,6 @@ try:
     from azazel_zero.sensors.wifi_safety import evaluate_wifi_safety
 except Exception:
     evaluate_wifi_safety = None  # fallback if deps missing
-
-# Positional arg or default
-IFACE = sys.argv[1] if len(sys.argv) > 1 else "wlan0"
 
 def run(cmd):
     return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
@@ -228,6 +236,113 @@ def _display_line(n):
     return f"{ssid[:32]:<32}  {sec:<10}  {sig:>3} dBm  ch{ch:>2}   {bssid}"
 
 
+class SSIDListTextualApp(App):
+    """Textual selector for scanned SSIDs with key behavior aligned to curses."""
+
+    BINDINGS = [
+        Binding("up", "move_up", "Up"),
+        Binding("down", "move_down", "Down"),
+        Binding("k", "move_up", "Up"),
+        Binding("j", "move_down", "Down"),
+        Binding("enter", "select", "Select"),
+        Binding("r", "refresh", "Refresh"),
+        Binding("q", "quit_list", "Quit"),
+        Binding("escape", "quit_list", "Quit"),
+    ]
+
+    CSS = """
+    Screen {
+        layout: vertical;
+    }
+
+    #status {
+        border: round cyan;
+        height: 4;
+        padding: 0 1;
+    }
+
+    #list {
+        border: round $accent;
+        height: 1fr;
+        padding: 0 1;
+    }
+
+    #message {
+        height: 1;
+        color: black;
+        background: $accent;
+        content-align: left middle;
+        padding: 0 1;
+    }
+    """
+
+    def __init__(self, iface: str, nets: list[dict[str, Any]]) -> None:
+        super().__init__()
+        self._iface = iface
+        self._nets = list(nets)
+        self._idx = 0
+        self._message = "Ready"
+
+    def compose(self) -> ComposeResult:
+        yield Header(show_clock=True)
+        yield Static("Scanning result", id="status")
+        yield Static("Loading list...", id="list")
+        yield Static(self._message, id="message")
+        yield Footer()
+
+    async def on_mount(self) -> None:
+        self._render()
+
+    def _render(self) -> None:
+        self.query_one("#status", Static).update(
+            f"Interface: {self._iface}\nNetworks: {len(self._nets)}\nUse Up/Down (or j/k), Enter, r, q"
+        )
+        if not self._nets:
+            self.query_one("#list", Static).update("(no networks)")
+        else:
+            lines = ["  SSID                              SEC          SIGNAL(dBm)  CH   BSSID", "-" * 92]
+            for i, net in enumerate(self._nets):
+                marker = ">" if i == self._idx else " "
+                lines.append(f"{marker} {_display_line(net)}")
+            self.query_one("#list", Static).update("\n".join(lines))
+        self.query_one("#message", Static).update(self._message)
+
+    def action_move_up(self) -> None:
+        if not self._nets:
+            return
+        self._idx = (self._idx - 1) % len(self._nets)
+        self._render()
+
+    def action_move_down(self) -> None:
+        if not self._nets:
+            return
+        self._idx = (self._idx + 1) % len(self._nets)
+        self._render()
+
+    async def action_refresh(self) -> None:
+        self._message = "Rescanning..."
+        self._render()
+        nets = await asyncio.to_thread(_rescan_nets, self._iface)
+        self._nets = list(nets)
+        if not self._nets:
+            self._idx = 0
+            self._message = "No networks found after rescan"
+        else:
+            self._idx = min(self._idx, len(self._nets) - 1)
+            self._message = f"Rescan complete ({len(self._nets)} networks)"
+        self._render()
+
+    def action_select(self) -> None:
+        if not self._nets:
+            self._message = "No network to select"
+            self._render()
+            return
+        self.exit(("selected", self._nets[self._idx]))
+
+    def action_quit_list(self) -> None:
+        self.exit(("quit", None))
+
+
 def _interactive_select(stdscr, iface, nets):
     curses.curs_set(0)
     stdscr.nodelay(False)
@@ -289,31 +404,56 @@ def interactive_select(iface, nets):
     return curses.wrapper(_interactive_select, iface, nets)
 
 
+def interactive_select_textual(iface, nets):
+    if not TEXTUAL_AVAILABLE:
+        print("Error: Textual mode requested but python3-textual is not installed.", file=sys.stderr)
+        return None
+    result = SSIDListTextualApp(iface, nets).run()
+    if not result:
+        return None
+    action, payload = result
+    if action == "selected":
+        return payload
+    return None
+
+
 def main():
+    parser = argparse.ArgumentParser(
+        description="Wi-Fi SSID selector",
+    )
+    parser.add_argument("iface", nargs="?", default="wlan0", help="Wireless interface (default: wlan0)")
+    parser.add_argument("--textual", action="store_true", help="Run Textual UI instead of curses")
+    args = parser.parse_args()
+
+    iface = args.iface
+
     if shutil.which("iw") is None:
         print("Error: 'iw' not found. Install 'iw' and run again.", file=sys.stderr)
         sys.exit(1)
 
     # スキャン（共通モジュール使用）
-    nets = _rescan_nets(IFACE)
+    nets = _rescan_nets(iface)
     
     if not nets:
         print("No networks found or scan failed", file=sys.stderr)
         sys.exit(2)
 
     # Interactive selection
-    choice = interactive_select(IFACE, nets)
+    if args.textual:
+        choice = interactive_select_textual(iface, nets)
+    else:
+        choice = interactive_select(iface, nets)
     if choice is None:
         return
     ssid = choice["ssid"] or f"<hidden:{choice['bssid']}>"
     is_open = not (choice.get("rsn") or choice.get("wpa"))
-    ok = ensure_connected(ssid, IFACE, is_open)
+    ok = ensure_connected(ssid, iface, is_open)
     if ok:
         # Show resulting IP
-        ip = run(["/sbin/ip", "-4", "addr", "show", IFACE]).stdout
+        ip = run(["/sbin/ip", "-4", "addr", "show", iface]).stdout
         print(f"Connected to: {ssid}")
         print(ip)
-        run_health_check_once(IFACE)
+        run_health_check_once(iface)
     else:
         print(f"Failed to connect: {ssid}", file=sys.stderr)
         sys.exit(3)
