@@ -8,6 +8,7 @@ cli_unified.py for snapshot loading, command dispatch, and optional EPD updates.
 from __future__ import annotations
 
 import asyncio
+import sys
 import time
 from typing import Any, Callable, Optional, Tuple
 
@@ -390,3 +391,12 @@ def run_textual(
         enable_epd=enable_epd,
     )
     app.run()
+
+
+if __name__ == "__main__":
+    print(
+        "This module is a backend for cli_unified.\n"
+        "Run: python3 py/azazel_zero/cli_unified.py --textual",
+        file=sys.stderr,
+    )
+    sys.exit(2)
