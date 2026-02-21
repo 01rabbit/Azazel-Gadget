@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Azazel-Zero full-screen TUI (manual refresh, dark theme, fixed layout).
+Azazel-Gadget full-screen TUI (manual refresh, dark theme, fixed layout).
  - Snapshot JSON is fetched on demand (no auto-refresh).
  - IPC is file-based by default: /run/azazel-zero/ui_snapshot.json and ui_command.json
  - Actions send commands via the command file; controller側で処理することを想定。
@@ -1041,7 +1041,7 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
             temp_color = cp(1)  # green
     
     bar = (
-        f"Azazel-Zero | "
+        f"Azazel-Gadget | "
         f"{'📶' if unicode_mode else 'WiFi'} SSID: {snap.ssid}  "
         f"{'⬇️' if unicode_mode else 'Down:'} {snap.down_if}  "
         f"{'⬆️' if unicode_mode else 'Up:'} {snap.up_if}  "
@@ -1458,7 +1458,7 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
             stdscr.addnstr(extra_y + 3, 2, no_blocks[: w - 4], cp(1))
 
     # Actions + Hint (絵文字なし、シンプル表示)
-    actions = "[U] Refresh  [A] Stage-Open  [R] Re-Probe  [C] Contain  [L] Details  [Q] Quit"
+    actions = "[U] Refresh  [A] Stage-Open  [R] Re-Probe  [C] Contain  [L] Details  [M] Menu  [Q] Quit"
     
     # 状態遷移フロー表示
     state_flow = "Flow: PROBE → DEGRADED → NORMAL → ✅ SAFE" if unicode_mode else "Flow: PROBE->DEGRADED->NORMAL->SAFE"
@@ -1502,25 +1502,21 @@ def details_view(stdscr, snap: Snapshot, unicode_mode: bool):
 
 def main():
     locale.setlocale(locale.LC_ALL, "")
-    parser = argparse.ArgumentParser(description="Azazel-Zero manual-refresh TUI")
+    parser = argparse.ArgumentParser(description="Azazel-Gadget manual-refresh TUI")
     parser.add_argument("--ascii", action="store_true", help="Force ASCII fallback")
     parser.add_argument("--unicode", action="store_true", help="Force Unicode box/icons")
     parser.add_argument("--textual", action="store_true", help="Run Textual UI instead of curses")
+    parser.add_argument("--menu", action="store_true", help="Open control menu on startup (Textual mode)")
     parser.add_argument("--enable-epd", action="store_true", help="Enable E-Paper display updates")
     parser.add_argument("--disable-epd", action="store_true", help="Disable E-Paper display updates")
     args = parser.parse_args()
 
     unicode_mode = detect_unicode(args.ascii, args.unicode)
     
-    # EPD behavior:
-    # - curses mode: enabled by default (legacy behavior)
-    # - textual mode: disabled by default (safer on unstable EPD setups)
-    if args.disable_epd:
-        enable_epd = False
-    elif args.enable_epd:
+    # EPD is enabled by default unless explicitly disabled.
+    enable_epd = not args.disable_epd
+    if args.enable_epd:
         enable_epd = True
-    else:
-        enable_epd = False if args.textual else True
 
     if args.textual:
         try:
@@ -1538,6 +1534,7 @@ def main():
             epd_fingerprint_fn=_epd_fingerprint,
             unicode_mode=unicode_mode,
             enable_epd=enable_epd,
+            start_menu=args.menu,
         )
         return
 
@@ -1573,6 +1570,17 @@ def main():
                 snap.evidence.append("• action: contain command sent")
             elif ch in (ord("l"), ord("L")):
                 details_view(stdscr, snap, unicode_mode)
+            elif ch in (ord("m"), ord("M")):
+                try:
+                    menu_script = DEFAULT_ROOT / "py" / "azazel_menu.py"
+                    cmd = ["python3", str(menu_script), "--textual"]
+                    if enable_epd:
+                        cmd.append("--enable-epd")
+                    else:
+                        cmd.append("--disable-epd")
+                    subprocess.call(cmd)
+                except Exception:
+                    pass
             snap = snap  # no-op to keep reference
 
     curses.wrapper(_loop)

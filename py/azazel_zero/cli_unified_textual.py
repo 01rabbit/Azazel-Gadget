@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Textual implementation for Azazel-Zero unified TUI.
+Textual implementation for Azazel-Gadget unified TUI.
 
 This app is intentionally thin and reuses existing backend callbacks from
 cli_unified.py for snapshot loading, command dispatch, and optional EPD updates.
@@ -8,15 +8,18 @@ cli_unified.py for snapshot loading, command dispatch, and optional EPD updates.
 from __future__ import annotations
 
 import asyncio
+import os
+import subprocess
 import sys
 import time
+from pathlib import Path
 from typing import Any, Callable, Optional, Tuple
 
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
-from textual.widgets import Header, Static
+from textual.widgets import Footer, Header, Static
 
 
 SnapshotLoader = Callable[[], Any]
@@ -24,11 +27,18 @@ ActionSender = Callable[[str], None]
 EpdUpdater = Callable[[Any, bool], None]
 EpdFingerprint = Callable[[Any], Tuple[str, str, str, Optional[int], str]]
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PY_ROOT = PROJECT_ROOT / "py"
+
+
+def _maybe_sudo(cmd: list[str]) -> list[str]:
+    return cmd if os.geteuid() == 0 else ["sudo"] + cmd
+
 
 class AzazelTextualApp(App):
     """Manual-refresh monitor app with key bindings compatible with curses UI."""
 
-    TITLE = "Azazel-Zero Textual Monitor"
+    TITLE = "Azazel-Gadget Textual Monitor"
     SUB_TITLE = "Manual refresh mode"
 
     CSS = """
@@ -80,17 +90,16 @@ class AzazelTextualApp(App):
         padding: 0 1;
     }
 
-    #actions {
-        height: 1;
-        background: $boost;
-        color: $text;
-        content-align: left middle;
-        padding: 0 1;
-    }
-
     #details {
         height: 8;
         border: round magenta;
+        padding: 0 1;
+        display: none;
+    }
+
+    #menu {
+        height: 1fr;
+        border: round $accent-darken-2;
         padding: 0 1;
         display: none;
     }
@@ -102,6 +111,12 @@ class AzazelTextualApp(App):
         Binding("r", "reprobe", "Re-Probe"),
         Binding("c", "contain", "Contain"),
         Binding("l", "details", "Details"),
+        Binding("m", "toggle_menu", "Menu"),
+        Binding("up", "menu_up", "Menu Up", show=False),
+        Binding("down", "menu_down", "Menu Down", show=False),
+        Binding("j", "menu_down", "Menu Down", show=False),
+        Binding("k", "menu_up", "Menu Up", show=False),
+        Binding("enter", "menu_select", "Select", show=False),
         Binding("q", "quit", "Quit"),
     ]
 
@@ -113,6 +128,7 @@ class AzazelTextualApp(App):
         epd_fingerprint_fn: EpdFingerprint,
         unicode_mode: bool,
         enable_epd: bool,
+        start_menu: bool = False,
     ) -> None:
         super().__init__()
         self._load_snapshot_fn = load_snapshot_fn
@@ -125,6 +141,9 @@ class AzazelTextualApp(App):
         self._snapshot: Any = None
         self._is_loading = False
         self._details_open = False
+        self._menu_open = start_menu
+        self._menu_idx = 0
+        self._menu_items = self._build_menu_items()
         self._last_epd_fp: Optional[Tuple[str, str, str, Optional[int], str]] = None
         self._status_message = "Ready"
 
@@ -137,12 +156,67 @@ class AzazelTextualApp(App):
             yield Static("Loading control...", id="control", markup=False)
         yield Static("Loading evidence...", id="evidence", markup=False)
         yield Static("Flow: PROBE -> DEGRADED -> NORMAL -> SAFE", id="flow", markup=False)
-        yield Static("[U] Refresh  [A] Stage-Open  [R] Re-Probe  [C] Contain  [L] Details  [Q] Quit", id="actions", markup=False)
+        yield Static("Control menu loading...", id="menu", markup=False)
         yield Static("Details hidden. Press [L] to toggle.", id="details", markup=False)
+        yield Footer()
 
     async def on_mount(self) -> None:
         self.set_interval(1.0, self._tick_age_only)
+        self._apply_menu_visibility()
         await self._refresh_snapshot(initial=True)
+
+    def _build_menu_items(self) -> list[dict[str, object]]:
+        ssid_cmd = _maybe_sudo(
+            [sys.executable, str(PY_ROOT / "ssid_list.py"), "--textual", "wlan0"]
+        )
+        epd_start = _maybe_sudo(
+            [sys.executable, str(PY_ROOT / "boot_splash_epd.py"), "--mode", "start"]
+        )
+        epd_shutdown = _maybe_sudo(
+            [sys.executable, str(PY_ROOT / "boot_splash_epd.py"), "--mode", "shutdown"]
+        )
+        return [
+            {"label": "Refresh Snapshot", "kind": "refresh"},
+            {"label": "Stage-Open", "kind": "send_action", "action": "stage_open"},
+            {"label": "Re-Probe", "kind": "send_action", "action": "reprobe"},
+            {"label": "Contain", "kind": "send_action", "action": "contain"},
+            {"label": "Wi-Fi Selector (Textual)", "kind": "interactive_cmd", "cmd": ssid_cmd},
+            {"label": "OpenCanary: start", "kind": "run_cmd", "cmd": _maybe_sudo(["systemctl", "start", "opencanary.service"])},
+            {"label": "OpenCanary: stop", "kind": "run_cmd", "cmd": _maybe_sudo(["systemctl", "stop", "opencanary.service"])},
+            {"label": "OpenCanary: hits (latest)", "kind": "interactive_cmd", "cmd": _maybe_sudo(["journalctl", "-u", "opencanary.service", "-n", "50", "--no-pager"])},
+            {"label": "EPD: start animation (test)", "kind": "run_cmd", "cmd": epd_start},
+            {"label": "EPD: shutdown animation (test)", "kind": "run_cmd", "cmd": epd_shutdown},
+            {"label": "Toggle Details", "kind": "toggle_details"},
+            {"label": "Close Menu", "kind": "close_menu"},
+        ]
+
+    def _menu_text(self) -> str:
+        lines = ["Control Menu [Enter=Run, M=Close]", ""]
+        for i, item in enumerate(self._menu_items):
+            marker = ">" if i == self._menu_idx else " "
+            lines.append(f"{marker} {item['label']}")
+        return "\n".join(lines)
+
+    def _apply_menu_visibility(self) -> None:
+        summary = self.query_one("#summary", Static)
+        middle = self.query_one("#middle", Horizontal)
+        flow = self.query_one("#flow", Static)
+        menu = self.query_one("#menu", Static)
+        evidence = self.query_one("#evidence", Static)
+        if self._menu_open:
+            summary.styles.height = 6
+            middle.styles.height = 8
+            flow.styles.display = "none"
+            evidence.styles.display = "none"
+            menu.styles.display = "block"
+        else:
+            summary.styles.height = 8
+            middle.styles.height = 12
+            flow.styles.display = "block"
+            evidence.styles.display = "block"
+            menu.styles.display = "none"
+        if self._menu_open:
+            menu.update(Text(self._menu_text()))
 
     def _tick_age_only(self) -> None:
         if self._snapshot is not None:
@@ -308,6 +382,7 @@ class AzazelTextualApp(App):
             )
             self.query_one("#details", Static).update(Text(details_text))
 
+        self._apply_menu_visibility()
         self._render_status_line()
 
     async def _refresh_snapshot(self, initial: bool = False) -> None:
@@ -372,6 +447,72 @@ class AzazelTextualApp(App):
         self._status_message = "Details shown" if self._details_open else "Details hidden"
         self._render_panels()
 
+    def action_toggle_menu(self) -> None:
+        self._menu_open = not self._menu_open
+        self._status_message = "Menu opened" if self._menu_open else "Menu closed"
+        self._apply_menu_visibility()
+        self._render_status_line()
+
+    def action_menu_up(self) -> None:
+        if not self._menu_open:
+            return
+        self._menu_idx = (self._menu_idx - 1) % len(self._menu_items)
+        self._apply_menu_visibility()
+
+    def action_menu_down(self) -> None:
+        if not self._menu_open:
+            return
+        self._menu_idx = (self._menu_idx + 1) % len(self._menu_items)
+        self._apply_menu_visibility()
+
+    async def action_menu_select(self) -> None:
+        if not self._menu_open:
+            return
+        item = self._menu_items[self._menu_idx]
+        kind = item.get("kind")
+        label = str(item.get("label", "item"))
+
+        if kind == "close_menu":
+            self._menu_open = False
+            self._status_message = "Menu closed"
+            self._apply_menu_visibility()
+            self._render_status_line()
+            return
+        if kind == "toggle_details":
+            self.action_details()
+            return
+        if kind == "refresh":
+            await self._refresh_snapshot()
+            return
+        if kind == "send_action":
+            action = str(item.get("action", ""))
+            if action:
+                await self._send_action(action, f"• action: {action} command sent (menu)")
+            return
+        if kind == "run_cmd":
+            cmd = list(item.get("cmd", []))
+            if not cmd:
+                return
+            self._status_message = f"Running: {label}"
+            self._render_status_line()
+            code = await asyncio.to_thread(subprocess.call, cmd)
+            self._status_message = f"Done: {label} (code {code})"
+            self._render_status_line()
+            return
+        if kind == "interactive_cmd":
+            cmd = list(item.get("cmd", []))
+            if not cmd:
+                return
+            self._status_message = f"Running: {label}"
+            self._render_status_line()
+            try:
+                with self.suspend():
+                    code = subprocess.call(cmd)
+                self._status_message = f"Done: {label} (code {code})"
+            except Exception as exc:
+                self._status_message = f"Failed: {label} ({exc})"
+            self._render_status_line()
+
 
 def run_textual(
     load_snapshot_fn: SnapshotLoader,
@@ -380,6 +521,7 @@ def run_textual(
     epd_fingerprint_fn: EpdFingerprint,
     unicode_mode: bool,
     enable_epd: bool,
+    start_menu: bool = False,
 ) -> None:
     app = AzazelTextualApp(
         load_snapshot_fn=load_snapshot_fn,
@@ -388,6 +530,7 @@ def run_textual(
         epd_fingerprint_fn=epd_fingerprint_fn,
         unicode_mode=unicode_mode,
         enable_epd=enable_epd,
+        start_menu=start_menu,
     )
     app.run()
 
