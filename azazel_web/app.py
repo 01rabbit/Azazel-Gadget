@@ -47,6 +47,7 @@ try:
         watch_snapshots as cp_watch_snapshots,
     )
     from azazel_gadget.path_schema import (
+        config_dir_candidates,
         first_minute_config_candidates,
         portal_env_candidates,
         snapshot_path_candidates,
@@ -56,6 +57,7 @@ try:
 except Exception:
     cp_read_snapshot_payload = None
     cp_watch_snapshots = None
+    config_dir_candidates = lambda: [Path("/etc/azazel-gadget"), Path("/etc/azazel-zero")]  # type: ignore
     first_minute_config_candidates = lambda: [Path("/etc/azazel-gadget/first_minute.yaml"), Path("/etc/azazel-zero/first_minute.yaml")]  # type: ignore
     portal_env_candidates = lambda: [Path("/etc/azazel-gadget/portal-viewer.env"), Path("/etc/azazel-zero/portal-viewer.env")]  # type: ignore
     snapshot_path_candidates = lambda: [Path("/run/azazel-gadget/ui_snapshot.json"), Path("/run/azazel-zero/ui_snapshot.json"), Path(".azazel-gadget/run/ui_snapshot.json"), Path(".azazel-zero/run/ui_snapshot.json")]  # type: ignore
@@ -79,9 +81,26 @@ NTFY_CONFIG_PATHS = [
 NTFY_SSE_KEEPALIVE_SEC = int(os.environ.get("AZAZEL_SSE_KEEPALIVE_SEC", "20"))
 NTFY_SSE_READ_TIMEOUT_SEC = int(os.environ.get("AZAZEL_NTFY_READ_TIMEOUT_SEC", "35"))
 NTFY_SSE_MAX_BACKOFF_SEC = int(os.environ.get("AZAZEL_NTFY_MAX_BACKOFF_SEC", "30"))
-WEBUI_CA_CERT_PATH = Path(
-    os.environ.get("AZAZEL_WEBUI_CA_PATH", "/etc/azazel-gadget/certs/azazel-webui-local-ca.crt")
-)
+_CA_CERT_FILENAME = "azazel-webui-local-ca.crt"
+_WEBUI_CA_CERT_CANDIDATES: List[Path] = []
+_env_ca_cert = str(os.environ.get("AZAZEL_WEBUI_CA_PATH", "")).strip()
+if _env_ca_cert:
+    _WEBUI_CA_CERT_CANDIDATES.append(Path(_env_ca_cert))
+for cfg_dir in config_dir_candidates():
+    _WEBUI_CA_CERT_CANDIDATES.append(cfg_dir / "certs" / _CA_CERT_FILENAME)
+if not _WEBUI_CA_CERT_CANDIDATES:
+    _WEBUI_CA_CERT_CANDIDATES = [
+        Path("/etc/azazel-gadget/certs/azazel-webui-local-ca.crt"),
+        Path("/etc/azazel-zero/certs/azazel-webui-local-ca.crt"),
+    ]
+_seen_ca_paths: set[str] = set()
+WEBUI_CA_CERT_PATHS: List[Path] = []
+for _candidate in _WEBUI_CA_CERT_CANDIDATES:
+    key = str(_candidate)
+    if key in _seen_ca_paths:
+        continue
+    _seen_ca_paths.add(key)
+    WEBUI_CA_CERT_PATHS.append(_candidate)
 
 # Allowed actions
 ALLOWED_ACTIONS = {
@@ -267,6 +286,15 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
             hasher.update(chunk)
     return hasher.hexdigest()
+
+
+def _resolve_webui_ca_cert_path() -> Tuple[Path, List[Path]]:
+    """Return first existing CA cert path plus all checked candidates."""
+    for candidate in WEBUI_CA_CERT_PATHS:
+        if candidate.exists():
+            warn_if_legacy_path(candidate, app.logger)
+            return candidate, WEBUI_CA_CERT_PATHS
+    return WEBUI_CA_CERT_PATHS[0], WEBUI_CA_CERT_PATHS
 
 
 def _queue_put_drop_oldest(out_q: queue.Queue, item: Dict[str, Any]) -> None:
@@ -1062,18 +1090,20 @@ def api_portal_viewer_open():
 @app.route("/api/certs/azazel-webui-local-ca/meta")
 def api_webui_ca_meta():
     """GET certificate metadata for client-side trust onboarding."""
-    cert_path = WEBUI_CA_CERT_PATH
+    cert_path, checked_paths = _resolve_webui_ca_cert_path()
     if not cert_path.exists():
         return jsonify({
             "ok": False,
             "error": "CA certificate not found",
             "path": str(cert_path),
+            "checked_paths": [str(p) for p in checked_paths],
         }), 404
 
     try:
         stat = cert_path.stat()
         return jsonify({
             "ok": True,
+            "path": str(cert_path),
             "filename": cert_path.name,
             "sha256": _sha256_file(cert_path),
             "size_bytes": stat.st_size,
@@ -1090,12 +1120,13 @@ def api_webui_ca_meta():
 @app.route("/api/certs/azazel-webui-local-ca.crt")
 def api_webui_ca_download():
     """Download local CA certificate used by Caddy internal TLS."""
-    cert_path = WEBUI_CA_CERT_PATH
+    cert_path, checked_paths = _resolve_webui_ca_cert_path()
     if not cert_path.exists():
         return jsonify({
             "ok": False,
             "error": "CA certificate not found",
             "path": str(cert_path),
+            "checked_paths": [str(p) for p in checked_paths],
         }), 404
 
     return send_file(

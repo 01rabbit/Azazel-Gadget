@@ -2,9 +2,19 @@
 
 Azazel-Gadget (formerly Azazel-Zero) is a portable defensive gateway for untrusted Wi-Fi environments on Raspberry Pi Zero 2 W / Pi 4-class devices.
 
-This README is implementation-first: it describes features that are currently present in this repository and how they are connected.
+<p align="center">
+  <img src="images/Azazel-Gadget_logo.png" alt="Azazel-Gadget logo" width="540">
+</p>
 
-## Implemented capabilities (repo-verified)
+## Interface Preview
+
+| Web UI | Unified TUI |
+|---|---|
+| [![Azazel-Gadget Web UI screenshot](images/WebUI.png)](images/WebUI.png) | [![Azazel-Gadget unified TUI screenshot](images/TUI.png)](images/TUI.png) |
+
+Azazel-Gadget combines active network defense, operator-facing interfaces, and optional deception services into a compact gateway workflow.
+
+## Features
 
 ### 1) First-minute control plane
 - Main controller tracks upstream health, captive portal status, and risk transitions (`NORMAL`/`DEGRADED`/`CONTAIN`).
@@ -13,15 +23,11 @@ This README is implementation-first: it describes features that are currently pr
 - Includes tactics decision logging (`decision_explanations.jsonl`) and ntfy notifier hooks.
 - In `DECEPTION`, applies `tc` delay only to Suricata-confirmed OpenCanary attack flows (targeted Delay-to-Win).
 
-Reference: `py/azazel_gadget/first_minute/controller.py`
-
 ### 2) Action/control daemon (Unix socket)
 - Dedicated daemon at `/run/azazel/control.sock`.
 - Executes action scripts, Wi-Fi scan/connect handlers, and portal-viewer startup workflow.
 - Supports control-plane snapshot streaming (`watch_snapshot`) for clients.
 - Includes path-schema actions (`path_schema_status`, `migrate_path_schema`).
-
-Reference: `py/azazel_control/daemon.py`, `systemd/azazel-control-daemon.service`
 
 ### 3) Web UI backend (Flask)
 - Dashboard + state API + SSE state stream.
@@ -30,30 +36,22 @@ Reference: `py/azazel_control/daemon.py`, `systemd/azazel-control-daemon.service
 - CA certificate metadata/download endpoints for local HTTPS onboarding.
 - Token auth via header or query (if token file exists).
 
-Reference: `azazel_web/app.py`, `systemd/azazel-web.service`
-
 ### 4) Portal viewer (noVNC)
 - Browser-assisted captive-portal workflow (Chromium + Xvfb + x11vnc + noVNC).
 - Web UI can start and open it on demand (`/api/portal-viewer/open`).
 - Runtime start URL override is supported.
-
-Reference: `scripts/azazel-portal-viewer.sh`, `systemd/azazel-portal-viewer.service`
 
 ### 5) E-paper integration
 - Boot/shutdown splash service.
 - Periodic captive-portal detection display updates.
 - Suricata-linked e-paper alert updates.
 
-Reference: `systemd/azazel-epd.service`, `systemd/azazel-epd-shutdown.service`, `systemd/azazel-epd-portal.service`, `systemd/azazel-epd-portal.timer`, `systemd/suri-epaper.service`
-
 ### 6) Optional local monitoring/deception
 - OpenCanary systemd unit and startup wrapper.
 - Suricata integration and monitoring-state reflection in UI.
 - Optional local ntfy server (`--with-ntfy`) and `/api/events/stream` bridge.
 
-Reference: `systemd/opencanary.service`, `azazel_web/app.py`, `scripts/install_ntfy.sh`
-
-## Runtime dependency map
+## Architecture at a Glance
 
 1. `azazel-first-minute.service`
 - Produces state snapshot and Status API (`:8082`).
@@ -66,7 +64,7 @@ Reference: `systemd/opencanary.service`, `azazel_web/app.py`, `scripts/install_n
 5. Optional `azazel-portal-viewer.service`
 - noVNC endpoint (default `10.55.0.10:6080`), started on demand by API.
 
-## Systemd units in this repo
+## Included Services (systemd)
 
 | Unit | Purpose |
 |---|---|
@@ -82,7 +80,7 @@ Reference: `systemd/opencanary.service`, `azazel_web/app.py`, `scripts/install_n
 | `suri-epaper.service` | Suricata-driven E-paper updates |
 | `opencanary.service` | Optional deception service |
 
-## Installer feature switches
+## Installation Options
 
 Main entrypoint: `install.sh`
 
@@ -104,7 +102,7 @@ sudo ./install.sh --all
 sudo ./install.sh --resume
 ```
 
-## Web API surface (current)
+## Web API
 
 | Endpoint | Notes |
 |---|---|
@@ -116,7 +114,7 @@ sudo ./install.sh --resume
 | `POST /api/portal-viewer/open` | Start/open portal viewer |
 | `POST /api/action` | New action format |
 | `POST /api/action/<action>` | Legacy action format |
-| `GET /api/wifi/scan` | Wi-Fi scan (currently no token required) |
+| `GET /api/wifi/scan` | Wi-Fi scan (no token required by default) |
 | `POST /api/wifi/connect` | Wi-Fi connect |
 | `GET /api/certs/azazel-webui-local-ca/meta` | Local CA metadata |
 | `GET /api/certs/azazel-webui-local-ca.crt` | Local CA download |
@@ -128,9 +126,7 @@ Token auth:
 - Header: `X-AZAZEL-TOKEN` or `X-Auth-Token`
 - Query: `?token=...`
 
-Reference: `azazel_web/app.py`
-
-## Operator interfaces
+## Interfaces
 
 - Web UI: `azazel_web/`
 - Unified TUI monitor/menu: `py/azazel_gadget/cli_unified.py`
@@ -138,20 +134,20 @@ Reference: `azazel_web/app.py`
 - Terminal status panel: `py/azazel_status.py`
 - E-paper renderer/controller: `py/azazel_epd.py`, `py/boot_splash_epd.py`
 
-## Tests included
+## Testing
 
 - Unit tests: `tests/`
 - Regression scripts: `scripts/tests/regression/`
 - UI stack smoke test: `scripts/tests/e2e/run_ui_stack_smoke.sh`
 
-## Path schema and naming compatibility
+## Path Compatibility
 
 Both naming schemas are supported:
 - Current: `azazel-gadget` (`/etc/azazel-gadget`, `/run/azazel-gadget`, `~/.azazel-gadget`)
 - Legacy: `azazel-zero` (`/etc/azazel-zero`, `/run/azazel-zero`, `~/.azazel-zero`)
 
-Schema helpers and migration are in `py/azazel_gadget/path_schema.py`.
-Current deprecation marker for legacy compatibility paths is `2026-12-31`.
+Schema helpers and migration are implemented in `py/azazel_gadget/path_schema.py`.
+Legacy path compatibility is planned through `2026-12-31`.
 
 ## Repository structure (main)
 
