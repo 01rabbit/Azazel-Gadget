@@ -1,394 +1,172 @@
-# Azazel-Gadget
+# Azazel-Gadget（Azazel-Zero）— Cyber Scapegoat Gateway
 
-[English](/README.md) | 日本語
+Azazel-Gadget（旧称 Azazel-Zero）は、不審な Wi-Fi 環境向けの携行型防御ゲートウェイです。主対象は Raspberry Pi Zero 2 W / Pi 4 クラスです。
 
-## コンセプト
+この README は「実装されている機能」を基準に整理しています。
 
-**Azazel-Gadget** は Raspberry Pi Zero 2 W 上で動作する **「身代わり防壁（Substitute Barrier）」** のプロトタイプです。  
-Azazel System の**遅滞防御（delaying action）**を実用的に具現化しつつ、**身代わり防壁**と**防壁迷路（Barrier Maze）**という原点に立ち返ります。
+## 実装済み機能（リポジトリ確認ベース）
 
-### Azazel-Pi との比較
+### 1) first-minute 制御プレーン
+- 上流接続状態とキャプティブポータルを監視し、`NORMAL`/`DEGRADED`/`CONTAIN` を制御。
+- UI 用スナップショット JSON を生成。
+- ローカル Status API（`:8082`）で `/action/*` と `/details` を提供。
+- Tactics の意思決定ログ出力や ntfy 通知フックを実装。
+- `DECEPTION` 時は、Suricata で OpenCanary 宛攻撃と判定した通信フローに限定して `tc` 遅延を適用（対象限定 Delay-to-Win）。
 
-- **Azazel-Pi**  
-  - Raspberry Pi 5 をベースにした **Portable Security Gateway (Cyber Scapegoat Gateway)**  
-  - **一時的に構築する小規模ネットワーク** を低コストで守るための **コンセプトモデル**  
-  - 複数の技術要素を試験するための実験色が強い
+根拠: `py/azazel_gadget/first_minute/controller.py`
 
-- **Azazel-Gadget**  
-  - **用途を絞り、不要機能をそぎ落とした軽量版**。実運用を前提に設計  
-  - **携帯性と実用性を重視した物理的バリア**  
-  - コンセプトモデルの Azazel-Pi と異なり、**現場投入を想定した実用モデル**
+### 2) Control Daemon（Unix socket）
+- `/run/azazel/control.sock` でアクション要求を受け付け。
+- シェルスクリプト系アクション、Wi-Fi scan/connect、portal viewer 起動を実行。
+- `watch_snapshot` によるスナップショット配信に対応。
+- パススキーマ関連アクション（`path_schema_status`, `migrate_path_schema`）を提供。
 
----
+根拠: `py/azazel_control/daemon.py`, `systemd/azazel-control-daemon.service`
 
-## 設計方針
+### 3) Web UI バックエンド（Flask）
+- ダッシュボード HTML、状態 API、状態 SSE。
+- 新旧アクション API、Wi-Fi API、portal viewer API。
+- ntfy ブリッジ SSE（`/api/events/stream`）。
+- ローカル HTTPS 用 CA 証明書メタ情報/配布 API。
+- トークン認証（トークンファイルが存在する場合）。
 
-- **携帯性**: 胸ポケットに収まるサイズ  
-- **不可避性**: 端末と外部ネットワークの間に強制的に割り込む  
-- **シンプルさ**: USB を挿すだけでファイアウォールが成立  
-- **遅延防御**: 攻撃者の時間を浪費させる（Azazel System の中核）
+根拠: `azazel_web/app.py`, `systemd/azazel-web.service`
 
----
+### 4) Portal Viewer（noVNC）
+- Chromium + Xvfb + x11vnc + noVNC によるポータル操作支援。
+- WebUI からオンデマンド起動して URL を返却。
+- 実行時 start URL 上書きに対応。
 
-## 実装
+根拠: `scripts/azazel-portal-viewer.sh`, `systemd/azazel-portal-viewer.service`
 
-### ベース
+### 5) E-paper 連携
+- 起動/終了スプラッシュ表示。
+- キャプティブポータル関連の定期表示更新。
+- Suricata 連動表示更新。
 
-- **Raspberry Pi Zero 2 W**
+根拠: `systemd/azazel-epd.service`, `systemd/azazel-epd-shutdown.service`, `systemd/azazel-epd-portal.service`, `systemd/azazel-epd-portal.timer`, `systemd/suri-epaper.service`
 
-### ネットワーク
+### 6) 任意のローカル監視/デコイ
+- OpenCanary ユニットと起動ラッパーを同梱。
+- Suricata 稼働状態を WebUI に反映。
+- `--with-ntfy` でローカル ntfy サーバ（`:8081`）を導入可能。
 
-- **USB OTG ガジェットモード**  
-  - 1 本の USB ケーブルで給電と仮想ネットワークを同時に提供  
-  - ノート PC に挿すだけで即起動
+根拠: `systemd/opencanary.service`, `azazel_web/app.py`, `scripts/install_ntfy.sh`
 
-### 防御機能（軽量）
+## コンポーネント連携（実行時）
 
-- **iptables/nftables** によるブロック・遅延  
-- **tc (Traffic Control)** で遅延・ジッターを注入  
-- **カスタム Python スクリプト** による動的制御と通知  
-- **Wi-Fi セーフティセンサー**（Python + `iw` + `tcpdump`）で Evil AP / MITM / DNS・DHCP スプーフィングを検出し、危険タグを発行して自動切断へ接続
+1. `azazel-first-minute.service`
+- 状態スナップショット生成と Status API（`:8082`）を提供。
+2. `azazel-control-daemon.service`
+- `/run/azazel/control.sock` 経由でアクション実行を仲介。
+3. `azazel-web.service`
+- Flask バックエンド（既定 `127.0.0.1:8084`）として状態取得/操作 API を提供。
+4. 任意 `caddy.service`（`--with-webui`）
+- `https://<MGMT_IP>:443` で Flask へリバースプロキシ。
+5. 任意 `azazel-portal-viewer.service`
+- 既定 `10.55.0.10:6080` の noVNC を必要時起動。
 
-### ステータス表示
+## 本リポジトリの systemd ユニット
 
-- **E-Paper（電子ペーパー）**  
-  - 2.13 インチ モノクロ（250×122）  
-  - 脅威レベル/アクション/RTT/キュー状態/キャプティブポータル検出を簡潔に表示
+| Unit | 役割 |
+|---|---|
+| `azazel-first-minute.service` | 制御プレーン本体 |
+| `azazel-control-daemon.service` | Unix socket アクションデーモン |
+| `azazel-web.service` | Flask バックエンド |
+| `azazel-portal-viewer.service` | Captive Portal Viewer（noVNC） |
+| `usb0-static.service` | `usb0` 固定 IPv4 設定 |
+| `azazel-nat.service` | iptables ベース NAT/forward 補助 |
+| `azazel-epd.service` | E-paper 起動表示 |
+| `azazel-epd-shutdown.service` | E-paper 終了表示 |
+| `azazel-epd-portal.service` + `.timer` | ポータル検知表示更新 |
+| `suri-epaper.service` | Suricata 連動 E-paper 更新 |
+| `opencanary.service` | 任意デコイサービス |
 
----
+## インストーラの機能スイッチ
 
-## Threat Evaluation Pipeline
+エントリポイント: `install.sh`
 
-Pi Zero 2 W でも動作する決定論的な 2 層構成の判定エンジンを採用しています。
+| オプション | 効果 |
+|---|---|
+| `--with-webui` | Flask venv + Caddy HTTPS を導入 |
+| `--with-canary` | OpenCanary を導入/有効化 |
+| `--with-ntfy` | ローカル ntfy サーバ（`:8081`）導入 |
+| `--with-portal-viewer` | noVNC/Chromium 構成を導入 |
+| `--with-epd` | Waveshare E-Paper 依存導入（既定 ON） |
+| `--all` | 上記オプションを一括有効化 |
+| `--resume` | 再起動後の続きから実行 |
 
-- **第1層: Wi-Fi セーフティセンサー**  
-  - `py/azazel_gadget/sensors/wifi_safety.py` が `iw dev … link` と短時間の `tcpdump` から ARP/DHCP/DNS の異常を検出。  
-  - `evil_ap`, `mitm`, `arp_spoof`, `dhcp_spoof`, `dns_spoof`, `tls_downgrade`, `captive_portal`, `phish` などのタグとメタ情報を生成。
-
-- **第2層: Mock-LLM Core**  
-  - `py/azazel_gadget/core/mock_llm_core.py` が入力を従来カテゴリ（`scan`, `bruteforce`, `exploit`, `malware`, `sqli`, `dos`, `unknown`）へマッピング。  
-  - 正規表現 + ランダムから、ハッシュに基づく決定論リプライへ刷新し、リスク（1–5）と理由文を安定出力。  
-  - プロファイル `"zero"` は Wi-Fi タグに Evil AP / MITM があれば自動でリスクを引き上げ、Danger/Disconnect 判定を確実化。
-
-- **Threat Judge ラッパー**  
-  - `py/azazel_gadget/app/threat_judge.py` がタグと最終判定をまとめ、UI や自動化が扱いやすい JSON を返却（例: `risk >= 4` または `evil_ap` タグで即切断）。
-
-重量級 ML は将来の研究テーマとして残しつつ、現状の決定論的スタックだけで携帯シールドに必要な自動判定を実現しています。
-
----
-
-## Operator Console & Automation
-
-- **TUI（ターミナルユーザーインターフェース）**  
-  - `py/azazel_gadget/cli_unified.py` は統合監視TUI。WiFi状態、脅威レベル、チャンネル混雑度、制御ルールなどをリアルタイム表示。
-  - カラフルなアイコンと色分けで直感的に状態を把握可能。
-  - Textual モードをオペレーターUIの主系として利用（UI指定なしでデフォルト起動）。
-  - `--curses` はフォールバック用途のみ。
-  - 監視画面から `[M]` で統合メニューを開いて制御。
-  
-- **tmux コンソール**  
-  - `py/azazel_menu.py` は互換ランチャー（`cli_unified.py --menu` へ委譲）。  
-  - `py/azazel_status.py` は SSID/BSSID、USB ガジェット IP、RSSI、キャプティブポータル指標などを表示するテレメトリパネル。
-  - Textual モード:
-    - `python3 py/azazel_menu.py`（互換ランチャー）
-    - `python3 py/ssid_list.py --textual [iface]`
-
----
-
-## ランタイム構成
-
-| コンポーネント | エントリーポイント | 補足 |
-|-----------|-------------|-------|
-| 統合インストーラー | `install.sh`, `installer/stages/*.sh` | Stage 00/10/20/30/40/99 の単一インストールフロー |
-| First-Minute コントローラー | `py/azazel-first-minute.py` | コア状態マシン（`PROBE/NORMAL/DEGRADED/CONTAIN/DECEPTION`） |
-| Status API | `py/azazel_gadget/first_minute/controller.py` | `10.55.0.10:8082` で JSON とアクション API を提供 |
-| 制御デーモン | `py/azazel_control/daemon.py` | Unix socket `/run/azazel/control.sock` 経由でアクション実行と Wi-Fi scan/connect |
-| Web UI（オプション） | `azazel_web/app.py` | Caddy 経由の HTTPS ダッシュボード（`https://10.55.0.10`）+ Flask バックエンド（`127.0.0.1:8084`） |
-| Captive Portal Viewer（オプション） | `scripts/azazel-portal-viewer.sh` | `azazel-portal-viewer.service` で仮想画面 Chromium を noVNC (`:6080/vnc.html`) 公開 |
-| TUI モニター | `py/azazel_gadget/cli_unified.py` | 手動更新型のターミナル監視 UI |
-| E-Paper ツール | `py/azazel_epd.py`, `py/boot_splash_epd.py` | ステータス/警告表示および起動/終了スプラッシュ |
-
----
-
-## Captive Probe ロール分離
-
-`first_minute.yaml` では、経路用IFとキャプティブ判定IFを分離します。
-
-```yaml
-interfaces:
-  upstream: auto
-  captive_probe: auto
-  downstream: usb0
-
-captive_probe_policy: wifi_prefer  # wifi_prefer | upstream_same | any
-suppress_auto_wifi: true
-```
-
-- `upstream`: NAT/経路用途
-- `captive_probe`: `curl --interface` で束縛してキャプティブ判定
-- `wifi_state=DISCONNECTED` 時は `ssid/ip_wlan/gateway_ip/bssid` の stale 値をクリア
-
----
-
-## TUI（統合監視インターフェース）の見方
-
-### 起動方法
+例:
 
 ```bash
-sudo python3 py/azazel_gadget/cli_unified.py
-```
-
-互換のため、明示Textualフラグも利用可能:
-
-```bash
-sudo python3 py/azazel_gadget/cli_unified.py --textual
-```
-
-メニュー先頭起動（起動直後に統合メニューを開く）:
-
-```bash
-sudo python3 py/azazel_gadget/cli_unified.py --menu
-```
-
-EPD はデフォルト有効です。必要時のみ無効化:
-
-```bash
-sudo python3 py/azazel_gadget/cli_unified.py --disable-epd
-```
-
-curses フォールバック:
-
-```bash
-sudo python3 py/azazel_gadget/cli_unified.py --curses
-```
-
-端末の色初期化で失敗する場合:
-
-```bash
-TERM=xterm-256color python3 py/azazel_gadget/cli_unified.py
-```
-
-### 画面構成
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│ Azazel-Gadget | 📶 SSID: Wired:eth0 | ⬇️ usb0 | ⬆️ eth0 | 🕐 12:34:56 │
-│ CPU 4.1% | Mem 1173/7820MB (15%) | View: SNAPSHOT (manual) Age:🟢00:00:01 │
-├─────────────────────────────────────────────────────────────┤
-│ Suspicion: 0 | Risk Score: 🟢 0/100                         │
-│ ✅ SAFE        推奨：...                                    │
-│ 理由：...                                                   │
-│ Threat: [⚪⚪⚪⚪⚪] LOW                                       │
-│ 次：...                                                     │
-│ Monitoring: Suricata=ON  OpenCanary=ON  ntfy=ON            │
-├──────────────────────┬──────────────────────────────────────┤
-│ Connection           │ Control / Safety                     │
-│ SSID: ...            │ QUIC: ⛔ BLOCKED / ✓ ALLOWED        │
-│ BSSID: ...           │ DoH:  ⛔ BLOCKED / ✓ ALLOWED        │
-│ Signal: ... dBm      │ Degrade: ON / OFF                    │
-│ Gateway: ...         │ Down/Up: X.Y / X.Y Mbps              │
-│ State: ...           │ Probe: tls_ok/tls_total (...blocked) │
-│ Internet: ...        │ IDS: C/W/I                            │
-│ Captive: ...         │ DNS: OK/WARN/BLK, Traffic: ↓/↑       │
-├──────────────────────┴──────────────────────────────────────┤
-│ Evidence & State                                             │
-│ State: SAFE  Suspicion: 0  CPU Temp: 37.0C  CPU: 4.1%  Memory: 15% │
-│ Scan Results: 31 APs (low)                                  │
-│ 🟢 / 🟡 / 🔴 evidence lines ...                              │
-│ Decision: State: SAFE, Suspicion: 0                         │
-├─────────────────────────────────────────────────────────────┤
-│ Flow: PROBE → DEGRADED → NORMAL → ✅ SAFE                   │
-│ [U] Refresh  [A] Stage-Open  [R] Re-Probe  [C] Contain  [L] Details  [M] Menu  [Q] Quit │
-│ Hint: この画面は自動更新しません。必要時に [U] で更新してください。 │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 主要な読み方
-
-- 状態バッジ: `CHECKING / SAFE / LIMITED / CONTAINED / DECEPTION`
-- 脅威レベルは `internal.suspicion` に連動:
-  - `0-14`: `LOW`
-  - `15-29`: `MEDIUM`
-  - `30-49`: `HIGH`
-  - `50以上`: `CRITICAL`
-- Age 表示:
-  - `0-30秒`: 緑
-  - `31-120秒`: 黄
-  - `121秒以上`: 赤
-- Signal は `signal_dbm` からバー表示（取得できる場合）
-- Captive は `connection.captive_portal` と reason を表示
-- `Scan Results` は AP数と混雑度を表示
-
-### キー操作
-
-| キー | 機能 | 説明 |
-|------|------|------|
-| **[U]** | Refresh | スナップショットを手動更新（チャンネルスキャンも実行） |
-| **[A]** | Stage-Open | 制限状態から通常モードへ移行指示 |
-| **[R]** | Re-Probe | 再度プローブテストを実行 |
-| **[C]** | Contain | 隔離モードへ移行 |
-| **[L]** | Details | 詳細情報画面（Evidence履歴30件、内部状態） |
-| **[Q]** | Quit | 終了 |
-
-### Details画面（[L]キーで遷移）
-
-- **Evidence履歴**: 過去30件の証拠ログを表示
-- **内部状態**:
-  - `State`: ステートマシンの現在状態（PROBE/NORMAL/DEGRADED/CONTAIN/DECEPTION）
-  - `Suspicion`: 疑わしさスコア（0-100）
-  - `Decay`: 減衰値
-  - `Rules`: 制御ルール詳細
-- **[B]キー**でメイン画面に戻る
-
----
-
-## インストール手順
-
-**統合インストーラーで完全セットアップが完了します。** 詳細は [installer/README.md](installer/README.md) を参照してください。
-
-### 前提条件
-
-- **Raspberry Pi Zero 2 W** 上で Raspberry Pi OS Lite 64-bit を実行中
-- **USB ガジェットモード** を設定済み：
-  - `/boot/config.txt` に `dtoverlay=dwc2` を追記
-  - `/boot/cmdline.txt` に `modules-load=dwc2,g_ether` を追記
-  - 再起動後、`usb0` が使用可能
-- リポジトリを `/home/azazel/azazel` に展開
-
-### クイックスタート（推奨）
-
-```bash
-cd ~/azazel
-sudo ./install.sh
-```
-
-**それだけです。** 以下が自動化されます：
-
-✅ **Stage 00**: 前提条件確認（root、OS、ディスク、インターフェース）  
-✅ **Stage 10**: 依存パッケージ導入（nftables、dnsmasq、Python venv など）  
-✅ **Stage 20**: ネットワーク設定（usb0、NAT、iptables）  
-  - **ネットワーク変更を自動検出** → 再起動を要求 → `--resume` で再開可能  
-✅ **Stage 30**: 設定ファイルをデプロイ（/etc/azazel-zero/）  
-✅ **Stage 40**: systemd ユニットを登録・有効化  
-✅ **Stage 99**: 全サービスを検証・完了
-
-### ネットワーク変更時の対応
-
-インストール中に wlan0 の IP が変わった場合（DHCP 再割り当てなど）：
-
-1. **Stage 20** でネットワーク変更を検出
-2. 再起動を促すメッセージが表示される
-3. 状態を保存して安全に終了
-4. 再起動後、以下を実行：
-   ```bash
-   sudo ./install.sh --resume
-   ```
-5. **Stage 30** から続行
-
-### オプション機能の有効化
-
-```bash
-# Web UI + OpenCanary + ntfy + Portal Viewer を含める
-# （E-Paper はインストーラーでデフォルト有効）
-sudo ./install.sh --with-webui --with-canary --with-ntfy --with-portal-viewer
-
-# すべてのオプション機能を含める
 sudo ./install.sh --all
-
-# 実行内容を確認のみ（変更しない）
-sudo ./install.sh --dry-run
+# 再起動が必要になった場合
+sudo ./install.sh --resume
 ```
 
-**利用可能なオプション：**
+## Web API 一覧（現行）
 
-| オプション | 説明 |
-|----------|------|
-| `--with-webui` | HTTPS（Caddy）+ Flask バックエンドの Web UI を有効化 |
-| `--with-canary` | OpenCanary ハニーポット機能を有効化 |
-| `--with-epd` | Waveshare E-Paper ドライバを導入（デフォルト有効） |
-| `--with-ntfy` | ntfy 通知機能を有効化 |
-| `--with-portal-viewer` | noVNC ベースのポータル操作ビューア（6080番）を有効化 |
-| `--all` | すべてのオプションを有効化 |
-| `--dry-run` | 実行内容を表示（変更なし） |
-| `--resume` | 中断された場所から再開 |
-| `--auto-reboot` | Stage 20 でネットワーク変更検出時に自動再起動 |
-| `--debug` | インストーラのデバッグログを有効化 |
+| Endpoint | 内容 |
+|---|---|
+| `GET /` | ダッシュボード |
+| `GET /api/state` | 状態 + 監視状態 + portal viewer 状態 |
+| `GET /api/state/stream` | 状態 SSE |
+| `GET /api/events/stream` | ntfy ブリッジ SSE |
+| `GET /api/portal-viewer` | noVNC 状態/URL |
+| `POST /api/portal-viewer/open` | portal viewer 起動/URL返却 |
+| `POST /api/action` | 新形式アクション |
+| `POST /api/action/<action>` | 旧形式アクション |
+| `GET /api/wifi/scan` | Wi-Fi スキャン（現状トークン不要） |
+| `POST /api/wifi/connect` | Wi-Fi 接続 |
+| `GET /api/certs/azazel-webui-local-ca/meta` | ローカルCAメタ情報 |
+| `GET /api/certs/azazel-webui-local-ca.crt` | ローカルCAダウンロード |
+| `GET /health` | Web バックエンドヘルス |
 
-### ntfy 実運用チャネル
+許可アクション:
+`refresh`, `reprobe`, `contain`, `release`, `details`, `stage_open`, `disconnect`, `wifi_scan`, `wifi_connect`, `portal_viewer_open`, `shutdown`, `reboot`
 
-`--with-ntfy` を有効化した場合、Azazel-Gadget の通知で実際に利用する ntfy topic は次の 2 つです。
+トークン認証:
+- Header: `X-AZAZEL-TOKEN` / `X-Auth-Token`
+- Query: `?token=...`
 
-- `azg-alert-critical`（重大アラート）
-- `azg-info-status`（状態/情報通知）
+根拠: `azazel_web/app.py`
 
-デバイス上での確認コマンド:
+## オペレータ向けUI
 
-```bash
-sudo ntfy access
-```
+- Web UI: `azazel_web/`
+- 統合 TUI（モニタ/メニュー）: `py/azazel_gadget/cli_unified.py`
+- 互換ランチャー: `py/azazel_menu.py`
+- 端末ステータス表示: `py/azazel_status.py`
+- E-paper 描画/制御: `py/azazel_epd.py`, `py/boot_splash_epd.py`
 
-### セットアップ後
+## テスト関連
 
-インストール完了後：
+- 単体テスト: `tests/`
+- 回帰テストスクリプト: `scripts/tests/regression/`
+- UIスタックスモーク: `scripts/tests/e2e/run_ui_stack_smoke.sh`
 
-1. **Web UI にアクセス**（MacBook 側から usb0 経由）：
-   ```
-   https://10.55.0.10
-   ```
-2. **Captive Portal Viewer にアクセス**（導入時）：
-   ```
-   http://10.55.0.10:6080/vnc.html
-   ```
+## パススキーマと命名互換
 
-3. **systemd サービスの状態確認**：
-   ```bash
-   systemctl status azazel-first-minute.service
-   systemctl status azazel-control-daemon.service
-   systemctl status usb0-static.service
-   ```
+2系統の命名をサポートしています。
+- 現行: `azazel-gadget`（`/etc/azazel-gadget`, `/run/azazel-gadget`, `~/.azazel-gadget`）
+- 旧名: `azazel-zero`（`/etc/azazel-zero`, `/run/azazel-zero`, `~/.azazel-zero`）
 
-4. **API の疎通確認**：
-   ```bash
-   curl http://10.55.0.10:8082/
-   curl -k https://10.55.0.10/health
-   ```
+スキーマ補助/移行は `py/azazel_gadget/path_schema.py` に実装されています。
+旧パス互換の廃止目安は `2026-12-31` です。
 
-5. **ログ確認**（リアルタイム監視）：
-   ```bash
-   journalctl -u azazel-first-minute.service -f
-   ```
+## ディレクトリ構成（主要）
 
-詳細な設定変更やトラブルシューティングについては [installer/README.md](installer/README.md) を参照してください。
+| Path | 内容 |
+|---|---|
+| `py/azazel_gadget/` | 制御、センサー、Tactics、パススキーマ |
+| `py/azazel_control/` | 制御デーモン、Wi-Fi処理、アクションスクリプト |
+| `azazel_web/` | Flask バックエンド + フロント |
+| `systemd/` | service/timer ユニット |
+| `installer/` | 段階的インストーラ |
+| `configs/` | 既定設定テンプレート |
+| `scripts/` | 実行補助とテストスクリプト |
+| `docs/` | 開発/アーカイブ文書 |
 
----
+## ライセンス
 
-## install.sh 実行後の最小トラブルシュート
-
-`install.sh` 完了後に動作がおかしい場合は、まず以下だけ確認してください。
-
-```bash
-# 1) コアサービス状態
-sudo systemctl status azazel-first-minute.service azazel-control-daemon.service usb0-static.service
-
-# 2) 直近ログ
-sudo journalctl -u azazel-first-minute.service -n 80 --no-pager
-
-# 3) スナップショット/API
-ls -l /run/azazel-zero/ui_snapshot.json
-curl -s http://10.55.0.10:8082/ | jq .
-```
-
-`--with-webui` 有効時:
-
-```bash
-sudo systemctl status azazel-web.service caddy.service
-curl -k https://10.55.0.10/health
-```
-
-`usb0` の DHCP/DNS が不安定な場合:
-
-```bash
-sudo bash bin/diagnose_dhcp.sh
-```
-
-詳細は `installer/README.md` と `docs/dev-archive/` を参照してください。
+リポジトリ内の `LICENSE`（存在する場合）を参照してください。

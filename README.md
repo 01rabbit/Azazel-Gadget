@@ -1,396 +1,171 @@
-# Azazel-Gadget
+# Azazel-Gadget (Azazel-Zero) — Cyber Scapegoat Gateway
 
-English | [日本語](/README_ja.md)
+Azazel-Gadget (formerly Azazel-Zero) is a portable defensive gateway for untrusted Wi-Fi environments on Raspberry Pi Zero 2 W / Pi 4-class devices.
 
-## Concept
+This README is implementation-first: it describes features that are currently present in this repository and how they are connected.
 
-**Azazel-Gadget** is a prototype of a **“Substitute Barrier”** running on Raspberry Pi Zero 2 W.  
-It brings the Azazel System’s **delaying action** into a practical form while returning to the roots of the **Substitute Barrier** and **Barrier Maze**.
+## Implemented capabilities (repo-verified)
 
-### Compared to Azazel-Pi
+### 1) First-minute control plane
+- Main controller tracks upstream health, captive portal status, and risk transitions (`NORMAL`/`DEGRADED`/`CONTAIN`).
+- Writes UI snapshot JSON consumed by Web UI and TUI.
+- Exposes local Status API (`:8082`) with action endpoints (`/action/*`) and details endpoint (`/details`).
+- Includes tactics decision logging (`decision_explanations.jsonl`) and ntfy notifier hooks.
+- In `DECEPTION`, applies `tc` delay only to Suricata-confirmed OpenCanary attack flows (targeted Delay-to-Win).
 
-- **Azazel-Pi**  
-  - A **Portable Security Gateway (Cyber Scapegoat Gateway)** based on Raspberry Pi 5  
-  - A **concept model** to cheaply protect **small temporary networks**  
-  - Heavily experimental for trying multiple technical elements
+Reference: `py/azazel_gadget/first_minute/controller.py`
 
-- **Azazel-Gadget**  
-  - A **trimmed, lightweight edition** with narrowed scope, designed for real operation  
-  - A physical barrier focused on portability and practicality  
-  - Unlike the concept-model Azazel-Pi, this is a **deployable, practical model**
+### 2) Action/control daemon (Unix socket)
+- Dedicated daemon at `/run/azazel/control.sock`.
+- Executes action scripts, Wi-Fi scan/connect handlers, and portal-viewer startup workflow.
+- Supports control-plane snapshot streaming (`watch_snapshot`) for clients.
+- Includes path-schema actions (`path_schema_status`, `migrate_path_schema`).
 
----
+Reference: `py/azazel_control/daemon.py`, `systemd/azazel-control-daemon.service`
 
-## Design Principles
+### 3) Web UI backend (Flask)
+- Dashboard + state API + SSE state stream.
+- Action API (new and legacy format), Wi-Fi scan/connect API, portal-viewer APIs.
+- ntfy event bridge SSE endpoint.
+- CA certificate metadata/download endpoints for local HTTPS onboarding.
+- Token auth via header or query (if token file exists).
 
-- **Portability**: fits in a shirt pocket  
-- **Inevitability**: forcibly interposes between device and external network  
-- **Simplicity**: plug USB and the firewall is in place  
-- **Delaying defense**: waste the attacker’s time (core of the Azazel System)
+Reference: `azazel_web/app.py`, `systemd/azazel-web.service`
 
----
+### 4) Portal viewer (noVNC)
+- Browser-assisted captive-portal workflow (Chromium + Xvfb + x11vnc + noVNC).
+- Web UI can start and open it on demand (`/api/portal-viewer/open`).
+- Runtime start URL override is supported.
 
-## Implementation
+Reference: `scripts/azazel-portal-viewer.sh`, `systemd/azazel-portal-viewer.service`
 
-### Base
+### 5) E-paper integration
+- Boot/shutdown splash service.
+- Periodic captive-portal detection display updates.
+- Suricata-linked e-paper alert updates.
 
-- **Raspberry Pi Zero 2 W**
+Reference: `systemd/azazel-epd.service`, `systemd/azazel-epd-shutdown.service`, `systemd/azazel-epd-portal.service`, `systemd/azazel-epd-portal.timer`, `systemd/suri-epaper.service`
 
-### Network
+### 6) Optional local monitoring/deception
+- OpenCanary systemd unit and startup wrapper.
+- Suricata integration and monitoring-state reflection in UI.
+- Optional local ntfy server (`--with-ntfy`) and `/api/events/stream` bridge.
 
-- **USB OTG gadget mode**  
-  - Single USB cable supplies power and virtual networking  
-  - Plug into a laptop and it boots immediately
+Reference: `systemd/opencanary.service`, `azazel_web/app.py`, `scripts/install_ntfy.sh`
 
-### Lightweight Protection
+## Runtime dependency map
 
-- Blocking/latency via **iptables/nftables**  
-- Delay/jitter injection with **tc (Traffic Control)**  
-- **Custom Python scripts** for dynamic control and notifications  
-- **Wi-Fi Safety Sensor** (Python + `iw` + `tcpdump`) detects Evil AP / MITM / DNS & DHCP spoofing, issues danger tags, and auto-disconnects
+1. `azazel-first-minute.service`
+- Produces state snapshot and Status API (`:8082`).
+2. `azazel-control-daemon.service`
+- Bridges action requests over `/run/azazel/control.sock`.
+3. `azazel-web.service`
+- Flask backend (`127.0.0.1:8084` by default), reads snapshot and calls control daemon/Status API.
+4. Optional `caddy.service` (installer `--with-webui`)
+- TLS reverse proxy (`https://<MGMT_IP>:443`) to Flask backend.
+5. Optional `azazel-portal-viewer.service`
+- noVNC endpoint (default `10.55.0.10:6080`), started on demand by API.
 
-### Status Display
+## Systemd units in this repo
 
-- **E-Paper**  
-  - 2.13" monochrome (250×122)  
-  - Compact view of threat level/action/RTT/queue state/captive-portal detection
+| Unit | Purpose |
+|---|---|
+| `azazel-first-minute.service` | Main control-plane process |
+| `azazel-control-daemon.service` | Unix socket action daemon |
+| `azazel-web.service` | Flask backend API/UI |
+| `azazel-portal-viewer.service` | Captive-portal viewer (noVNC) |
+| `usb0-static.service` | Forces static IPv4 on `usb0` |
+| `azazel-nat.service` | iptables-based forwarding/NAT helper |
+| `azazel-epd.service` | E-paper startup status |
+| `azazel-epd-shutdown.service` | E-paper shutdown clear/splash |
+| `azazel-epd-portal.service` + `.timer` | E-paper captive-portal checks |
+| `suri-epaper.service` | Suricata-driven E-paper updates |
+| `opencanary.service` | Optional deception service |
 
----
+## Installer feature switches
 
-## Threat Evaluation Pipeline
+Main entrypoint: `install.sh`
 
-Uses a deterministic two-layer engine that runs even on Pi Zero 2 W.
+| Option | Effect |
+|---|---|
+| `--with-webui` | Installs Flask venv + Caddy HTTPS reverse proxy |
+| `--with-canary` | Installs/enables OpenCanary |
+| `--with-ntfy` | Installs local ntfy server (`:8081`) |
+| `--with-portal-viewer` | Installs noVNC/Chromium stack |
+| `--with-epd` | Enables Waveshare E-Paper dependencies (default ON) |
+| `--all` | Enables all optional features above |
+| `--resume` | Resume after reboot-required network stage |
 
-- **Layer 1: Wi-Fi Safety Sensor**  
-  - `py/azazel_gadget/sensors/wifi_safety.py` inspects `iw dev … link` and short `tcpdump` captures to detect ARP/DHCP/DNS anomalies.  
-  - Emits tags and metadata such as `evil_ap`, `mitm`, `arp_spoof`, `dhcp_spoof`, `dns_spoof`, `tls_downgrade`, `captive_portal`, `phish`.
-
-- **Layer 2: Mock-LLM Core**  
-  - `py/azazel_gadget/core/mock_llm_core.py` maps inputs to legacy categories (`scan`, `bruteforce`, `exploit`, `malware`, `sqli`, `dos`, `unknown`).  
-  - Modernized from regex + randomness to hash-based deterministic replies, outputting risk (1–5) and rationale consistently.  
-  - Profile `"zero"` raises risk when Evil AP / MITM tags exist, ensuring Danger/Disconnect decisions.
-
-- **Threat Judge wrapper**  
-  - `py/azazel_gadget/app/threat_judge.py` bundles tags and final decisions into JSON that UI/automation can consume (e.g., immediate disconnect for `risk >= 4` or `evil_ap`).
-
-Heavyweight ML remains a future research theme; the current deterministic stack alone provides the automation needed for a portable shield.
-
----
-
-## Operator Console & Automation
-
-- **TUI (terminal UI)**  
-  - `py/azazel_gadget/cli_unified.py` is the unified monitoring TUI showing Wi-Fi state, threat level, channel congestion, control rules in real time.
-  - Colorful icons and color-coding for intuitive situational awareness.
-  - Textual mode is the primary operator UI (default with no UI flag).
-  - Use `--curses` only when fallback is needed.
-  - Open the integrated control menu with `[M]` (execute actions from the monitor screen).
-  
-- **tmux console**  
-  - `py/azazel_menu.py` is now a compatibility launcher to the integrated monitor menu (`cli_unified.py --menu`).  
-  - `py/azazel_status.py` is a telemetry panel showing SSID/BSSID, USB gadget IP, RSSI, captive-portal indicators, etc.
-  - Textual mode:
-    - `python3 py/azazel_menu.py` (compat launcher)
-    - `python3 py/ssid_list.py --textual [iface]`
-
----
-
-## Runtime Components
-
-| Component | Entry Point | Notes |
-|-----------|-------------|-------|
-| Unified installer | `install.sh`, `installer/stages/*.sh` | Single installation flow with Stage 00/10/20/30/40/99 |
-| First-Minute controller | `py/azazel-first-minute.py` | Core state machine (`PROBE/NORMAL/DEGRADED/CONTAIN/DECEPTION`) |
-| Status API | `py/azazel_gadget/first_minute/controller.py` | JSON + actions on `10.55.0.10:8082` |
-| Control daemon | `py/azazel_control/daemon.py` | Unix socket `/run/azazel/control.sock`, executes action scripts and Wi-Fi scan/connect |
-| Web UI (optional) | `azazel_web/app.py` | HTTPS dashboard via Caddy (`https://10.55.0.10`) + Flask backend (`127.0.0.1:8084`) |
-| Captive Portal Viewer (optional) | `scripts/azazel-portal-viewer.sh` | Chromium on virtual display + noVNC via `azazel-portal-viewer.service` (`:6080/vnc.html`) |
-| TUI monitor | `py/azazel_gadget/cli_unified.py` | Manual-refresh terminal monitor |
-| E-Paper tools | `py/azazel_epd.py`, `py/boot_splash_epd.py` | Status/alert rendering and boot/shutdown splash |
-
----
-
-## Captive Probe Roles
-
-`first_minute.yaml` now separates route role and captive-probe role:
-
-```yaml
-interfaces:
-  upstream: auto
-  captive_probe: auto
-  downstream: usb0
-
-captive_probe_policy: wifi_prefer  # wifi_prefer | upstream_same | any
-suppress_auto_wifi: true
-```
-
-- `upstream`: NAT/routing interface.
-- `captive_probe`: interface bound with `curl --interface` for captive check.
-- `wifi_state=DISCONNECTED` clears stale `ssid/ip_wlan/gateway_ip/bssid`.
-
----
-
-## How to Read the TUI (Integrated Monitoring)
-
-### Launch
+Typical:
 
 ```bash
-sudo python3 py/azazel_gadget/cli_unified.py
-```
-
-Legacy explicit Textual flag (still supported for compatibility):
-
-```bash
-sudo python3 py/azazel_gadget/cli_unified.py --textual
-```
-
-Menu-first launch (opens control menu immediately):
-
-```bash
-sudo python3 py/azazel_gadget/cli_unified.py --menu
-```
-
-EPD is enabled by default. Disable only when needed:
-
-```bash
-sudo python3 py/azazel_gadget/cli_unified.py --disable-epd
-```
-
-Curses fallback:
-
-```bash
-sudo python3 py/azazel_gadget/cli_unified.py --curses
-```
-
-If your terminal has color-init issues:
-
-```bash
-TERM=xterm-256color python3 py/azazel_gadget/cli_unified.py
-```
-
-### Layout
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│ Azazel-Gadget | 📶 SSID: Wired:eth0 | ⬇️ usb0 | ⬆️ eth0 | 🕐 12:34:56 │
-│ CPU 4.1% | Mem 1173/7820MB (15%) | View: SNAPSHOT (manual) Age:🟢00:00:01 │
-├─────────────────────────────────────────────────────────────┤
-│ Suspicion: 0 | Risk Score: 🟢 0/100                         │
-│ ✅ SAFE        Recommendation: ...                          │
-│ Reason: ...                                                 │
-│ Threat: [⚪⚪⚪⚪⚪] LOW                                       │
-│ Next: ...                                                   │
-│ Monitoring: Suricata=ON  OpenCanary=ON  ntfy=ON            │
-├──────────────────────┬──────────────────────────────────────┤
-│ Connection           │ Control / Safety                     │
-│ SSID: ...            │ QUIC: ⛔ BLOCKED / ✓ ALLOWED        │
-│ BSSID: ...           │ DoH:  ⛔ BLOCKED / ✓ ALLOWED        │
-│ Signal: ... dBm      │ Degrade: ON / OFF                    │
-│ Gateway: ...         │ Down/Up: X.Y / X.Y Mbps              │
-│ State: ...           │ Probe: tls_ok/tls_total (...blocked) │
-│ Internet: ...        │ IDS: C/W/I                            │
-│ Captive: ...         │ DNS: OK/WARN/BLK, Traffic: ↓/↑       │
-├──────────────────────┴──────────────────────────────────────┤
-│ Evidence & State                                             │
-│ State: SAFE  Suspicion: 0  CPU Temp: 37.0C  CPU: 4.1%  Memory: 15% │
-│ Scan Results: 31 APs (low)                                  │
-│ 🟢 / 🟡 / 🔴 evidence lines ...                              │
-│ Decision: State: SAFE, Suspicion: 0                         │
-├─────────────────────────────────────────────────────────────┤
-│ Flow: PROBE → DEGRADED → NORMAL → ✅ SAFE                   │
-│ [U] Refresh  [A] Stage-Open  [R] Re-Probe  [C] Contain  [L] Details  [M] Menu  [Q] Quit │
-│ Hint: This screen does not auto-refresh. Press [U] when needed.             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Main Interpretation Rules
-
-- State badge: `CHECKING / SAFE / LIMITED / CONTAINED / DECEPTION`
-- Threat level uses `internal.suspicion`:
-  - `0-14`: `LOW`
-  - `15-29`: `MEDIUM`
-  - `30-49`: `HIGH`
-  - `50+`: `CRITICAL`
-- Age indicator:
-  - `0-30s`: green
-  - `31-120s`: yellow
-  - `121s+`: red
-- Signal is rendered as bars from `signal_dbm` when available
-- Captive line reflects `connection.captive_portal` and reason
-- `Scan Results` is based on channel scan summary (`ap_count`, congestion)
-
-### Key bindings
-
-| Key | Function | Description |
-|-----|----------|-------------|
-| **[U]** | Refresh | Manually update snapshot (also runs channel scan) |
-| **[A]** | Stage-Open | Move from restricted to normal mode |
-| **[R]** | Re-Probe | Run probe test again |
-| **[C]** | Contain | Enter containment mode |
-| **[L]** | Details | Detail view (30 evidence entries, internal state) |
-| **[Q]** | Quit | Exit |
-
-### Details screen (via [L])
-
-- **Evidence history**: last 30 evidence entries
-- **Internal state**:
-  - `State`: current state machine status (PROBE/NORMAL/DEGRADED/CONTAIN/DECEPTION)
-  - `Suspicion`: suspicion score (0–100)
-  - `Decay`: decay value
-  - `Rules`: control rule details
-- Press **[B]** to return to main screen
-
----
-
-## Installation
-
-**Complete setup with the unified installer.** See [installer/README.md](installer/README.md) for details.
-
-### Prerequisites
-
-- **Raspberry Pi Zero 2 W** running Raspberry Pi OS Lite 64-bit
-- **USB gadget mode** configured:
-  - Add `dtoverlay=dwc2` to `/boot/config.txt`
-  - Add `modules-load=dwc2,g_ether` to `/boot/cmdline.txt`
-  - After reboot, `usb0` is available
-- Repository deployed to `/home/azazel/azazel`
-
-### Quick Start (Recommended)
-
-```bash
-cd ~/azazel
-sudo ./install.sh
-```
-
-**That's it.** The following is automatically executed:
-
-✅ **Stage 00**: Prerequisites check (root, OS, disk, interfaces)  
-✅ **Stage 10**: Dependency installation (nftables, dnsmasq, Python venv, etc.)  
-✅ **Stage 20**: Network configuration (usb0, NAT, iptables)  
-  - **Auto-detect network changes** → prompt reboot → resumable with `--resume`  
-✅ **Stage 30**: Deploy configs to `/etc/azazel-zero/`  
-✅ **Stage 40**: Register and enable systemd units  
-✅ **Stage 99**: Validate all services and complete
-
-### Network Change Handling
-
-If wlan0 IP changes during installation (e.g., DHCP reassignment):
-
-1. **Stage 20** detects the network change
-2. Displays a reboot prompt message
-3. Saves state and exits safely
-4. After reboot, run:
-   ```bash
-   sudo ./install.sh --resume
-   ```
-5. Continues from **Stage 30**
-
-### Enable Optional Features
-
-```bash
-# Include Web UI + OpenCanary + ntfy + Portal Viewer
-# (E-Paper is enabled by default in the installer)
-sudo ./install.sh --with-webui --with-canary --with-ntfy --with-portal-viewer
-
-# Enable all optional features
 sudo ./install.sh --all
-
-# Preview only (no changes)
-sudo ./install.sh --dry-run
+# if prompted for reboot:
+sudo ./install.sh --resume
 ```
 
-**Available Options:**
+## Web API surface (current)
 
-| Option | Description |
-|--------|-------------|
-| `--with-webui` | Enable Web UI with HTTPS (Caddy) and Flask backend |
-| `--with-canary` | Enable OpenCanary honeypot |
-| `--with-epd` | Install Waveshare E-Paper driver (enabled by default) |
-| `--with-ntfy` | Enable ntfy notifications |
-| `--with-portal-viewer` | Enable noVNC portal assist viewer (port 6080) |
-| `--all` | Enable all options |
-| `--dry-run` | Print actions only (no changes) |
-| `--resume` | Resume from interrupted installation |
-| `--auto-reboot` | Auto-reboot when Stage 20 detects network changes |
-| `--debug` | Enable debug logging for installer stages |
+| Endpoint | Notes |
+|---|---|
+| `GET /` | Dashboard HTML |
+| `GET /api/state` | Snapshot + monitoring + portal-viewer state |
+| `GET /api/state/stream` | SSE state stream |
+| `GET /api/events/stream` | SSE ntfy bridge events |
+| `GET /api/portal-viewer` | noVNC state/URL |
+| `POST /api/portal-viewer/open` | Start/open portal viewer |
+| `POST /api/action` | New action format |
+| `POST /api/action/<action>` | Legacy action format |
+| `GET /api/wifi/scan` | Wi-Fi scan (currently no token required) |
+| `POST /api/wifi/connect` | Wi-Fi connect |
+| `GET /api/certs/azazel-webui-local-ca/meta` | Local CA metadata |
+| `GET /api/certs/azazel-webui-local-ca.crt` | Local CA download |
+| `GET /health` | Web backend health |
 
-### ntfy Channels in Operation
+Allowed actions (API): `refresh`, `reprobe`, `contain`, `release`, `details`, `stage_open`, `disconnect`, `wifi_scan`, `wifi_connect`, `portal_viewer_open`, `shutdown`, `reboot`
 
-When `--with-ntfy` is enabled, Azazel-Gadget uses these two ntfy topics for runtime notifications:
+Token auth:
+- Header: `X-AZAZEL-TOKEN` or `X-Auth-Token`
+- Query: `?token=...`
 
-- `azg-alert-critical` (critical alerts)
-- `azg-info-status` (status/info updates)
+Reference: `azazel_web/app.py`
 
-Quick verification on the device:
+## Operator interfaces
 
-```bash
-sudo ntfy access
-```
+- Web UI: `azazel_web/`
+- Unified TUI monitor/menu: `py/azazel_gadget/cli_unified.py`
+- Menu compatibility launcher: `py/azazel_menu.py`
+- Terminal status panel: `py/azazel_status.py`
+- E-paper renderer/controller: `py/azazel_epd.py`, `py/boot_splash_epd.py`
 
-### After Installation
+## Tests included
 
-Once complete:
+- Unit tests: `tests/`
+- Regression scripts: `scripts/tests/regression/`
+- UI stack smoke test: `scripts/tests/e2e/run_ui_stack_smoke.sh`
 
-1. **Access Web UI** (from MacBook via usb0):
-   ```
-   https://10.55.0.10
-   ```
-2. **Open Captive Portal Viewer** (if installed):
-   ```
-   http://10.55.0.10:6080/vnc.html
-   ```
+## Path schema and naming compatibility
 
-3. **Verify systemd services**:
-   ```bash
-   systemctl status azazel-first-minute.service
-   systemctl status azazel-control-daemon.service
-   systemctl status usb0-static.service
-   ```
+Both naming schemas are supported:
+- Current: `azazel-gadget` (`/etc/azazel-gadget`, `/run/azazel-gadget`, `~/.azazel-gadget`)
+- Legacy: `azazel-zero` (`/etc/azazel-zero`, `/run/azazel-zero`, `~/.azazel-zero`)
 
-4. **Check APIs**:
-   ```bash
-   curl http://10.55.0.10:8082/
-   curl -k https://10.55.0.10/health
-   ```
+Schema helpers and migration are in `py/azazel_gadget/path_schema.py`.
+Current deprecation marker for legacy compatibility paths is `2026-12-31`.
 
-5. **Monitor logs** (real-time):
-   ```bash
-   journalctl -u azazel-first-minute.service -f
-   ```
+## Repository structure (main)
 
-For advanced configuration changes and troubleshooting, see [installer/README.md](installer/README.md).
+| Path | Meaning |
+|---|---|
+| `py/azazel_gadget/` | Controller, sensors, tactics engine, path schema |
+| `py/azazel_control/` | Control daemon + Wi-Fi handlers + action scripts |
+| `azazel_web/` | Flask backend + static dashboard |
+| `systemd/` | Service and timer units |
+| `installer/` | Staged installer |
+| `configs/` | Default runtime configs |
+| `scripts/` | Runtime helpers + tests |
+| `docs/` | Development/archive notes |
 
----
+## License
 
-## Post-install Troubleshooting (Minimal)
-
-If `install.sh` completed but behavior looks wrong, check only these first:
-
-```bash
-# 1) Core services
-sudo systemctl status azazel-first-minute.service azazel-control-daemon.service usb0-static.service
-
-# 2) Recent logs
-sudo journalctl -u azazel-first-minute.service -n 80 --no-pager
-
-# 3) Snapshot/API health
-ls -l /run/azazel-zero/ui_snapshot.json
-curl -s http://10.55.0.10:8082/ | jq .
-```
-
-When `--with-webui` is enabled:
-
-```bash
-sudo systemctl status azazel-web.service caddy.service
-curl -k https://10.55.0.10/health
-```
-
-If DHCP/DNS over `usb0` is unstable:
-
-```bash
-sudo bash bin/diagnose_dhcp.sh
-```
-
-For deeper details, see `installer/README.md` and `docs/dev-archive/`.
-
----
+See `LICENSE` if present in this repository.

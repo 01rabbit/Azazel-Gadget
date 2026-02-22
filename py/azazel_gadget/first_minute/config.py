@@ -61,7 +61,15 @@ class FirstMinuteConfig:
                 "port": 8082
             },
             "suricata": {"enabled": False},
-            "deception": {"enable_if_opencanary_present": True},
+            "deception": {
+                "enable_if_opencanary_present": True,
+                "opencanary_cfg": "/etc/opencanaryd/opencanary.conf",
+                "delay_on_canary_attack": True,
+                "canary_delay_window_sec": 45.0,
+                "canary_delay_ms": 650,
+                "canary_delay_jitter_ms": 120,
+                "canary_delay_loss_percent": 0.0,
+            },
             "notify": {  # ★ ntfy デフォルト設定
                 "enabled": False,
                 "ntfy": {

@@ -175,6 +175,7 @@ def cmd_dry_run(cfg: FirstMinuteConfig) -> None:
     print("PROBE: netem 220ms/100ms; tbf 1mbit")
     print("DEGRADED: netem 150ms/50ms; tbf 2mbit")
     print("CONTAIN: netem 400ms/200ms loss 5%; tbf 512kbit")
+    print("DECEPTION: Suricata+OpenCanary target-only delay via tc prio/netem")
 
 
 def cmd_cleanup(cfg: FirstMinuteConfig, kill_dnsmasq: bool) -> None:

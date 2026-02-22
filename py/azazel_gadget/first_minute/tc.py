@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+from typing import Iterable, Tuple
 
 from .state_machine import Stage
 
@@ -23,11 +24,17 @@ class TcManager:
     def __init__(self, downstream: str, upstream: str):
         self.downstream = downstream
         self.upstream = upstream
+        self._deception_signature: tuple | None = None
+        self._deception_active = False
 
     def _run(self, args: list[str]) -> None:
         subprocess.run(["tc"] + args, check=False)
 
     def apply(self, stage: Stage) -> None:
+        # Stage-applied shaping and targeted deception-delay must not conflict.
+        self._deception_signature = None
+        self._deception_active = False
+
         # Keep lightweight shaping; Pi Zero 2 W cannot handle heavy queuing
         if stage == Stage.DEGRADED:
             # 出向き (upstream): 2Mbps 帯域制限
@@ -46,9 +53,110 @@ class TcManager:
             #    （TCP のみを遅滞したい場合は root qdisc ではなく HTB/HFSC 使用）
             self._run(["qdisc", "replace", "dev", self.upstream, "root", "handle", "1:", "tbf", "rate", "512kbit", "burst", "8kbit", "latency", "600ms"])
             self._run(["qdisc", "replace", "dev", self.downstream, "root", "handle", "2:", "netem", "delay", "400ms", "200ms", "loss", "5%"])
+        elif stage == Stage.DECEPTION:
+            # DECEPTION は Suricata+Canary 条件でのみ個別遅滞を入れるため、
+            # ここでは一旦クリアして専用メソッド側へ委譲する。
+            self.clear()
         else:
             self.clear()
 
+    def apply_deception_delay(
+        self,
+        targets: Iterable[Tuple[str, int]],
+        delay_ms: int = 650,
+        jitter_ms: int = 120,
+        loss_percent: float = 0.0,
+    ) -> None:
+        cleaned = sorted(
+            {
+                (str(ip).strip(), int(port))
+                for ip, port in targets
+                if str(ip).strip() and 1 <= int(port) <= 65535
+            }
+        )
+        if not cleaned:
+            self.clear_deception_delay()
+            return
+
+        signature = (tuple(cleaned), int(delay_ms), int(jitter_ms), float(loss_percent))
+        if signature == self._deception_signature:
+            return
+
+        self._deception_signature = signature
+        self._deception_active = True
+
+        # Rebuild upstream qdisc deterministically so stale filters do not remain.
+        self._run(["qdisc", "del", "dev", self.upstream, "root"])
+        self._run(["qdisc", "replace", "dev", self.upstream, "root", "handle", "1:", "prio", "bands", "3"])
+        self._run(["qdisc", "replace", "dev", self.upstream, "parent", "1:1", "handle", "10:", "sfq"])
+        self._run(["qdisc", "replace", "dev", self.upstream, "parent", "1:2", "handle", "20:", "sfq"])
+
+        netem_cmd = [
+            "qdisc",
+            "replace",
+            "dev",
+            self.upstream,
+            "parent",
+            "1:3",
+            "handle",
+            "30:",
+            "netem",
+            "delay",
+            f"{max(1, int(delay_ms))}ms",
+            f"{max(0, int(jitter_ms))}ms",
+            "distribution",
+            "normal",
+        ]
+        if float(loss_percent) > 0:
+            netem_cmd.extend(["loss", f"{float(loss_percent):.2f}%"])
+        self._run(netem_cmd)
+
+        pref = 200
+        for attacker_ip, canary_port in cleaned:
+            # Canary 応答 (sport=canary_port) が attacker_ip に戻るフローのみ遅延する。
+            for proto in (6, 17):  # TCP, UDP
+                self._run(
+                    [
+                        "filter",
+                        "add",
+                        "dev",
+                        self.upstream,
+                        "protocol",
+                        "ip",
+                        "parent",
+                        "1:",
+                        "pref",
+                        str(pref),
+                        "u32",
+                        "match",
+                        "ip",
+                        "dst",
+                        f"{attacker_ip}/32",
+                        "match",
+                        "ip",
+                        "protocol",
+                        str(proto),
+                        "0xff",
+                        "match",
+                        "ip",
+                        "sport",
+                        str(canary_port),
+                        "0xffff",
+                        "flowid",
+                        "1:3",
+                    ]
+                )
+                pref += 1
+
+    def clear_deception_delay(self) -> None:
+        if not self._deception_active and self._deception_signature is None:
+            return
+        self._deception_signature = None
+        self._deception_active = False
+        self._run(["qdisc", "del", "dev", self.upstream, "root"])
+
     def clear(self) -> None:
+        self._deception_signature = None
+        self._deception_active = False
         self._run(["qdisc", "del", "dev", self.downstream, "root"])
         self._run(["qdisc", "del", "dev", self.upstream, "root"])

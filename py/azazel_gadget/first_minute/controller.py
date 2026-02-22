@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import ipaddress
 import logging
 import os
 import re
@@ -15,7 +16,7 @@ import sys
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from azazel_gadget.sensors.wifi_safety import evaluate_wifi_safety
 from azazel_gadget.tactics_engine import ConfigHash, DecisionLogger
@@ -278,6 +279,26 @@ class FirstMinuteController:
             self.health_min_interval = 20.0
         # Suricata alert context
         self._last_suricata_severity: int = 0
+        self._opencanary_ports: set[int] = set()
+        self._opencanary_cfg_mtime_ns: Optional[int] = None
+        self._canary_delay_targets: Dict[Tuple[str, int], float] = {}
+        self._canary_delay_enabled = bool(self.cfg.deception.get("delay_on_canary_attack", True))
+        try:
+            self._canary_delay_window_sec = max(5.0, float(self.cfg.deception.get("canary_delay_window_sec", 45.0)))
+        except (TypeError, ValueError):
+            self._canary_delay_window_sec = 45.0
+        try:
+            self._canary_delay_ms = max(1, int(float(self.cfg.deception.get("canary_delay_ms", 650))))
+        except (TypeError, ValueError):
+            self._canary_delay_ms = 650
+        try:
+            self._canary_delay_jitter_ms = max(0, int(float(self.cfg.deception.get("canary_delay_jitter_ms", 120))))
+        except (TypeError, ValueError):
+            self._canary_delay_jitter_ms = 120
+        try:
+            self._canary_delay_loss_percent = max(0.0, float(self.cfg.deception.get("canary_delay_loss_percent", 0.0)))
+        except (TypeError, ValueError):
+            self._canary_delay_loss_percent = 0.0
 
     def preflight(self) -> None:
         if os.geteuid() != 0:
@@ -1595,15 +1616,159 @@ class FirstMinuteController:
                 events.append(obj)
         return events
 
-    def suricata_bumped(self) -> bool:
+    def _coerce_port(self, value: object) -> Optional[int]:
+        try:
+            port = int(float(str(value)))
+        except Exception:
+            return None
+        if 1 <= port <= 65535:
+            return port
+        return None
+
+    def _normalize_ipv4(self, value: object) -> Optional[str]:
+        if value is None:
+            return None
+        text = str(value).strip()
+        if not text:
+            return None
+        try:
+            addr = ipaddress.ip_address(text)
+        except ValueError:
+            return None
+        if addr.version != 4:
+            return None
+        return str(addr)
+
+    def _resolve_opencanary_ports(self) -> set[int]:
+        # Optional override to pin target ports without parsing OpenCanary config.
+        override_ports: set[int] = set()
+        override = self.cfg.deception.get("canary_ports_override", [])
+        if isinstance(override, (list, tuple)):
+            for raw in override:
+                parsed = self._coerce_port(raw)
+                if parsed is not None:
+                    override_ports.add(parsed)
+        if override_ports:
+            self._opencanary_ports = set(override_ports)
+            return set(override_ports)
+
+        cfg_path = Path(self.cfg.deception.get("opencanary_cfg", "/etc/opencanaryd/opencanary.conf"))
+        try:
+            stat = cfg_path.stat()
+            mtime_ns = stat.st_mtime_ns
+        except OSError:
+            mtime_ns = None
+
+        if (
+            mtime_ns is not None
+            and self._opencanary_cfg_mtime_ns == mtime_ns
+            and self._opencanary_ports
+        ):
+            return set(self._opencanary_ports)
+
+        ports: set[int] = set()
+        if mtime_ns is not None:
+            try:
+                payload = json.loads(cfg_path.read_text(encoding="utf-8"))
+            except Exception:
+                payload = {}
+            if isinstance(payload, dict):
+                for key, enabled in payload.items():
+                    if not isinstance(key, str) or not key.endswith(".enabled"):
+                        continue
+                    is_enabled = enabled
+                    if isinstance(is_enabled, str):
+                        is_enabled = is_enabled.strip().lower() in ("1", "true", "yes", "on")
+                    if not bool(is_enabled):
+                        continue
+                    prefix = key[: -len(".enabled")]
+                    port = self._coerce_port(payload.get(f"{prefix}.port"))
+                    if port is not None:
+                        ports.add(port)
+            self._opencanary_cfg_mtime_ns = mtime_ns
+
+        if not ports:
+            ports = {22, 80}
+        self._opencanary_ports = set(ports)
+        return set(ports)
+
+    def _extract_canary_target_from_event(self, event: Dict[str, object]) -> Optional[Tuple[str, int]]:
+        if not self._canary_delay_enabled:
+            return None
+        canary_ports = self._resolve_opencanary_ports()
+        if not canary_ports:
+            return None
+
+        local_ip = self._normalize_ipv4(self._get_interface_ip(self.cfg.interfaces.get("upstream", "")))
+        if not local_ip:
+            return None
+
+        flow = event.get("flow")
+        flow_dict = flow if isinstance(flow, dict) else {}
+
+        src_ip = self._normalize_ipv4(event.get("src_ip") or flow_dict.get("src_ip"))
+        dst_ip = self._normalize_ipv4(event.get("dest_ip") or flow_dict.get("dest_ip"))
+        src_port = self._coerce_port(event.get("src_port") or flow_dict.get("src_port"))
+        dst_port = self._coerce_port(event.get("dest_port") or flow_dict.get("dest_port"))
+
+        if dst_ip == local_ip and dst_port in canary_ports and src_ip:
+            return (src_ip, int(dst_port))
+        if src_ip == local_ip and src_port in canary_ports and dst_ip:
+            return (dst_ip, int(src_port))
+        return None
+
+    def _register_canary_delay_targets(self, targets: List[Tuple[str, int]], now: float) -> None:
+        if not self._canary_delay_enabled:
+            return
+        expires_at = now + self._canary_delay_window_sec
+        for ip_addr, port in targets:
+            ip_norm = self._normalize_ipv4(ip_addr)
+            if ip_norm is None:
+                continue
+            parsed_port = self._coerce_port(port)
+            if parsed_port is None:
+                continue
+            self._canary_delay_targets[(ip_norm, parsed_port)] = expires_at
+
+    def _active_canary_delay_targets(self, now: float) -> List[Tuple[str, int]]:
+        expired = [key for key, ttl in self._canary_delay_targets.items() if ttl <= now]
+        for key in expired:
+            self._canary_delay_targets.pop(key, None)
+        return sorted(self._canary_delay_targets.keys())
+
+    def _sync_deception_delay_tc(self, stage: Stage, now: float) -> List[Tuple[str, int]]:
+        active_targets = self._active_canary_delay_targets(now)
+        if (
+            stage == Stage.DECEPTION
+            and self._canary_delay_enabled
+            and active_targets
+            and not self.dry_run
+        ):
+            self.tc.apply_deception_delay(
+                active_targets,
+                delay_ms=self._canary_delay_ms,
+                jitter_ms=self._canary_delay_jitter_ms,
+                loss_percent=self._canary_delay_loss_percent,
+            )
+        else:
+            self.tc.clear_deception_delay()
+        return active_targets
+
+    def suricata_bumped(self) -> Dict[str, object]:
+        summary: Dict[str, object] = {
+            "alert": False,
+            "severity": 0,
+            "canary_targets": [],
+        }
         eve = Path(self.cfg.suricata.get("eve_path", "/var/log/suricata/eve.json"))
         if not self.cfg.suricata.get("enabled", False) or not eve.exists():
-            return False
+            return summary
         events = self._read_new_eve_events(eve)
         if not events:
-            return False
+            return summary
         now = time.time()
-        found_alert = False
+        max_severity = 0
+        canary_targets: set[Tuple[str, int]] = set()
         for event in events:
             if event.get("event_type") != "alert" and "alert" not in event:
                 continue
@@ -1611,17 +1776,38 @@ class FirstMinuteController:
                 sev = int((event.get("alert") or {}).get("severity", 3))
             except Exception:
                 sev = 3
-            self._last_suricata_severity = max(1, min(3, sev))
+            sev = max(1, min(3, sev))
+
             ts = self._parse_eve_timestamp(event.get("timestamp"))
-            if ts is not None:
+            if ts is None:
+                dt = 0.0
+            else:
                 dt = now - ts
                 self.logger.debug(f"[suricata] alert: ts={ts:.0f} sev={sev} dt={dt:.1f}s")
-                if dt < 30:
-                    found_alert = True
-                    return True
-        if not found_alert and events:
+            if dt >= 30:
+                continue
+
+            summary["alert"] = True
+            max_severity = max(max_severity, sev)
+            target = self._extract_canary_target_from_event(event)
+            if target is not None:
+                canary_targets.add(target)
+                self.logger.debug(
+                    "[suricata] canary target detected src=%s canary_port=%s",
+                    target[0],
+                    target[1],
+                )
+
+        if not summary["alert"] and events:
             self.logger.debug(f"[suricata] {len(events)} alerts found but all outside 30s window")
-        return False
+            return summary
+
+        if max_severity <= 0:
+            max_severity = max(1, min(3, int(self._last_suricata_severity or 3)))
+        self._last_suricata_severity = max_severity
+        summary["severity"] = max_severity
+        summary["canary_targets"] = sorted(canary_targets)
+        return summary
 
     def run_loop(self) -> None:
         self.handle_signals()
@@ -1993,13 +2179,18 @@ class FirstMinuteController:
                 
                 probe_done = True
 
-            if self.suricata_bumped():
+            suricata_ctx = self.suricata_bumped()
+            if bool(suricata_ctx.get("alert", False)):
                 signals["suricata_alert"] = True
-                signals["suricata_severity"] = max(1, min(3, int(self._last_suricata_severity or 3)))
+                signals["suricata_severity"] = max(1, min(3, int(suricata_ctx.get("severity", self._last_suricata_severity or 3))))
+                canary_targets = suricata_ctx.get("canary_targets", [])
+                if isinstance(canary_targets, list) and canary_targets:
+                    self._register_canary_delay_targets(canary_targets, time.time())
+                    signals["canary_target_alert"] = True
                 
                 # ★ Suricata アラートを通知
                 severity_name = {1: "Low", 2: "Medium", 3: "High"}.get(
-                    int(self._last_suricata_severity or 3), "Unknown"
+                    int(suricata_ctx.get("severity", self._last_suricata_severity or 3)), "Unknown"
                 )
                 self._notify_signal_alert(
                     signal_type="suricata_alert",
@@ -2028,6 +2219,8 @@ class FirstMinuteController:
                 self.current_stage = state
                 probe_done = state != Stage.PROBE
                 self.apply_stage(state)
+
+            active_canary_targets = self._sync_deception_delay_tc(state, time.time())
             
             # Tactics Engine: DecisionRecord を作成・ログ（状態遷移時のみ）
             if state != self.current_stage or "suricata_alert" in signals:
@@ -2076,6 +2269,7 @@ class FirstMinuteController:
                         features={
                             "suricata_alert": "suricata_alert" in signals,
                             "suricata_severity": int(signals.get("suricata_severity", 0)),
+                            "canary_target_alert": "canary_target_alert" in signals,
                         },
                         state_before=state_before,
                         score_delta=score_delta,
@@ -2114,6 +2308,10 @@ class FirstMinuteController:
                     "rtt_ms": 180 if state in (Stage.PROBE, Stage.DEGRADED) else 0,
                     "rate_mbps": 2.0 if state == Stage.DEGRADED else 1.0 if state == Stage.PROBE else 0,
                     "last_signals": signals,
+                    "canary_delay_enabled": self._canary_delay_enabled,
+                    "canary_delay_active": bool(state == Stage.DECEPTION and active_canary_targets),
+                    "canary_delay_target_count": len(active_canary_targets),
+                    "canary_delay_targets": [f"{ip}:{port}" for ip, port in active_canary_targets],
                     "degrade_threshold": self.cfg.state_machine.get("degrade_threshold", 20),
                     "normal_threshold": self.cfg.state_machine.get("normal_threshold", 8),
                     "contain_threshold": self.cfg.state_machine.get("contain_threshold", 50),
