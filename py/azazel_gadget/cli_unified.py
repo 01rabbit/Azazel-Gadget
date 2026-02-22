@@ -72,6 +72,7 @@ class Snapshot:
     internal: Dict[str, object]
     connection: Dict[str, object]
     monitoring: Dict[str, str]
+    attack: Dict[str, object]
     age: str = "00:00:00"
     snapshot_epoch: float = 0.0
     source: str = "SNAPSHOT"
@@ -124,6 +125,15 @@ class Snapshot:
             }
         if self.monitoring is None:
             self.monitoring = {"suricata": "UNKNOWN", "opencanary": "UNKNOWN", "ntfy": "UNKNOWN"}
+        if self.attack is None:
+            self.attack = {
+                "suricata_alert": False,
+                "suricata_severity": 0,
+                "canary_target_alert": False,
+                "canary_delay_active": False,
+                "canary_delay_target_count": 0,
+                "canary_delay_targets": [],
+            }
 
 
 def detect_unicode(force_ascii: bool, force_unicode: bool) -> bool:
@@ -171,6 +181,15 @@ def build_snapshot(data: Dict[str, object], source: str = "SNAPSHOT") -> Snapsho
         "opencanary": str(monitoring.get("opencanary", "UNKNOWN") or "UNKNOWN").upper(),
         "ntfy": str(monitoring.get("ntfy", "UNKNOWN") or "UNKNOWN").upper(),
     }
+    attack = data.get("attack", {}) if isinstance(data.get("attack"), dict) else {}
+    normalized_attack = {
+        "suricata_alert": bool(attack.get("suricata_alert", False)),
+        "suricata_severity": int(attack.get("suricata_severity", 0) or 0),
+        "canary_target_alert": bool(attack.get("canary_target_alert", False)),
+        "canary_delay_active": bool(attack.get("canary_delay_active", False)),
+        "canary_delay_target_count": int(attack.get("canary_delay_target_count", 0) or 0),
+        "canary_delay_targets": attack.get("canary_delay_targets", []) if isinstance(attack.get("canary_delay_targets", []), list) else [],
+    }
     
     return Snapshot(
         now_time=data.get("now_time", time.strftime("%H:%M:%S")),
@@ -196,6 +215,7 @@ def build_snapshot(data: Dict[str, object], source: str = "SNAPSHOT") -> Snapsho
         internal=internal,
         connection=normalized_connection,
         monitoring=normalized_monitoring,
+        attack=normalized_attack,
         age=age,
         snapshot_epoch=float(ts) if ts else 0.0,
         source=source,
@@ -1348,6 +1368,17 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
     else:
         suri_text = "IDS: (no alerts)"
         suri_color = 6
+
+    attack = snap.attack if isinstance(snap.attack, dict) else {}
+    delay_active = bool(attack.get("canary_delay_active", False))
+    delay_targets = _coerce_int(attack.get("canary_delay_target_count", 0), 0)
+    if delay_active:
+        delay_text = f"Delay=ACTIVE({delay_targets})"
+    elif snap.user_state.upper() == "DECEPTION":
+        delay_text = "Delay=ARMED"
+    else:
+        delay_text = "Delay=OFF"
+    suri_text = f"{suri_text} {delay_text}"
     
     # ネットワークスループット
     traffic_text = f"Traffic: ↓ {snap.download_mbps:.1f} Mbps / ↑ {snap.upload_mbps:.1f} Mbps" if unicode_mode else f"Traffic: D:{snap.download_mbps:.1f} U:{snap.upload_mbps:.1f} Mbps"

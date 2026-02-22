@@ -1006,6 +1006,33 @@ class FirstMinuteController:
         except Exception as e:
             self.logger.debug(f"snapshot: Suricata alerts gathering failed: {e}")
         
+        attack_summary: Dict[str, object] = {
+            "suricata_alert": False,
+            "suricata_severity": 0,
+            "canary_target_alert": False,
+            "canary_delay_active": False,
+            "canary_delay_target_count": 0,
+            "canary_delay_targets": [],
+        }
+        try:
+            with self.status_ctx_lock:
+                last_signals = self.status_ctx.get("last_signals", {})
+                if not isinstance(last_signals, dict):
+                    last_signals = {}
+                canary_delay_targets = self.status_ctx.get("canary_delay_targets", [])
+                if not isinstance(canary_delay_targets, list):
+                    canary_delay_targets = []
+                attack_summary = {
+                    "suricata_alert": bool(last_signals.get("suricata_alert", False)),
+                    "suricata_severity": int(last_signals.get("suricata_severity", 0) or 0),
+                    "canary_target_alert": bool(last_signals.get("canary_target_alert", False)),
+                    "canary_delay_active": bool(self.status_ctx.get("canary_delay_active", False)),
+                    "canary_delay_target_count": int(self.status_ctx.get("canary_delay_target_count", 0) or 0),
+                    "canary_delay_targets": [str(item) for item in canary_delay_targets],
+                }
+        except Exception:
+            pass
+
         snap = {
             "now_time": time.strftime("%H:%M:%S"),
             "snapshot_epoch": time.time(),
@@ -1050,6 +1077,8 @@ class FirstMinuteController:
             # Suricata IDS alerts
             "suricata_critical": suricata_critical,
             "suricata_warning": suricata_warning,
+            # Attack/deception context shared across WebUI/TUI/EPD.
+            "attack": attack_summary,
             # Default connection section (will be overwritten with persisted state below)
             "connection": self._default_connection_state(),
         }
@@ -1292,6 +1321,17 @@ class FirstMinuteController:
                 self.logger.debug(f"EPD: Skipping update - fingerprint unchanged")
                 return
             cmd = ["python3", str(epd_script), "--state", mode, "--msg", contain_msg]
+        elif stage == Stage.DECEPTION:
+            mode = "danger"
+            # Deception stage indicates active hostile activity under canary decoy.
+            delay_active = bool(self._active_canary_delay_targets(now))
+            deception_msg = "DELAY ACTIVE" if delay_active else "DECEPTION MODE"
+            fp = self._epd_fingerprint(mode, "", "", "", deception_msg)
+            self.logger.debug(f"EPD: fingerprint check - current={fp}, last={self.epd_last_fp}, match={fp == self.epd_last_fp}")
+            if not force and fp == self.epd_last_fp:
+                self.logger.debug(f"EPD: Skipping update - fingerprint unchanged")
+                return
+            cmd = ["python3", str(epd_script), "--state", mode, "--msg", deception_msg]
         else:
             self.logger.debug(f"EPD: Unknown stage {stage}, skipping update")
             return

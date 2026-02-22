@@ -205,6 +205,18 @@ function updateUI(state) {
         idsStatus = parts.join(', ');
     }
     updateElement('ctrlIDS', idsStatus);
+
+    // Security - Delay-to-Win (targeted canary response slowdown)
+    const attack = state.attack || {};
+    const delayActive = !!attack.canary_delay_active;
+    const delayTargetCount = Number(attack.canary_delay_target_count || 0);
+    let delayStatus = 'inactive';
+    if (delayActive) {
+        delayStatus = `ACTIVE (${delayTargetCount} target${delayTargetCount === 1 ? '' : 's'})`;
+    } else if (stateVal === 'DECEPTION') {
+        delayStatus = 'armed';
+    }
+    updateElement('ctrlCanaryDelay', delayStatus);
     
     // Evidence
     updateBadge('evidState', mapState(stateVal));

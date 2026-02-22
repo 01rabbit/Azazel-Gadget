@@ -420,6 +420,7 @@ class AzazelTextualApp(App):
         snap = self._snapshot
         connection = self._safe_get(snap, "connection", {}) or {}
         monitoring = self._safe_get(snap, "monitoring", {}) or {}
+        attack = self._safe_get(snap, "attack", {}) or {}
         degrade = self._safe_get(snap, "degrade", {}) or {}
         probe = self._safe_get(snap, "probe", {}) or {}
         dns_stats = self._safe_get(snap, "dns_stats", {}) or {}
@@ -463,6 +464,15 @@ class AzazelTextualApp(App):
         )
         self.query_one("#connection", Static).update(Text(connection_text))
 
+        delay_active = bool(attack.get("canary_delay_active", False))
+        delay_target_count = int(attack.get("canary_delay_target_count", 0) or 0)
+        if delay_active:
+            delay_text = f"ACTIVE ({delay_target_count} target{'s' if delay_target_count != 1 else ''})"
+        elif str(state).upper() == "DECEPTION":
+            delay_text = "ARMED"
+        else:
+            delay_text = "OFF"
+
         control_text = (
             "Control / Safety\n"
             f"QUIC: {self._safe_get(snap, 'quic', 'unknown')}  "
@@ -474,6 +484,7 @@ class AzazelTextualApp(App):
             f"blocked={probe.get('blocked', 0)}\n"
             f"DNS stats: ok={dns_stats.get('ok', 0)} warn={dns_stats.get('anomaly', 0)} "
             f"blocked={dns_stats.get('blocked', 0)} avg={self._safe_get(snap, 'dns_avg_ms', 0.0)}ms\n"
+            f"Delay-to-Win: {delay_text}\n"
             f"Traffic: down={self._safe_get(snap, 'download_mbps', 0.0):.1f} "
             f"up={self._safe_get(snap, 'upload_mbps', 0.0):.1f} Mbps\n"
             f"Monitoring: IDS={monitoring.get('suricata', 'UNKNOWN')} "

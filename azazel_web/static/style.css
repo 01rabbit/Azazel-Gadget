@@ -117,6 +117,14 @@ body {
     border-left-color: var(--color-danger);
 }
 
+.card-risk.contained {
+    border-left-color: #e67e22;
+}
+
+.card-risk.lockdown {
+    border-left-color: #ff3b30;
+}
+
 .risk-compact {
     display: flex;
     align-items: center;
@@ -151,6 +159,18 @@ body {
     color: var(--color-danger);
 }
 
+.score-circle.contained {
+    background: rgba(230, 126, 34, 0.2);
+    border-color: #e67e22;
+    color: #e67e22;
+}
+
+.score-circle.lockdown {
+    background: rgba(255, 59, 48, 0.2);
+    border-color: #ff3b30;
+    color: #ff3b30;
+}
+
 .risk-info {
     flex: 1;
     margin-left: 12px;
@@ -169,6 +189,14 @@ body {
 
 .risk-status.danger {
     color: var(--color-danger);
+}
+
+.risk-status.contained {
+    color: #e67e22;
+}
+
+.risk-status.lockdown {
+    color: #ff3b30;
 }
 
 .risk-level {
