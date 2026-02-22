@@ -49,6 +49,7 @@ Azazel-Gadget combines active network defense, operator-facing interfaces, and o
 ### 6) Optional local monitoring/deception
 - OpenCanary systemd unit and startup wrapper.
 - Suricata integration and monitoring-state reflection in UI.
+- Lightweight canary rules detect scans/access attempts to `22/80` from same-LAN peers on `wlan0` as well as non-local sources.
 - Optional local ntfy server (`--with-ntfy`) and `/api/events/stream` bridge.
 
 ## Architecture at a Glance

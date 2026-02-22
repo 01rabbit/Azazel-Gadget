@@ -86,12 +86,13 @@ esac
 
 write_canary_rules() {
   cat > "$CUSTOM_RULES" <<'RULES'
-# Local low-overhead rules for OpenCanary-facing services (22/80)
-alert tcp $EXTERNAL_NET any -> $HOME_NET 22 (msg:"AZAZEL CANARY SSH SYN"; flags:S; flow:to_server; classtype:attempted-recon; sid:9901001; rev:1;)
-alert tcp $EXTERNAL_NET any -> $HOME_NET 80 (msg:"AZAZEL CANARY HTTP SYN"; flags:S; flow:to_server; classtype:attempted-recon; sid:9901002; rev:1;)
-alert tcp $EXTERNAL_NET any -> $HOME_NET [22,80] (msg:"AZAZEL CANARY repeated access to canary ports"; flags:S; flow:to_server; threshold:type both, track by_src, count 8, seconds 60; classtype:attempted-recon; sid:9901003; rev:1;)
-alert tcp $EXTERNAL_NET any -> $HOME_NET 22 (msg:"AZAZEL CANARY SSH brute-force like pattern"; flags:S; flow:to_server; threshold:type both, track by_src, count 20, seconds 300; classtype:attempted-admin; sid:9901004; rev:1;)
-alert tcp $EXTERNAL_NET any -> $HOME_NET 80 (msg:"AZAZEL CANARY HTTP burst access pattern"; flags:S; flow:to_server; threshold:type both, track by_src, count 30, seconds 120; classtype:web-application-attack; sid:9901005; rev:1;)
+# Local low-overhead rules for OpenCanary-facing services (22/80).
+# Source is 'any' on purpose so same-LAN attackers on wlan0 are detected.
+alert tcp any any -> $HOME_NET 22 (msg:"AZAZEL CANARY SSH SYN"; flags:S; flow:to_server; classtype:attempted-recon; sid:9901001; rev:2;)
+alert tcp any any -> $HOME_NET 80 (msg:"AZAZEL CANARY HTTP SYN"; flags:S; flow:to_server; classtype:attempted-recon; sid:9901002; rev:2;)
+alert tcp any any -> $HOME_NET [22,80] (msg:"AZAZEL CANARY repeated access to canary ports"; flags:S; flow:to_server; threshold:type both, track by_src, count 8, seconds 60; classtype:attempted-recon; sid:9901003; rev:2;)
+alert tcp any any -> $HOME_NET 22 (msg:"AZAZEL CANARY SSH brute-force like pattern"; flags:S; flow:to_server; threshold:type both, track by_src, count 20, seconds 300; classtype:attempted-admin; sid:9901004; rev:2;)
+alert tcp any any -> $HOME_NET 80 (msg:"AZAZEL CANARY HTTP burst access pattern"; flags:S; flow:to_server; threshold:type both, track by_src, count 30, seconds 120; classtype:web-application-attack; sid:9901005; rev:2;)
 RULES
 }
 
