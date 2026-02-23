@@ -66,8 +66,11 @@ except Exception:
 
 # Configuration
 _STATE_PATHS = snapshot_path_candidates()
-STATE_PATH = _STATE_PATHS[0]  # Share TUI snapshot
-FALLBACK_STATE_PATH = _STATE_PATHS[-1]  # Fallback for testing
+_RUNTIME_STATE_PATHS = [p for p in _STATE_PATHS if str(p).startswith("/run/")]
+if not _RUNTIME_STATE_PATHS:
+    _RUNTIME_STATE_PATHS = _STATE_PATHS[:2]
+STATE_PATH = _RUNTIME_STATE_PATHS[0]  # Share TUI snapshot
+FALLBACK_STATE_PATH = _RUNTIME_STATE_PATHS[-1]  # Legacy runtime fallback
 CONTROL_SOCKET = Path("/run/azazel/control.sock")
 TOKEN_FILE = web_token_candidates()[0]
 BIND_HOST = os.environ.get("AZAZEL_WEB_HOST", "0.0.0.0")

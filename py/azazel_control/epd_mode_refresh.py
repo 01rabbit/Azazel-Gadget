@@ -12,6 +12,10 @@ from typing import Any, Dict
 
 EPD_STATE = Path("/run/azazel/epd_state.json")
 EPD_LAST_RENDER = Path("/run/azazel/epd_last_render.json")
+RUNTIME_SNAPSHOT_CANDIDATES = (
+    Path("/run/azazel-gadget/ui_snapshot.json"),
+    Path("/run/azazel-zero/ui_snapshot.json"),
+)
 
 
 def _safe_load(path: Path) -> Dict[str, Any]:
@@ -41,15 +45,55 @@ def _read_live_ssid(upstream_if: str) -> str:
 
 
 def _normal_render_spec(payload: Dict[str, Any], mode_label: str, risk_status: str) -> Dict[str, Any]:
-    ssid = str(payload.get("ssid", "")).strip() or _read_live_ssid(str(payload.get("upstream_if", "")).strip())
+    live_ssid = ""
+    live_signal: int | None = None
+    live_wifi_state = ""
+    for path in RUNTIME_SNAPSHOT_CANDIDATES:
+        data = _safe_load(path)
+        if not isinstance(data, dict):
+            continue
+        conn = data.get("connection")
+        if isinstance(conn, dict):
+            live_wifi_state = str(conn.get("wifi_state", "")).strip().upper()
+        raw_ssid = str(data.get("ssid", "")).strip()
+        if raw_ssid and raw_ssid != "-":
+            live_ssid = raw_ssid
+        raw_signal = data.get("signal_dbm")
+        try:
+            live_signal = int(float(str(raw_signal).strip()))
+        except Exception:
+            pass
+        if live_ssid or live_signal is not None:
+            break
+
+    ssid = live_ssid or str(payload.get("ssid", "")).strip() or _read_live_ssid(str(payload.get("upstream_if", "")).strip())
+    signal = live_signal if live_wifi_state == "CONNECTED" else None
     return {
         "state": "normal",
         "mode_label": str(mode_label or "SHIELD").strip().upper()[:12],
         "ssid": ssid,
         "risk_status": str(risk_status or "UNKNOWN").strip().upper(),
         "suspicion": 0,
-        "signal": None,
+        "signal": signal,
     }
+
+
+def _risk_status_from_snapshot() -> str:
+    for path in RUNTIME_SNAPSHOT_CANDIDATES:
+        data = _safe_load(path)
+        if not isinstance(data, dict):
+            continue
+        conn = data.get("connection")
+        if not isinstance(conn, dict):
+            continue
+        internet = str(conn.get("internet_check", "")).strip().upper()
+        if internet == "OK":
+            return "SAFE"
+        if internet == "FAIL":
+            return "FAIL"
+        if internet in ("N/A", "UNKNOWN"):
+            return "CHECKING"
+    return "UNKNOWN"
 
 
 def _desired_render_spec(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -66,8 +110,16 @@ def _desired_render_spec(payload: Dict[str, Any]) -> Dict[str, Any]:
         return {"state": "danger", "msg": "MODE FAIL"}
 
     if mode in ("portal", "shield", "scapegoat"):
-        net = str(payload.get("internet", "unknown")).strip().upper()
-        risk = net if net in ("OK", "FAIL") else "UNKNOWN"
+        # Prefer first-minute runtime snapshot for live internet verdict.
+        risk = _risk_status_from_snapshot()
+        if risk == "UNKNOWN":
+            net = str(payload.get("internet", "unknown")).strip().upper()
+            if net == "OK":
+                risk = "SAFE"
+            elif net == "FAIL":
+                risk = "FAIL"
+            else:
+                risk = "CHECKING"
         return _normal_render_spec(payload, mode, risk)
 
     return {"state": "warning", "msg": "MODE N/A"}
@@ -109,6 +161,8 @@ def main() -> int:
                 "--suspicion", str(desired.get("suspicion", 0)),
             ]
         )
+        if desired.get("signal") is not None:
+            cmd.extend(["--signal", str(desired.get("signal"))])
     else:
         cmd.extend(["--msg", str(desired.get("msg", "MODE"))])
 

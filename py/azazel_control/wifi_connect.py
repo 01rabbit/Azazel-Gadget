@@ -751,15 +751,18 @@ def apply_nat(wlan_iface: str, usb_iface: str) -> Dict[str, Any]:
 def update_state_json(wifi_state: str, **kwargs):
     """Update snapshot.json with Wi-Fi state (schema-aware paths)."""
     candidates = snapshot_path_candidates(home=Path.home())
-    state_path = candidates[0]
-    fallback_path = candidates[-1]
+    runtime_candidates = [p for p in candidates if str(p).startswith("/run/")]
+    if not runtime_candidates:
+        runtime_candidates = candidates[:2]
+    state_path = runtime_candidates[0]
+    fallback_path = runtime_candidates[-1]
     
     try:
         # Read from both paths to get the most complete state
         data = {}
         
         # Try all candidate paths to get the richest current state
-        for p in candidates:
+        for p in runtime_candidates:
             if not p.exists():
                 continue
             try:

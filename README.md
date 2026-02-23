@@ -74,26 +74,17 @@ Azazel-Gadget combines active network defense, operator-facing interfaces, and o
 
 ## Modes
 
-- `portal`
-  - Internet gateway behavior for `usb0` clients (NAT via `wlan0`).
-  - Decoy exposure OFF on `wlan0`.
-  - EPD sample:
-    ![Portal mode EPD sample](images/portal_composite.png)
-- `shield` (default)
-  - Drops inbound from `wlan0` while keeping `usb0` client outbound path.
-  - Decoy exposure OFF.
-  - EPD sample:
-    ![Shield mode EPD sample](images/shield_composite.png)
-- `scapegoat`
-  - Exposes only OpenCanary allowlisted ports on `wlan0`.
-  - OpenCanary runs in isolated namespace (`az_canary`) and never gets a path to `usb0`.
-  - EPD sample:
-    ![Scapegoat mode EPD sample](images/scapegoat_composite.png)
+| Mode | Behavior | EPD Sample |
+|---|---|---|
+| `portal` | Internet gateway behavior for `usb0` clients (NAT via `wlan0`). Decoy exposure is OFF on `wlan0`. | ![Portal mode EPD sample](images/portal_composite.png) |
+| `shield` (default) | Drops inbound from `wlan0` while keeping `usb0` client outbound path. Decoy exposure is OFF. | ![Shield mode EPD sample](images/shield_composite.png) |
+| `scapegoat` | Exposes only OpenCanary allowlisted ports on `wlan0`. OpenCanary runs in isolated namespace (`az_canary`) and never gets a path to `usb0`. | ![Scapegoat mode EPD sample](images/scapegoat_composite.png) |
 
 Warning display (not a mode):
-- Triggered when alert conditions are detected by the monitoring pipeline.
-- EPD sample:
-  ![Warning EPD sample](images/warning_composite.png)
+
+| Display | Trigger | EPD Sample |
+|---|---|---|
+| `WARNING` | Alert conditions detected by the monitoring pipeline. | ![Warning EPD sample](images/warning_composite.png) |
 
 Single source of truth:
 - `/etc/azazel/mode.json` (compatibly linked to `/etc/azazel-gadget/mode.json`)

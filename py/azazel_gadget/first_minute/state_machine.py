@@ -20,6 +20,8 @@ class StageContext:
     state: Stage = Stage.INIT
     suspicion: float = 0.0
     last_transition: float = field(default_factory=time.time)
+    # Separate decay clock from transition clock to avoid over-decay oscillation.
+    last_decay_at: float = field(default_factory=time.time)
     last_link_bssid: str = ""
     probe_started: float = field(default_factory=time.time)
     stable_since: float = field(default_factory=time.time)
@@ -49,39 +51,37 @@ class FirstMinuteStateMachine:
 
     def reset_for_new_link(self, bssid: str) -> None:
         # デフォルトは開放 (NORMAL) とし、検知時にのみ縮退させる
+        now = time.time()
         self.ctx.state = Stage.NORMAL
         self.ctx.suspicion = 0.0
-        self.ctx.last_transition = time.time()
-        self.ctx.probe_started = time.time()
-        self.ctx.stable_since = time.time()
+        self.ctx.last_transition = now
+        self.ctx.last_decay_at = now
+        self.ctx.probe_started = now
+        self.ctx.stable_since = now
         self.ctx.last_link_bssid = bssid
         self.ctx.last_reason = "new_link"
         self.ctx.last_suricata_alert = 0.0
 
     def force_state(self, stage: Stage, reason: str = "manual") -> Stage:
+        now = time.time()
         self.ctx.state = stage
-        self.ctx.last_transition = time.time()
+        self.ctx.last_transition = now
+        self.ctx.last_decay_at = now
         self.ctx.last_reason = reason
-        self.ctx.stable_since = time.time()
+        self.ctx.stable_since = now
         if stage == Stage.CONTAIN:
-            self.ctx.contain_entered_at = time.time()
+            self.ctx.contain_entered_at = now
         return stage
 
     def _decay(self, now: float) -> None:
-        # ★ BUG FIX: decay should NOT update last_transition
-        # last_transition is set only on state changes, not on every step
-        if self.ctx.state == Stage.INIT:
-            return  # INIT では decay しない
-        
-        # Calculate elapsed time since last_transition (state change)
-        dt = now - self.ctx.last_transition
+        # Decay must use elapsed loop time, not elapsed since the last transition.
+        dt = max(0.0, now - self.ctx.last_decay_at)
+        self.ctx.last_decay_at = now
+        if self.ctx.state == Stage.INIT or dt <= 0.0:
+            return
+
         decay_rate = self.cfg.get("decay_per_sec", 2)
-        
-        # Apply decay
         self.ctx.suspicion = max(0.0, self.ctx.suspicion - decay_rate * dt)
-        
-        # ★ FIX: Do NOT update last_transition here
-        # This stays tied to the state change timestamp, not the current step
 
     def _apply_signals(
         self,
@@ -160,6 +160,7 @@ class FirstMinuteStateMachine:
             self.ctx.suspicion = 0.0
             self.ctx.last_reason = "link_down"
             self.ctx.last_transition = now
+            self.ctx.last_decay_at = now
             return self.ctx.state, {"state": self.ctx.state.value, "suspicion": 0.0, "reason": "link_down", "changed": True}
 
         degrade_threshold = self.cfg.get("degrade_threshold", 30)
@@ -232,6 +233,7 @@ class FirstMinuteStateMachine:
         if changed:
             self.ctx.state = state
             self.ctx.last_transition = now
+            self.ctx.last_decay_at = now
         
         summary = {
             "state": self.ctx.state.value,
