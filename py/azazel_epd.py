@@ -33,13 +33,15 @@ Icon files in icons/epd/:
 """
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
 from typing import Tuple, Optional
+from datetime import datetime, timezone
 
 try:
-    from PIL import Image, ImageDraw, ImageFont, ImageChops
+    from PIL import Image, ImageDraw, ImageFont
 except ImportError:
     print("ERROR: Pillow is required. Install with: pip3 install pillow")
     sys.exit(1)
@@ -51,6 +53,7 @@ WS_LIB = "/opt/waveshare-epd/RaspberryPi_JetsonNano/python/lib"
 # Display specifications
 EPD_WIDTH = 250
 EPD_HEIGHT = 122
+LAST_RENDER_PATH = Path("/run/azazel/epd_last_render.json")
 
 # Icon file names (user-replaceable in icons/epd/)
 ICON_WIFI_STRONG = "wifi_3.png"      # Signal >= -60 dBm (very good)
@@ -249,10 +252,43 @@ def fit_text_two_lines(
     return line1, line2, font
 
 
+def suricata_alert_lines(msg: str) -> Optional[Tuple[str, str]]:
+    """
+    Return fixed 2-line label for Suricata alerts.
+    Accepts slight truncation like "Suricata Ale".
+    """
+    normalized = " ".join((msg or "").strip().split()).lower()
+    if not normalized:
+        return None
+    if normalized.startswith("suricata ale") or ("suricata" in normalized and "alert" in normalized):
+        return ("SURICATA", "ALERT")
+    return None
+
+
+def normalize_warning_reason(msg: str) -> str:
+    """
+    Normalize WARNING reason text.
+    Composite reasons that include Suricata alert are fixed to "SURICATA ALERT".
+    """
+    raw = " ".join((msg or "").strip().split())
+    if not raw:
+        return "LIMITED"
+
+    lowered = raw.lower().replace(",", " ").replace(";", " ").replace("/", " ")
+    lowered = lowered.replace("_", " ")
+    tokens = [t for t in lowered.split() if t]
+
+    if "suricata" in tokens and ("alert" in tokens or "ale" in tokens):
+        return "SURICATA ALERT"
+    if "suricata alert" in lowered or "suricata ale" in lowered:
+        return "SURICATA ALERT"
+
+    return raw.replace("_", " ").upper()
+
+
 def should_force_two_line_alert(msg: str) -> bool:
     """Force 2-line layout for known labels that clip on one line."""
-    normalized = " ".join((msg or "").strip().split()).lower()
-    return normalized.startswith("suricata alert")
+    return suricata_alert_lines(msg) is not None
 
 
 def load_icon_with_transparency(icon_path: Path, max_size: int = 48) -> Image.Image:
@@ -352,9 +388,8 @@ def render_normal(
     draw_black = ImageDraw.Draw(black_img)
     
     # Load fonts
-    # Mode line: icbmss20.ttf (as requested)
+    # Top area is 2 lines: mode (upper) + SSID (lower), as in previous layout.
     font_mode = load_font(20, "icbm")
-    # SSID line: keep Stardos and use requested size 15pt
     font_ssid = load_font(15, "stardos")
     font_evidence = load_font(20, "icbm")  # Evidence (State/Suspicion) - 20pt (icbmss20, bottom)
     
@@ -379,7 +414,7 @@ def render_normal(
     icon_y = 8
     black_img.paste(wifi_icon_1bit, (icon_x, icon_y))
     
-    # Draw mode + SSID as two stacked lines (top area), without affecting lower evidence area.
+    # Draw mode + SSID as two stacked lines in top area.
     ssid_x = icon_x + 55  # Icon width + small gap
     mode_text = (mode_label or "SHIELD").strip().upper()
     if len(mode_text) > 12:
@@ -418,14 +453,16 @@ def render_normal(
 def render_warning(msg: str, icon_dir: Path) -> Tuple[Image.Image, Image.Image]:
     """
     Render WARNING state:
-    - White background
+    - Black background
     - Warning icons on left and right (RED, 30pt size)
     - "WARNING" text (center, 30pt, red)
     - Horizontal line dividing screen in half (RED)
-    - Message (bottom half, 30pt, black)
+    - Bottom half: fixed 2-line text (white)
+      - Line1: "CAUTION"
+      - Line2: reason message
     """
     # Create layers
-    black_img = Image.new('1', (EPD_WIDTH, EPD_HEIGHT), 255)  # White background
+    black_img = Image.new('1', (EPD_WIDTH, EPD_HEIGHT), 0)    # Black background
     red_img = Image.new('1', (EPD_WIDTH, EPD_HEIGHT), 255)    # White/red layer
     
     draw_black = ImageDraw.Draw(black_img)
@@ -433,18 +470,23 @@ def render_warning(msg: str, icon_dir: Path) -> Tuple[Image.Image, Image.Image]:
     
     # Load fonts - icbmss20 for WARNING state
     font_warning = load_font(35, "icbm")  # WARNING
-    # Message font is adaptive; SURICATA ALERT is forced to 2-line to avoid clipping.
+    # Bottom evidence lines match NORMAL state's State/Suspicion typography.
+    font_evidence = load_font(20, "icbm")
     msg_max_width = EPD_WIDTH - 26
     
     # Load warning icon and convert to 1-bit for RED layer (35pt size)
     warning_icon_path = icon_dir / ICON_WARNING
     warning_icon = load_icon_with_transparency(warning_icon_path, max_size=35)
     warning_icon_1bit = convert_to_1bit(warning_icon, invert=False)
+    warning_icon_white = convert_to_1bit(warning_icon, invert=True)
     
-    # Place warning icons in RED on left and right
+    # Place warning icons in RED on left and right.
+    # Knock out black background under red primitives so red is visible.
     icon_left_x = 10
     icon_right_x = EPD_WIDTH - 45  # 10px margin + 35px icon
     icon_y = 15
+    black_img.paste(warning_icon_white, (icon_left_x, icon_y))
+    black_img.paste(warning_icon_white, (icon_right_x, icon_y))
     red_img.paste(warning_icon_1bit, (icon_left_x, icon_y))
     red_img.paste(warning_icon_1bit, (icon_right_x, icon_y))
     
@@ -453,27 +495,112 @@ def render_warning(msg: str, icon_dir: Path) -> Tuple[Image.Image, Image.Image]:
     warning_width = warning_bbox[2] - warning_bbox[0]
     warning_x = (EPD_WIDTH - warning_width) // 2
     warning_y = 15
+    draw_black.text((warning_x, warning_y), "WARNING", fill=255, font=font_warning)  # knockout on black layer
     draw_red.text((warning_x, warning_y), "WARNING", fill=0, font=font_warning)  # 0=red pixel on red layer
     
     # Draw horizontal line dividing screen in half (y=61 for 122px height, in red)
     line_y = EPD_HEIGHT // 2
     line_margin = 10
+    draw_black.line([(line_margin, line_y), (EPD_WIDTH - line_margin, line_y)], fill=255, width=2)  # knockout
     draw_red.line([(line_margin, line_y), (EPD_WIDTH - line_margin, line_y)], fill=0, width=2)
     
-    # Draw message (bottom half, centered, black)
+    # Draw bottom half as fixed 2 lines.
+    # Line1 keeps NORMAL evidence size; line2 auto-shrinks to keep the full reason visible.
+    caution_text = "CAUTION"
+    reason_raw = normalize_warning_reason(msg)
+    reason_text, font_reason = fit_text_single_line(
+        draw_black,
+        reason_raw,
+        "icbm",
+        max_size=20,
+        min_size=12,
+        max_width=msg_max_width,
+    )
+
+    caution_bbox = draw_black.textbbox((0, 0), caution_text, font=font_evidence)
+    caution_width = caution_bbox[2] - caution_bbox[0]
+    caution_x = (EPD_WIDTH - caution_width) // 2
+    caution_y = 70
+    draw_black.text((caution_x, caution_y), caution_text, fill=255, font=font_evidence)  # 255=white
+
+    reason_bbox = draw_black.textbbox((0, 0), reason_text, font=font_reason)
+    reason_width = reason_bbox[2] - reason_bbox[0]
+    reason_x = (EPD_WIDTH - reason_width) // 2
+    reason_y = 100
+    draw_black.text((reason_x, reason_y), reason_text, fill=255, font=font_reason)  # 255=white
+    
+    return black_img, red_img
+
+
+def render_danger(msg: str, icon_dir: Path) -> Tuple[Image.Image, Image.Image]:
+    """
+    Render DANGER state:
+    - Black background
+    - Warning icons on left and right (RED, 35pt size)
+    - "DANGER" text (center, 35pt, red)
+    - Horizontal line dividing screen in half (RED)
+    - Message (bottom half, white)
+    """
+    # Create layers
+    black_img = Image.new('1', (EPD_WIDTH, EPD_HEIGHT), 0)    # Black background
+    red_img = Image.new('1', (EPD_WIDTH, EPD_HEIGHT), 255)    # White/red layer
+    
+    draw_black = ImageDraw.Draw(black_img)
+    draw_red = ImageDraw.Draw(red_img)
+    
+    # Load fonts - icbmss20 for DANGER state
+    font_danger = load_font(35, "icbm")
+    # Message font is adaptive; SURICATA ALERT is forced to 2-line to avoid clipping.
+    msg_max_width = EPD_WIDTH - 26
+    
+    # Load warning icon
+    warning_icon_path = icon_dir / ICON_WARNING
+    warning_icon = load_icon_with_transparency(warning_icon_path, max_size=40)
+    warning_icon_1bit = convert_to_1bit(warning_icon, invert=False)
+    warning_icon_white = convert_to_1bit(warning_icon, invert=True)
+    
+    # Place warning icons in RED and knock out black below.
+    icon_left_x = 10
+    icon_right_x = EPD_WIDTH - 50  # 10px margin + 40px icon
+    icon_y = 15
+    black_img.paste(warning_icon_white, (icon_left_x, icon_y))
+    black_img.paste(warning_icon_white, (icon_right_x, icon_y))
+    red_img.paste(warning_icon_1bit, (icon_left_x, icon_y))
+    red_img.paste(warning_icon_1bit, (icon_right_x, icon_y))
+    
+    # Draw "DANGER" text in red (center, top half, 35pt)
+    danger_bbox = draw_red.textbbox((0, 0), "DANGER", font=font_danger)
+    danger_width = danger_bbox[2] - danger_bbox[0]
+    danger_x = (EPD_WIDTH - danger_width) // 2
+    danger_y = 15
+    draw_black.text((danger_x, danger_y), "DANGER", fill=255, font=font_danger)  # knockout
+    draw_red.text((danger_x, danger_y), "DANGER", fill=0, font=font_danger)      # red
+    
+    # Draw horizontal line dividing screen in half (y=61 for 122px height)
+    line_y = EPD_HEIGHT // 2
+    line_margin = 10
+    draw_black.line([(line_margin, line_y), (EPD_WIDTH - line_margin, line_y)], fill=255, width=2)  # knockout
+    draw_red.line([(line_margin, line_y), (EPD_WIDTH - line_margin, line_y)], fill=0, width=2)
+    
+    # Draw message (bottom half, centered, white)
     bottom_top = line_y + 2
     bottom_height = EPD_HEIGHT - bottom_top
     if should_force_two_line_alert(msg):
-        line1, line2, font_message = fit_text_two_lines(
-            draw_black,
-            msg,
-            "icbm",
-            max_size=24,
-            min_size=14,
-            max_width=msg_max_width,
-            max_height=bottom_height - 2,
-            line_gap=2,
-        )
+        fixed = suricata_alert_lines(msg)
+        if fixed is not None:
+            line1, line2 = fixed
+            font_message = load_font(22, "icbm")
+        else:
+            line1, line2, font_message = fit_text_two_lines(
+                draw_black,
+                msg,
+                "icbm",
+                max_size=22,
+                min_size=12,
+                max_width=msg_max_width,
+                max_height=bottom_height - 2,
+                line_gap=2,
+            )
         b1 = draw_black.textbbox((0, 0), line1, font=font_message)
         b2 = draw_black.textbbox((0, 0), line2, font=font_message)
         w1, h1 = b1[2] - b1[0], b1[3] - b1[1]
@@ -483,108 +610,18 @@ def render_warning(msg: str, icon_dir: Path) -> Tuple[Image.Image, Image.Image]:
         y2 = y1 + h1 + 2
         x1 = (EPD_WIDTH - w1) // 2
         x2 = (EPD_WIDTH - w2) // 2
-        draw_black.text((x1, y1), line1, fill=0, font=font_message)  # 0=black
-        draw_black.text((x2, y2), line2, fill=0, font=font_message)  # 0=black
+        draw_black.text((x1, y1), line1, fill=255, font=font_message)  # 255=white
+        draw_black.text((x2, y2), line2, fill=255, font=font_message)  # 255=white
     else:
         msg_text, font_message = fit_text_single_line(
-            draw_black, msg, "icbm", max_size=28, min_size=16, max_width=msg_max_width
+            draw_black, msg, "icbm", max_size=25, min_size=14, max_width=msg_max_width
         )
         msg_bbox = draw_black.textbbox((0, 0), msg_text, font=font_message)
         msg_width = msg_bbox[2] - msg_bbox[0]
         msg_height = msg_bbox[3] - msg_bbox[1]
         msg_x = (EPD_WIDTH - msg_width) // 2
         msg_y = bottom_top + max(0, (bottom_height - msg_height) // 2)
-        draw_black.text((msg_x, msg_y), msg_text, fill=0, font=font_message)  # 0=black
-    
-    return black_img, red_img
-
-
-def render_danger(msg: str, icon_dir: Path) -> Tuple[Image.Image, Image.Image]:
-    """
-    Render DANGER state:
-    - Red background
-    - Warning icons on left and right (BLACK, 35pt size)
-    - "DANGER" text (center, 35pt, white)
-    - Horizontal line dividing screen in half
-    - Message (bottom half, 25pt, white)
-    """
-    # Create layers
-    black_img = Image.new('1', (EPD_WIDTH, EPD_HEIGHT), 255)  # White background
-    red_img = Image.new('1', (EPD_WIDTH, EPD_HEIGHT), 0)      # All red background
-    
-    draw_black = ImageDraw.Draw(black_img)
-    
-    # Create white mask for text (where red should be knocked out to white)
-    white_mask = Image.new('1', (EPD_WIDTH, EPD_HEIGHT), 0)   # Black background
-    draw_white = ImageDraw.Draw(white_mask)
-    
-    # Load fonts - icbmss20 for DANGER state
-    font_danger = load_font(35, "icbm")
-    # Message font is adaptive; SURICATA ALERT is forced to 2-line to avoid clipping.
-    msg_max_width = EPD_WIDTH - 26
-    
-    # Load warning icon and convert to white (40pt size)
-    warning_icon_path = icon_dir / ICON_WARNING
-    warning_icon = load_icon_with_transparency(warning_icon_path, max_size=40)
-    warning_icon_white = convert_to_1bit(warning_icon, invert=True)  # White mask for knockout
-    
-    # Place warning icons in WHITE on white mask (knockout from red)
-    icon_left_x = 10
-    icon_right_x = EPD_WIDTH - 50  # 10px margin + 40px icon
-    icon_y = 15
-    white_mask.paste(warning_icon_white, (icon_left_x, icon_y))
-    white_mask.paste(warning_icon_white, (icon_right_x, icon_y))
-    
-    # Draw "DANGER" text in white on white mask (center, top half, 35pt)
-    danger_bbox = draw_white.textbbox((0, 0), "DANGER", font=font_danger)
-    danger_width = danger_bbox[2] - danger_bbox[0]
-    danger_x = (EPD_WIDTH - danger_width) // 2
-    danger_y = 15
-    draw_white.text((danger_x, danger_y), "DANGER", fill=255, font=font_danger)  # 255=white
-    
-    # Draw horizontal line dividing screen in half (y=61 for 122px height)
-    line_y = EPD_HEIGHT // 2
-    line_margin = 10
-    draw_white.line([(line_margin, line_y), (EPD_WIDTH - line_margin, line_y)], fill=255, width=2)
-    
-    # Draw message (bottom half, centered, white)
-    bottom_top = line_y + 2
-    bottom_height = EPD_HEIGHT - bottom_top
-    if should_force_two_line_alert(msg):
-        line1, line2, font_message = fit_text_two_lines(
-            draw_white,
-            msg,
-            "icbm",
-            max_size=22,
-            min_size=12,
-            max_width=msg_max_width,
-            max_height=bottom_height - 2,
-            line_gap=2,
-        )
-        b1 = draw_white.textbbox((0, 0), line1, font=font_message)
-        b2 = draw_white.textbbox((0, 0), line2, font=font_message)
-        w1, h1 = b1[2] - b1[0], b1[3] - b1[1]
-        w2, h2 = b2[2] - b2[0], b2[3] - b2[1]
-        total_h = h1 + 2 + h2
-        y1 = bottom_top + max(0, (bottom_height - total_h) // 2)
-        y2 = y1 + h1 + 2
-        x1 = (EPD_WIDTH - w1) // 2
-        x2 = (EPD_WIDTH - w2) // 2
-        draw_white.text((x1, y1), line1, fill=255, font=font_message)  # 255=white
-        draw_white.text((x2, y2), line2, fill=255, font=font_message)  # 255=white
-    else:
-        msg_text, font_message = fit_text_single_line(
-            draw_white, msg, "icbm", max_size=25, min_size=14, max_width=msg_max_width
-        )
-        msg_bbox = draw_white.textbbox((0, 0), msg_text, font=font_message)
-        msg_width = msg_bbox[2] - msg_bbox[0]
-        msg_height = msg_bbox[3] - msg_bbox[1]
-        msg_x = (EPD_WIDTH - msg_width) // 2
-        msg_y = bottom_top + max(0, (bottom_height - msg_height) // 2)
-        draw_white.text((msg_x, msg_y), msg_text, fill=255, font=font_message)  # 255=white
-    
-    # Apply white knockout: use ImageChops.lighter to OR the white parts onto red
-    red_img = ImageChops.lighter(red_img, white_mask)
+        draw_black.text((msg_x, msg_y), msg_text, fill=255, font=font_message)  # 255=white
     
     return black_img, red_img
 
@@ -692,7 +729,7 @@ def display_to_epd(black_img: Image.Image, red_img: Image.Image) -> None:
     for p in (WS_ROOT, WS_LIB):
         if p not in sys.path:
             sys.path.append(p)
-    
+
     epd = None
     try:
         from waveshare_epd import epd2in13b_V4
@@ -707,24 +744,24 @@ def display_to_epd(black_img: Image.Image, red_img: Image.Image) -> None:
     except Exception as e:
         print(f"ERROR: Failed to initialize EPD: {e}")
         sys.exit(1)
-    
+
     try:
         print("Initializing EPD...")
         epd.init()
-        
+
         print("Sending image data...")
         # Convert 1-bit images to buffers
         black_buffer = epd.getbuffer(black_img)
         red_buffer = epd.getbuffer(red_img)
-        
+
         # Display both layers (skip Clear() to save time)
         epd.display(black_buffer, red_buffer)
-        
+
         print("Putting EPD to sleep...")
         epd.sleep()
-        
+
         print("✓ Display updated successfully")
-        
+
     except Exception as e:
         print(f"ERROR: EPD operation failed: {e}")
         import traceback
@@ -732,9 +769,25 @@ def display_to_epd(black_img: Image.Image, red_img: Image.Image) -> None:
         if epd:
             try:
                 epd.sleep()
-            except:
+            except Exception:
                 pass
         sys.exit(1)
+
+
+def write_last_render(render_spec: dict) -> None:
+    """Persist last successful render spec for redraw de-duplication."""
+    try:
+        LAST_RENDER_PATH.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "render": render_spec,
+        }
+        tmp = LAST_RENDER_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+        os.replace(tmp, LAST_RENDER_PATH)
+    except Exception:
+        # Non-fatal: rendering should succeed even if state persistence fails.
+        pass
 
 
 def main():
@@ -786,6 +839,7 @@ Examples:
     
     # Render appropriate state
     print(f"Rendering {args.state.upper()} state...")
+    render_spec: dict = {"state": args.state}
     
     if args.state == 'normal':
         black_img, red_img = render_normal(
@@ -796,18 +850,31 @@ Examples:
             args.suspicion,
             args.mode_label,
         )
+        render_spec.update(
+            {
+                "mode_label": str(args.mode_label or "").strip().upper(),
+                "ssid": str(args.ssid or ""),
+                "risk_status": str(args.risk_status or "").strip().upper(),
+                "suspicion": int(args.suspicion),
+                "signal": args.signal if args.signal is not None else None,
+            }
+        )
     elif args.state == 'warning':
         black_img, red_img = render_warning(args.msg, icon_dir)
+        render_spec["msg"] = str(args.msg or "")
     elif args.state == 'danger':
         black_img, red_img = render_danger(args.msg, icon_dir)
+        render_spec["msg"] = str(args.msg or "")
     elif args.state == 'stale':
         black_img, red_img = render_stale(args.msg, icon_dir)
+        render_spec["msg"] = str(args.msg or "")
     
     # Output
     if args.dry_run:
         save_preview(black_img, red_img, args.state)
     else:
         display_to_epd(black_img, red_img)
+        write_last_render(render_spec)
 
 
 if __name__ == '__main__':

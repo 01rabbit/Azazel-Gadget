@@ -66,8 +66,8 @@ class NftRenderTests(unittest.TestCase):
             mgmt_subnet="10.55.0.0/24",
             canary_ports=[22, 80],
         )
-        self.assertIn('iifname "wlan0" tcp dport { 22, 80 } dnat to 169.254.240.2', rendered)
-        self.assertIn('iifname "veth_canary_host" oifname "usb0" drop', rendered)
+        self.assertIn('iifname "wlan0" tcp dport { 22, 80 } dnat ip to 169.254.240.2', rendered)
+        self.assertIn('iifname "vcanary_host" oifname "usb0" drop', rendered)
 
 
 class ConfigHashTests(unittest.TestCase):

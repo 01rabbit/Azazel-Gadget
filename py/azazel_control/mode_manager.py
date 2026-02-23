@@ -31,11 +31,13 @@ AUDIT_LOG_PATH = Path("/var/log/azazel/mode_changes.jsonl")
 SNAPSHOT_DIR = Path("/var/lib/azazel/snapshots")
 
 CANARY_NS = "az_canary"
-CANARY_HOST_IF = "veth_canary_host"
-CANARY_NS_IF = "veth_canary_ns"
+# Linux interface names must be <= 15 chars.
+CANARY_HOST_IF = "vcanary_host"
+CANARY_NS_IF = "vcanary_ns"
 CANARY_HOST_IP = "169.254.240.1/30"
 CANARY_NS_IP = "169.254.240.2/30"
 CANARY_NS_ADDR = "169.254.240.2"
+CANARY_PIDFILE = Path("/home/azazel/canary-venv/bin/opencanaryd.pid")
 
 LOGGER = logging.getLogger("azazel.mode")
 
@@ -225,6 +227,10 @@ class ModeManager:
     # ---------- preflight ----------
 
     def _preflight(self, target_mode: str) -> PreflightContext:
+        for ifname in (CANARY_HOST_IF, CANARY_NS_IF):
+            if len(ifname) > 15:
+                raise ModeError(f"invalid canary interface name (too long): {ifname}")
+
         usb_if, upstream_if, mgmt_subnet, mgmt_ip = self._resolve_interfaces()
         if not self._iface_exists(usb_if):
             raise ModeError(f"usb interface not found: {usb_if}")
@@ -265,10 +271,12 @@ class ModeManager:
         if mode == "scapegoat":
             self._ensure_canary_namespace()
             self._stop_service_if_present("opencanary.service")
+            self._disable_service_if_present("opencanary.service")
             self._start_canary_isolated()
         else:
             self._stop_service_if_present("opencanary@az_canary.service")
             self._stop_service_if_present("opencanary.service")
+            self._disable_service_if_present("opencanary.service")
             self._teardown_canary_namespace()
 
         if context.fw_backend == "nft":
@@ -561,6 +569,8 @@ class ModeManager:
         self._run(["ip", "netns", "del", CANARY_NS], check=False)
 
     def _start_canary_isolated(self) -> None:
+        self._cleanup_stale_canary_processes()
+
         if self._unit_exists("opencanary@.service"):
             self._run(["systemctl", "start", f"opencanary@{CANARY_NS}.service"], check=True)
             return
@@ -577,6 +587,25 @@ class ModeManager:
             ["ip", "netns", "exec", CANARY_NS, str(binary), "--start", "--uid=nobody", "--gid=nogroup"],
             check=True,
         )
+
+    def _cleanup_stale_canary_processes(self) -> None:
+        # Stop any legacy/global unit first.
+        self._stop_service_if_present("opencanary.service")
+
+        # Kill orphaned twistd/opencanaryd processes that may still hold the global pidfile.
+        for pattern in (
+            "opencanary.tac",
+            "/home/azazel/canary-venv/bin/opencanaryd",
+            "opencanaryd.pid",
+        ):
+            self._run(["pkill", "-f", pattern], check=False)
+        self._run(["pkill", "-9", "-f", "opencanary.tac"], check=False)
+
+        try:
+            if CANARY_PIDFILE.exists():
+                CANARY_PIDFILE.unlink()
+        except Exception:
+            pass
 
     # ---------- snapshots / rollback ----------
 
@@ -712,7 +741,30 @@ class ModeManager:
             self._trigger_epd_refresh()
 
     def _trigger_epd_refresh(self) -> None:
-        self._run(["systemctl", "start", "--no-block", "azazel-epd-refresh.service"], check=False, timeout=2)
+        # If refresh is currently running (e.g. "switching" banner), wait briefly and then queue a clean start
+        # so the final steady-state screen is rendered without killing the in-flight refresh job.
+        for _ in range(30):
+            active = self._run(
+                ["systemctl", "is-active", "azazel-epd-refresh.service"],
+                check=False,
+                timeout=2,
+            ).stdout.strip().lower()
+            if active not in {"active", "activating"}:
+                break
+            time.sleep(0.2)
+
+        result = self._run(
+            ["systemctl", "start", "--no-block", "azazel-epd-refresh.service"],
+            check=False,
+            timeout=2,
+        )
+        if result.returncode == 0:
+            return
+
+        # Fallback for environments where the systemd refresh unit is not installed yet.
+        refresh_bin = Path("/usr/local/bin/azazel-epd-refresh")
+        if refresh_bin.exists():
+            self._run([str(refresh_bin)], check=False, timeout=45)
 
     # ---------- helpers ----------
 
@@ -807,12 +859,29 @@ class ModeManager:
             return "ON"
         pidfile = Path("/home/azazel/canary-venv/bin/opencanaryd.pid")
         if pidfile.exists():
+            pid: Optional[int] = None
             try:
                 pid = int(pidfile.read_text(encoding="utf-8").strip())
-                os.kill(pid, 0)
-                return "ON"
             except Exception:
-                pass
+                pid = None
+            if pid:
+                try:
+                    os.kill(pid, 0)
+                    cmdline = Path(f"/proc/{pid}/cmdline").read_bytes().decode("utf-8", errors="ignore")
+                    if "opencanary" in cmdline:
+                        return "ON"
+                except PermissionError:
+                    if Path(f"/proc/{pid}").exists():
+                        try:
+                            cmdline = Path(f"/proc/{pid}/cmdline").read_bytes().decode("utf-8", errors="ignore")
+                            if "opencanary" in cmdline:
+                                return "ON"
+                        except Exception:
+                            return "ON"
+                except Exception:
+                    pass
+        if self._run(["pgrep", "-f", "[o]pencanary.tac"], check=False).returncode == 0:
+            return "ON"
         return "OFF"
 
     def _dnsmasq_running(self) -> bool:
@@ -894,6 +963,10 @@ class ModeManager:
     def _stop_service_if_present(self, unit: str) -> None:
         if self._unit_exists(unit):
             self._run(["systemctl", "stop", unit], check=False)
+
+    def _disable_service_if_present(self, unit: str) -> None:
+        if self._unit_exists(unit):
+            self._run(["systemctl", "disable", unit], check=False)
 
     def _load_defaults(self) -> Dict[str, str]:
         defaults: Dict[str, str] = {}
@@ -1071,7 +1144,7 @@ def render_nft_rules(
                 f"add rule inet azazel forward iifname \"{CANARY_HOST_IF}\" oifname \"{upstream_if}\" ct state established,related accept",
                 f"add rule inet azazel forward iifname \"{CANARY_HOST_IF}\" oifname \"{usb_if}\" drop",
                 f"add rule inet azazel forward iifname \"{usb_if}\" oifname \"{CANARY_HOST_IF}\" drop",
-                f"add rule inet azazel nat_prerouting iifname \"{upstream_if}\" tcp dport {allow_port_text} dnat to {CANARY_NS_ADDR}",
+                f"add rule inet azazel nat_prerouting iifname \"{upstream_if}\" tcp dport {allow_port_text} dnat ip to {CANARY_NS_ADDR}",
             ]
         )
 

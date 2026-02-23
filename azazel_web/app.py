@@ -397,7 +397,7 @@ def verify_token() -> bool:
     return req_token == token
 
 
-def _pid_running(pid_path: Path) -> bool:
+def _pid_running(pid_path: Path, expected_cmd: str = "") -> bool:
     """Check whether the pid in pid_path is running."""
     try:
         pid_text = pid_path.read_text().strip()
@@ -411,7 +411,14 @@ def _pid_running(pid_path: Path) -> bool:
     except ProcessLookupError:
         return False
     except PermissionError:
-        return True
+        pass
+    if expected_cmd:
+        try:
+            cmdline = Path(f"/proc/{pid}/cmdline").read_bytes().decode("utf-8", errors="ignore")
+            if expected_cmd not in cmdline:
+                return False
+        except Exception:
+            return False
     return True
 
 
@@ -601,17 +608,31 @@ def _ntfy_health_ok() -> bool:
         return False
 
 
+def _process_running(pattern: str) -> bool:
+    """Check process existence by pattern without PID file read access."""
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", pattern],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
 def get_monitoring_state() -> Dict[str, str]:
     """Return ON/OFF status for local monitoring daemons."""
     # Prefer systemd state to avoid pidfile permission issues
-    opencanary_ok = _service_active("opencanary.service")
+    opencanary_ok = _service_active("opencanary@az_canary.service") or _service_active("opencanary.service")
     suricata_ok = _service_active("suricata.service")
     ntfy_ok = _service_active("ntfy.service") and _ntfy_health_ok()
     opencanary_pid = Path("/home/azazel/canary-venv/bin/opencanaryd.pid")
     suricata_pid = Path("/run/suricata.pid")
     return {
-        "opencanary": "ON" if (opencanary_ok or _pid_running(opencanary_pid)) else "OFF",
-        "suricata": "ON" if (suricata_ok or _pid_running(suricata_pid)) else "OFF",
+        "opencanary": "ON" if (opencanary_ok or _pid_running(opencanary_pid, "opencanary") or _process_running("[o]pencanary.tac")) else "OFF",
+        "suricata": "ON" if (suricata_ok or _pid_running(suricata_pid, "suricata")) else "OFF",
         "ntfy": "ON" if ntfy_ok else "OFF",
     }
 

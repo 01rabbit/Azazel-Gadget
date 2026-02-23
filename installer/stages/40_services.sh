@@ -278,14 +278,9 @@ main() {
         configure_sshd_usb_only
 
         if systemctl list-unit-files | grep -q "opencanary.service"; then
-            log_info "  • opencanary.service を有効化..."
-            systemctl enable opencanary.service >> "$LOG_FILE" 2>&1 || {
-                log_warn "⚠️  opencanary.service 有効化失敗"
-            }
-            log_info "  • opencanary.service を再起動..."
-            systemctl restart opencanary.service >> "$LOG_FILE" 2>&1 || {
-                log_warn "⚠️  opencanary.service 起動失敗"
-            }
+            log_info "  • opencanary.service を停止/無効化（mode_manager 管理へ移行）..."
+            systemctl stop opencanary.service >> "$LOG_FILE" 2>&1 || true
+            systemctl disable opencanary.service >> "$LOG_FILE" 2>&1 || true
         else
             log_warn "⚠️  opencanary.service が未登録です"
         fi

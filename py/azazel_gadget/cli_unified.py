@@ -342,13 +342,35 @@ def _service_active(name: str) -> bool:
         return False
 
 
-def _pid_running(pid_file: Path) -> bool:
+def _pid_running(pid_file: Path, expected_cmd: str = "") -> bool:
     try:
         if not pid_file.exists():
             return False
         pid = int(pid_file.read_text(encoding="utf-8").strip())
         os.kill(pid, 0)
-        return True
+    except PermissionError:
+        pass
+    except Exception:
+        return False
+    if expected_cmd:
+        try:
+            cmdline = Path(f"/proc/{pid}/cmdline").read_bytes().decode("utf-8", errors="ignore")
+            if expected_cmd not in cmdline:
+                return False
+        except Exception:
+            return False
+    return True
+
+
+def _process_running(pattern: str) -> bool:
+    try:
+        res = subprocess.run(
+            ["pgrep", "-f", pattern],
+            capture_output=True,
+            text=True,
+            timeout=1.0,
+        )
+        return res.returncode == 0
     except Exception:
         return False
 
@@ -368,14 +390,14 @@ def _ntfy_health_ok() -> bool:
 
 
 def _collect_monitoring_state() -> Dict[str, str]:
-    opencanary_ok = _service_active("opencanary.service")
+    opencanary_ok = _service_active("opencanary@az_canary.service") or _service_active("opencanary.service")
     suricata_ok = _service_active("suricata.service")
     ntfy_ok = _service_active("ntfy.service") and _ntfy_health_ok()
     opencanary_pid = Path("/home/azazel/canary-venv/bin/opencanaryd.pid")
     suricata_pid = Path("/run/suricata.pid")
     return {
-        "opencanary": "ON" if (opencanary_ok or _pid_running(opencanary_pid)) else "OFF",
-        "suricata": "ON" if (suricata_ok or _pid_running(suricata_pid)) else "OFF",
+        "opencanary": "ON" if (opencanary_ok or _pid_running(opencanary_pid, "opencanary") or _process_running("[o]pencanary.tac")) else "OFF",
+        "suricata": "ON" if (suricata_ok or _pid_running(suricata_pid, "suricata")) else "OFF",
         "ntfy": "ON" if ntfy_ok else "OFF",
     }
 
@@ -938,12 +960,13 @@ def update_epd(snap: Snapshot, enable_epd: bool = True) -> None:
             
             # Use wlan (upstream) IP address instead of downstream
             wlan_ip = snap.up_ip if snap.up_ip and snap.up_ip != "-" else "No IP"
+            mode_label = str((snap.mode or {}).get("current_mode", "shield") or "shield").upper()
             
             cmd = [
                 "python3", str(epd_script),
                 "--state", "normal",
                 "--ssid", snap.ssid or "No SSID",
-                "--ip", wlan_ip,
+                "--mode-label", mode_label,
             ]
             if signal_dbm is not None:
                 cmd += ["--signal", str(signal_dbm)]
