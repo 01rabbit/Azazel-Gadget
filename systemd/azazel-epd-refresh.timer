@@ -1,0 +1,12 @@
+[Unit]
+Description=Periodic Azazel EPD mode/status refresh
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=30s
+AccuracySec=10s
+Unit=azazel-epd-refresh.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

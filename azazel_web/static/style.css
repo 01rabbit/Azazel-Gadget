@@ -117,6 +117,14 @@ body {
     border-left-color: var(--color-danger);
 }
 
+.card-risk.contained {
+    border-left-color: #e67e22;
+}
+
+.card-risk.lockdown {
+    border-left-color: #ff3b30;
+}
+
 .risk-compact {
     display: flex;
     align-items: center;
@@ -151,6 +159,18 @@ body {
     color: var(--color-danger);
 }
 
+.score-circle.contained {
+    background: rgba(230, 126, 34, 0.2);
+    border-color: #e67e22;
+    color: #e67e22;
+}
+
+.score-circle.lockdown {
+    background: rgba(255, 59, 48, 0.2);
+    border-color: #ff3b30;
+    color: #ff3b30;
+}
+
 .risk-info {
     flex: 1;
     margin-left: 12px;
@@ -169,6 +189,14 @@ body {
 
 .risk-status.danger {
     color: var(--color-danger);
+}
+
+.risk-status.contained {
+    color: #e67e22;
+}
+
+.risk-status.lockdown {
+    color: #ff3b30;
 }
 
 .risk-level {
@@ -257,6 +285,45 @@ body {
 .badge.lockdown {
     background: var(--color-danger);
     color: #fff;
+}
+
+.badge.mode-portal {
+    background: #27ae60;
+    color: #fff;
+}
+
+.badge.mode-shield {
+    background: #2980b9;
+    color: #fff;
+}
+
+.badge.mode-scapegoat {
+    background: #c0392b;
+    color: #fff;
+}
+
+.mode-buttons {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin: 10px 0;
+}
+
+.mode-btn {
+    justify-content: center;
+    padding: 7px 8px;
+    font-size: 0.85em;
+}
+
+.mode-btn.active {
+    border: 2px solid var(--accent);
+    box-shadow: 0 0 0 1px rgba(0, 212, 255, 0.4);
+}
+
+.mode-note {
+    font-size: 0.82em;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
 }
 
 /* Evidence Card - Full Width */

@@ -5,6 +5,7 @@ const AUTH_TOKEN = localStorage.getItem('azazel_token') || 'azazel-default-token
 let updateInterval;
 let portalViewerOpening = false;
 let portalReprobeRunning = false;
+let modeSwitchInFlight = false;
 let eventSource = null;
 let unreadEventCount = 0;
 let lastEventSourceErrorToastAt = 0;
@@ -57,6 +58,8 @@ function updateUI(state) {
     
     // Header
     updateElement('headerClock', state.now_time || '--:--:--');
+    updateModeUI(state.mode || {}, state.mode_runtime || {});
+    window.__lastStateMode = state.mode || {};
     
     // Risk Assessment (based on internal state)
     const internal = state.internal || {};
@@ -205,6 +208,18 @@ function updateUI(state) {
         idsStatus = parts.join(', ');
     }
     updateElement('ctrlIDS', idsStatus);
+
+    // Security - Delay-to-Win (targeted canary response slowdown)
+    const attack = state.attack || {};
+    const delayActive = !!attack.canary_delay_active;
+    const delayTargetCount = Number(attack.canary_delay_target_count || 0);
+    let delayStatus = 'inactive';
+    if (delayActive) {
+        delayStatus = `ACTIVE (${delayTargetCount} target${delayTargetCount === 1 ? '' : 's'})`;
+    } else if (stateVal === 'DECEPTION') {
+        delayStatus = 'armed';
+    }
+    updateElement('ctrlCanaryDelay', delayStatus);
     
     // Evidence
     updateBadge('evidState', mapState(stateVal));
@@ -250,6 +265,127 @@ function getStatusClass(status) {
     if (lower === 'contain') return 'contained';
     if (lower === 'deception') return 'lockdown';
     return 'normal';
+}
+
+function formatModeTimestamp(raw) {
+    if (!raw) return '-';
+    const dt = new Date(raw);
+    if (Number.isNaN(dt.getTime())) return String(raw);
+    return dt.toLocaleString();
+}
+
+function modeDescription(modeName) {
+    const mode = String(modeName || '').toLowerCase();
+    if (mode === 'portal') return 'Outbound internet enabled; decoy OFF';
+    if (mode === 'scapegoat') return 'Decoy ON (isolated), only allowlisted ports exposed';
+    return 'Inbound(wlan): DROP ALL, decoy OFF';
+}
+
+function setModeBadge(modeName) {
+    const el = document.getElementById('modeCurrent');
+    if (!el) return;
+
+    const mode = String(modeName || 'shield').toLowerCase();
+    el.textContent = mode.toUpperCase();
+    el.classList.remove('mode-portal', 'mode-shield', 'mode-scapegoat');
+    if (mode === 'portal') el.classList.add('mode-portal');
+    else if (mode === 'scapegoat') el.classList.add('mode-scapegoat');
+    else el.classList.add('mode-shield');
+
+    const portalBtn = document.getElementById('modePortalBtn');
+    const shieldBtn = document.getElementById('modeShieldBtn');
+    const scapegoatBtn = document.getElementById('modeScapegoatBtn');
+    [portalBtn, shieldBtn, scapegoatBtn].forEach((btn) => {
+        if (!btn) return;
+        btn.classList.remove('active');
+    });
+    if (mode === 'portal' && portalBtn) portalBtn.classList.add('active');
+    if (mode === 'shield' && shieldBtn) shieldBtn.classList.add('active');
+    if (mode === 'scapegoat' && scapegoatBtn) scapegoatBtn.classList.add('active');
+}
+
+function updateModeUI(mode, runtime) {
+    const current = String((mode || {}).current_mode || 'shield').toLowerCase();
+    setModeBadge(current);
+    updateElement('modeLastChange', formatModeTimestamp((mode || {}).last_change));
+    updateElement('modeNote', modeDescription(current));
+
+    const epdRuntime = (runtime || {}).epd_state || {};
+    const switching = String(epdRuntime.mode || '').toLowerCase() === 'switching';
+    const target = String(epdRuntime.target_mode || '').toLowerCase();
+    const buttons = ['modePortalBtn', 'modeShieldBtn', 'modeScapegoatBtn']
+        .map((id) => document.getElementById(id))
+        .filter(Boolean);
+    buttons.forEach((btn) => {
+        btn.disabled = modeSwitchInFlight || switching;
+    });
+
+    if (switching && target) {
+        updateElement('modeNote', `Switching -> ${target.toUpperCase()} ...`);
+    }
+}
+
+function modeImpactText(targetMode) {
+    const mode = String(targetMode || '').toLowerCase();
+    if (mode === 'portal') {
+        return 'Portal mode keeps usb0 internet NAT and disables decoy exposure on wlan0.';
+    }
+    if (mode === 'scapegoat') {
+        return 'Scapegoat mode enables isolated OpenCanary exposure on allowlisted ports only.';
+    }
+    return 'Shield mode drops all inbound on wlan0 and keeps usb0 client internet path.';
+}
+
+async function switchMode(targetMode) {
+    if (modeSwitchInFlight) {
+        return;
+    }
+
+    const mode = String(targetMode || '').toLowerCase();
+    if (!['portal', 'shield', 'scapegoat'].includes(mode)) {
+        showToast(`Unknown mode: ${targetMode}`, 'error');
+        return;
+    }
+
+    const current = String((window.__lastStateMode || {}).current_mode || '').toLowerCase();
+    if (current === mode) {
+        showToast(`Already in ${mode.toUpperCase()}`, 'info');
+        return;
+    }
+
+    const confirmText = `${modeImpactText(mode)}\n\nSwitch ${current.toUpperCase() || '-'} -> ${mode.toUpperCase()} ?`;
+    if (!window.confirm(confirmText)) {
+        return;
+    }
+
+    modeSwitchInFlight = true;
+    updateElement('modeNote', `Switching -> ${mode.toUpperCase()} ...`);
+    ['modePortalBtn', 'modeShieldBtn', 'modeScapegoatBtn'].forEach((id) => {
+        const btn = document.getElementById(id);
+        if (btn) btn.disabled = true;
+    });
+
+    try {
+        const res = await fetch('/api/mode', {
+            method: 'POST',
+            headers: {
+                'X-Auth-Token': AUTH_TOKEN,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ mode, requested_by: 'webui' })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+            showToast(`Mode switch failed: ${data.error || 'unknown error'}`, 'error');
+        } else {
+            showToast(`Mode switched to ${mode.toUpperCase()}`, 'success');
+        }
+    } catch (e) {
+        showToast(`Mode switch failed: ${e.message}`, 'error');
+    } finally {
+        modeSwitchInFlight = false;
+        setTimeout(fetchState, 300);
+    }
 }
 
 // Helper: Update element text

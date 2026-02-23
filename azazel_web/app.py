@@ -105,7 +105,8 @@ for _candidate in _WEBUI_CA_CERT_CANDIDATES:
 # Allowed actions
 ALLOWED_ACTIONS = {
     "refresh", "reprobe", "contain", "release", "details", "stage_open", "disconnect",
-    "wifi_scan", "wifi_connect", "portal_viewer_open", "shutdown", "reboot"  # Wi-Fi + portal viewer actions
+    "wifi_scan", "wifi_connect", "portal_viewer_open", "shutdown", "reboot",
+    "mode_set", "mode_status", "mode_get", "mode_portal", "mode_shield", "mode_scapegoat"
 }
 
 
@@ -396,7 +397,7 @@ def verify_token() -> bool:
     return req_token == token
 
 
-def _pid_running(pid_path: Path) -> bool:
+def _pid_running(pid_path: Path, expected_cmd: str = "") -> bool:
     """Check whether the pid in pid_path is running."""
     try:
         pid_text = pid_path.read_text().strip()
@@ -410,7 +411,14 @@ def _pid_running(pid_path: Path) -> bool:
     except ProcessLookupError:
         return False
     except PermissionError:
-        return True
+        pass
+    if expected_cmd:
+        try:
+            cmdline = Path(f"/proc/{pid}/cmdline").read_bytes().decode("utf-8", errors="ignore")
+            if expected_cmd not in cmdline:
+                return False
+        except Exception:
+            return False
     return True
 
 
@@ -600,18 +608,74 @@ def _ntfy_health_ok() -> bool:
         return False
 
 
+def _process_running(pattern: str) -> bool:
+    """Check process existence by pattern without PID file read access."""
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", pattern],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
 def get_monitoring_state() -> Dict[str, str]:
     """Return ON/OFF status for local monitoring daemons."""
     # Prefer systemd state to avoid pidfile permission issues
-    opencanary_ok = _service_active("opencanary.service")
+    opencanary_ok = _service_active("opencanary@az_canary.service") or _service_active("opencanary.service")
     suricata_ok = _service_active("suricata.service")
     ntfy_ok = _service_active("ntfy.service") and _ntfy_health_ok()
     opencanary_pid = Path("/home/azazel/canary-venv/bin/opencanaryd.pid")
     suricata_pid = Path("/run/suricata.pid")
     return {
-        "opencanary": "ON" if (opencanary_ok or _pid_running(opencanary_pid)) else "OFF",
-        "suricata": "ON" if (suricata_ok or _pid_running(suricata_pid)) else "OFF",
+        "opencanary": "ON" if (opencanary_ok or _pid_running(opencanary_pid, "opencanary") or _process_running("[o]pencanary.tac")) else "OFF",
+        "suricata": "ON" if (suricata_ok or _pid_running(suricata_pid, "suricata")) else "OFF",
         "ntfy": "ON" if ntfy_ok else "OFF",
+    }
+
+
+def get_mode_state() -> Dict[str, Any]:
+    """Return gateway mode status from control daemon, with file fallback."""
+    daemon_payload = send_control_command_with_params("mode_status", {})
+    if daemon_payload.get("ok") and isinstance(daemon_payload.get("mode"), dict):
+        return daemon_payload
+
+    fallback_paths = [
+        Path("/etc/azazel/mode.json"),
+        Path("/etc/azazel-gadget/mode.json"),
+        Path("/etc/azazel-zero/mode.json"),
+    ]
+    for path in fallback_paths:
+        try:
+            if not path.exists():
+                continue
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(payload, dict):
+                return {
+                    "ok": True,
+                    "mode": {
+                        "current_mode": str(payload.get("current_mode", "shield")).lower(),
+                        "last_change": str(payload.get("last_change", "")),
+                        "requested_by": str(payload.get("requested_by", "")),
+                        "config_hash": str(payload.get("config_hash", "")),
+                    },
+                    "source": f"FILE:{path}",
+                }
+        except Exception:
+            continue
+
+    return {
+        "ok": False,
+        "mode": {
+            "current_mode": "shield",
+            "last_change": "",
+            "requested_by": "",
+            "config_hash": "",
+        },
+        "error": daemon_payload.get("error", "mode status unavailable"),
     }
 
 
@@ -992,6 +1056,9 @@ def api_state():
     # Add local monitoring status
     state["monitoring"] = get_monitoring_state()
     state["portal_viewer"] = get_portal_viewer_state()
+    mode_state = get_mode_state()
+    state["mode"] = mode_state.get("mode", {})
+    state["mode_runtime"] = mode_state
     return jsonify(state)
 
 
@@ -1015,12 +1082,18 @@ def api_state_stream():
                 payload["ok"] = True
                 payload["monitoring"] = get_monitoring_state()
                 payload["portal_viewer"] = get_portal_viewer_state()
+                mode_state = get_mode_state()
+                payload["mode"] = mode_state.get("mode", {})
+                payload["mode_runtime"] = mode_state
                 yield "event: state\ndata: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
             return
         while True:
             payload = read_state()
             payload["monitoring"] = get_monitoring_state()
             payload["portal_viewer"] = get_portal_viewer_state()
+            mode_state = get_mode_state()
+            payload["mode"] = mode_state.get("mode", {})
+            payload["mode_runtime"] = mode_state
             yield "event: state\ndata: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
             time.sleep(1.0)
 
@@ -1085,6 +1158,36 @@ def api_portal_viewer_open():
         "portal_viewer": portal_state,
         "daemon": daemon_result,
     }), 200
+
+
+@app.route("/api/mode", methods=["GET"])
+def api_mode_get():
+    """GET /api/mode - Return current mode metadata."""
+    if not verify_token():
+        return jsonify({"ok": False, "error": "Unauthorized"}), 403
+    payload = get_mode_state()
+    code = 200 if payload.get("ok") else 500
+    return jsonify(payload), code
+
+
+@app.route("/api/mode", methods=["POST"])
+def api_mode_set():
+    """POST /api/mode - Switch mode via control daemon."""
+    if not verify_token():
+        return jsonify({"ok": False, "error": "Unauthorized"}), 403
+
+    body = request.get_json(silent=True) or {}
+    target_mode = str(body.get("mode", "")).strip().lower()
+    if target_mode not in {"portal", "shield", "scapegoat"}:
+        return jsonify({"ok": False, "error": "mode must be one of: portal, shield, scapegoat"}), 400
+
+    requested_by = str(body.get("requested_by", "webui")).strip() or "webui"
+    result = send_control_command_with_params(
+        "mode_set",
+        {"mode": target_mode, "requested_by": requested_by},
+    )
+    code = 200 if result.get("ok") else 500
+    return jsonify(result), code
 
 
 @app.route("/api/certs/azazel-webui-local-ca/meta")

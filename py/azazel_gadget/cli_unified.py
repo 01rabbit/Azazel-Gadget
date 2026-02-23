@@ -71,7 +71,9 @@ class Snapshot:
     evidence: List[str]
     internal: Dict[str, object]
     connection: Dict[str, object]
+    mode: Dict[str, object]
     monitoring: Dict[str, str]
+    attack: Dict[str, object]
     age: str = "00:00:00"
     snapshot_epoch: float = 0.0
     source: str = "SNAPSHOT"
@@ -122,8 +124,24 @@ class Snapshot:
                 "captive_portal": "NA",
                 "captive_portal_reason": "NOT_CHECKED",
             }
+        if self.mode is None:
+            self.mode = {
+                "current_mode": "shield",
+                "last_change": "",
+                "requested_by": "",
+                "config_hash": "",
+            }
         if self.monitoring is None:
             self.monitoring = {"suricata": "UNKNOWN", "opencanary": "UNKNOWN", "ntfy": "UNKNOWN"}
+        if self.attack is None:
+            self.attack = {
+                "suricata_alert": False,
+                "suricata_severity": 0,
+                "canary_target_alert": False,
+                "canary_delay_active": False,
+                "canary_delay_target_count": 0,
+                "canary_delay_targets": [],
+            }
 
 
 def detect_unicode(force_ascii: bool, force_unicode: bool) -> bool:
@@ -171,6 +189,22 @@ def build_snapshot(data: Dict[str, object], source: str = "SNAPSHOT") -> Snapsho
         "opencanary": str(monitoring.get("opencanary", "UNKNOWN") or "UNKNOWN").upper(),
         "ntfy": str(monitoring.get("ntfy", "UNKNOWN") or "UNKNOWN").upper(),
     }
+    mode_payload = data.get("mode", {}) if isinstance(data.get("mode"), dict) else {}
+    normalized_mode = {
+        "current_mode": str(mode_payload.get("current_mode", "shield") or "shield").lower(),
+        "last_change": str(mode_payload.get("last_change", "") or ""),
+        "requested_by": str(mode_payload.get("requested_by", "") or ""),
+        "config_hash": str(mode_payload.get("config_hash", "") or ""),
+    }
+    attack = data.get("attack", {}) if isinstance(data.get("attack"), dict) else {}
+    normalized_attack = {
+        "suricata_alert": bool(attack.get("suricata_alert", False)),
+        "suricata_severity": int(attack.get("suricata_severity", 0) or 0),
+        "canary_target_alert": bool(attack.get("canary_target_alert", False)),
+        "canary_delay_active": bool(attack.get("canary_delay_active", False)),
+        "canary_delay_target_count": int(attack.get("canary_delay_target_count", 0) or 0),
+        "canary_delay_targets": attack.get("canary_delay_targets", []) if isinstance(attack.get("canary_delay_targets", []), list) else [],
+    }
     
     return Snapshot(
         now_time=data.get("now_time", time.strftime("%H:%M:%S")),
@@ -195,7 +229,9 @@ def build_snapshot(data: Dict[str, object], source: str = "SNAPSHOT") -> Snapsho
         evidence=data.get("evidence", [])[-6:],  # oldest→newest想定
         internal=internal,
         connection=normalized_connection,
+        mode=normalized_mode,
         monitoring=normalized_monitoring,
+        attack=normalized_attack,
         age=age,
         snapshot_epoch=float(ts) if ts else 0.0,
         source=source,
@@ -306,13 +342,35 @@ def _service_active(name: str) -> bool:
         return False
 
 
-def _pid_running(pid_file: Path) -> bool:
+def _pid_running(pid_file: Path, expected_cmd: str = "") -> bool:
     try:
         if not pid_file.exists():
             return False
         pid = int(pid_file.read_text(encoding="utf-8").strip())
         os.kill(pid, 0)
-        return True
+    except PermissionError:
+        pass
+    except Exception:
+        return False
+    if expected_cmd:
+        try:
+            cmdline = Path(f"/proc/{pid}/cmdline").read_bytes().decode("utf-8", errors="ignore")
+            if expected_cmd not in cmdline:
+                return False
+        except Exception:
+            return False
+    return True
+
+
+def _process_running(pattern: str) -> bool:
+    try:
+        res = subprocess.run(
+            ["pgrep", "-f", pattern],
+            capture_output=True,
+            text=True,
+            timeout=1.0,
+        )
+        return res.returncode == 0
     except Exception:
         return False
 
@@ -332,14 +390,14 @@ def _ntfy_health_ok() -> bool:
 
 
 def _collect_monitoring_state() -> Dict[str, str]:
-    opencanary_ok = _service_active("opencanary.service")
+    opencanary_ok = _service_active("opencanary@az_canary.service") or _service_active("opencanary.service")
     suricata_ok = _service_active("suricata.service")
     ntfy_ok = _service_active("ntfy.service") and _ntfy_health_ok()
     opencanary_pid = Path("/home/azazel/canary-venv/bin/opencanaryd.pid")
     suricata_pid = Path("/run/suricata.pid")
     return {
-        "opencanary": "ON" if (opencanary_ok or _pid_running(opencanary_pid)) else "OFF",
-        "suricata": "ON" if (suricata_ok or _pid_running(suricata_pid)) else "OFF",
+        "opencanary": "ON" if (opencanary_ok or _pid_running(opencanary_pid, "opencanary") or _process_running("[o]pencanary.tac")) else "OFF",
+        "suricata": "ON" if (suricata_ok or _pid_running(suricata_pid, "suricata")) else "OFF",
         "ntfy": "ON" if ntfy_ok else "OFF",
     }
 
@@ -902,12 +960,13 @@ def update_epd(snap: Snapshot, enable_epd: bool = True) -> None:
             
             # Use wlan (upstream) IP address instead of downstream
             wlan_ip = snap.up_ip if snap.up_ip and snap.up_ip != "-" else "No IP"
+            mode_label = str((snap.mode or {}).get("current_mode", "shield") or "shield").upper()
             
             cmd = [
                 "python3", str(epd_script),
                 "--state", "normal",
                 "--ssid", snap.ssid or "No SSID",
-                "--ip", wlan_ip,
+                "--mode-label", mode_label,
             ]
             if signal_dbm is not None:
                 cmd += ["--signal", str(signal_dbm)]
@@ -1068,6 +1127,7 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
         f"{'📶' if unicode_mode else 'WiFi'} SSID: {snap.ssid}  "
         f"{'⬇️' if unicode_mode else 'Down:'} {snap.down_if}  "
         f"{'⬆️' if unicode_mode else 'Up:'} {snap.up_if}  "
+        f"{'Mode:'} {str(snap.mode.get('current_mode', 'shield')).upper()}  "
         f"{'🕐' if unicode_mode else 'Time:'} {snap.now_time}"
     )
     if battery_icon:
@@ -1348,6 +1408,17 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
     else:
         suri_text = "IDS: (no alerts)"
         suri_color = 6
+
+    attack = snap.attack if isinstance(snap.attack, dict) else {}
+    delay_active = bool(attack.get("canary_delay_active", False))
+    delay_targets = _coerce_int(attack.get("canary_delay_target_count", 0), 0)
+    if delay_active:
+        delay_text = f"Delay=ACTIVE({delay_targets})"
+    elif snap.user_state.upper() == "DECEPTION":
+        delay_text = "Delay=ARMED"
+    else:
+        delay_text = "Delay=OFF"
+    suri_text = f"{suri_text} {delay_text}"
     
     # ネットワークスループット
     traffic_text = f"Traffic: ↓ {snap.download_mbps:.1f} Mbps / ↑ {snap.upload_mbps:.1f} Mbps" if unicode_mode else f"Traffic: D:{snap.download_mbps:.1f} U:{snap.upload_mbps:.1f} Mbps"

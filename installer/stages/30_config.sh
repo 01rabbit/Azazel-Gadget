@@ -42,6 +42,7 @@ main() {
         "opencanary.conf"
         "known_wifi.json"
         "iptables-rules.v4"
+        "mode.json"
     )
     
     for config in "${config_files[@]}"; do
@@ -114,6 +115,10 @@ EOF
     log_info "✓ 環境ファイル作成: $defaults_file"
     log_info "✓ 互換リンク作成: $legacy_defaults_file -> $defaults_file"
     log_info "✓ 互換処理完了: $legacy_cfg_dir / $legacy_log_dir"
+
+    # /etc/azazel 互換パス（mode.json 単一ソース）
+    mkdir -p /etc/azazel
+    ln -sfn "$cfg_dir/mode.json" /etc/azazel/mode.json
 
     # 4.2 zram-tools 設定（利用可能環境のみ）
     if dpkg-query -W -f='${Status}' zram-tools 2>/dev/null | grep -q "install ok installed"; then

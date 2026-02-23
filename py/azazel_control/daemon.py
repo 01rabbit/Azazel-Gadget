@@ -27,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 if str(PY_ROOT) not in sys.path:
     sys.path.insert(0, str(PY_ROOT))
 from wifi_scan import scan_wifi, get_wireless_interface, check_networkmanager
+from mode_manager import ModeManager
 from wifi_connect import connect_wifi, update_state_json
 from azazel_gadget.path_schema import (
     first_minute_config_candidates,
@@ -43,6 +44,7 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger('azazel-daemon')
+MODE_MANAGER = ModeManager(logger=logger)
 
 SOCKET_PATH = Path('/run/azazel/control.sock')
 PORTAL_VIEWER_SERVICE = "azazel-portal-viewer.service"
@@ -65,6 +67,7 @@ last_action_time = {}
 RATE_LIMITS = {
     'wifi_scan': 1.0,      # 1 second
     'wifi_connect': 3.0,   # 3 seconds
+    'mode_set': 2.0,       # 2 seconds
     'shutdown': 10.0,      # Prevent accidental repeated shutdown requests
     'reboot': 10.0,        # Prevent accidental repeated reboot requests
 }
@@ -320,6 +323,11 @@ def _snapshot_candidates() -> list[Path]:
 
 def read_ui_snapshot() -> dict[str, Any]:
     """Read latest UI snapshot from schema-aware paths."""
+    mode_payload: dict[str, Any] = {}
+    try:
+        mode_payload = MODE_MANAGER.status()
+    except Exception as exc:
+        logger.debug(f"Failed to read mode status: {exc}")
     for path in _snapshot_candidates():
         try:
             if not path.exists():
@@ -327,6 +335,8 @@ def read_ui_snapshot() -> dict[str, Any]:
             warn_if_legacy_path(path, logger=logger)
             data = json.loads(path.read_text(encoding="utf-8"))
             if isinstance(data, dict):
+                if mode_payload.get("ok"):
+                    data["mode"] = mode_payload.get("mode", {})
                 return {
                     "ok": True,
                     "snapshot": data,
@@ -477,6 +487,32 @@ def execute_action(action_name, params=None):
 
     if action_name == "get_snapshot":
         return read_ui_snapshot()
+    if action_name in ("mode_status", "mode_get"):
+        status = MODE_MANAGER.status()
+        status["ts"] = time.time()
+        return status
+    if action_name in ("mode_set", "mode_portal", "mode_shield", "mode_scapegoat"):
+        limited = rate_limit_error("mode_set", "Rate limit exceeded (1 req/2sec)")
+        if limited:
+            return limited
+        target_mode = str(params.get("mode", "")).strip().lower()
+        if action_name.startswith("mode_") and action_name != "mode_set":
+            target_mode = action_name.split("_", 1)[1]
+        if target_mode not in ("portal", "shield", "scapegoat"):
+            return {"ok": False, "error": f"Unknown mode: {target_mode}", "ts": time.time()}
+        requested_by = str(params.get("requested_by", "daemon")).strip() or "daemon"
+        dry_run = bool(params.get("dry_run", False))
+        result = MODE_MANAGER.set_mode(target_mode, requested_by=requested_by, dry_run=dry_run)
+        result["ts"] = time.time()
+        return result
+    if action_name == "mode_apply_default":
+        limited = rate_limit_error("mode_set", "Rate limit exceeded (1 req/2sec)")
+        if limited:
+            return limited
+        requested_by = str(params.get("requested_by", "boot")).strip() or "boot"
+        result = MODE_MANAGER.apply_default(requested_by=requested_by)
+        result["ts"] = time.time()
+        return result
     if action_name == "path_schema_status":
         return {"ok": True, "schema": path_schema_status(), "ts": time.time()}
     if action_name == "migrate_path_schema":

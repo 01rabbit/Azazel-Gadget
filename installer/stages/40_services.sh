@@ -64,6 +64,8 @@ main() {
     local scripts=(
         "scripts/usb0-static.sh:/usr/local/sbin/usb0-static.sh"
         "scripts/azazel-nat.sh:/usr/local/sbin/azazel-nat.sh"
+        "bin/azctl:/usr/local/bin/azctl"
+        "bin/azazel-epd-refresh:/usr/local/bin/azazel-epd-refresh"
         "bin/suri_epaper.sh:/usr/local/bin/"
         "bin/portal_detect.sh:/usr/local/bin/"
         "scripts/opencanary-start.sh:/usr/local/bin/opencanary-start"
@@ -89,8 +91,11 @@ main() {
     local units=(
         "azazel-first-minute.service"
         "azazel-epd.service"
+        "azazel-epd-refresh.service"
+        "azazel-epd-refresh.timer"
         "azazel-epd-portal.service"
         "azazel-epd-portal.timer"
+        "azazel-mode.service"
         "azazel-control-daemon.service"
         "azazel-web.service"
         "azazel-portal-viewer.service"
@@ -98,6 +103,7 @@ main() {
         "azazel-nat.service"
         "suri-epaper.service"
         "opencanary.service"
+        "opencanary@.service"
     )
     
     for unit in "${units[@]}"; do
@@ -162,10 +168,12 @@ main() {
     local primary_services=(
         "usb0-static.service"
         "azazel-nat.service"
+        "azazel-mode.service"
         "azazel-first-minute.service"
         "azazel-control-daemon.service"
         "azazel-web.service"
         "suri-epaper.service"
+        "azazel-epd-refresh.timer"
         "azazel-epd-portal.timer"
     )
 
@@ -200,6 +208,11 @@ main() {
     log_info "  • azazel-nat.service を起動..."
     systemctl start azazel-nat.service >> "$LOG_FILE" 2>&1 || {
         log_warn "⚠️  azazel-nat 起動失敗"
+    }
+
+    log_info "  • azazel-mode.service を起動..."
+    systemctl start azazel-mode.service >> "$LOG_FILE" 2>&1 || {
+        log_warn "⚠️  azazel-mode 起動失敗"
     }
     
     # 競合していた dnsmasq を掃除してから first-minute を再起動
@@ -265,14 +278,9 @@ main() {
         configure_sshd_usb_only
 
         if systemctl list-unit-files | grep -q "opencanary.service"; then
-            log_info "  • opencanary.service を有効化..."
-            systemctl enable opencanary.service >> "$LOG_FILE" 2>&1 || {
-                log_warn "⚠️  opencanary.service 有効化失敗"
-            }
-            log_info "  • opencanary.service を再起動..."
-            systemctl restart opencanary.service >> "$LOG_FILE" 2>&1 || {
-                log_warn "⚠️  opencanary.service 起動失敗"
-            }
+            log_info "  • opencanary.service を停止/無効化（mode_manager 管理へ移行）..."
+            systemctl stop opencanary.service >> "$LOG_FILE" 2>&1 || true
+            systemctl disable opencanary.service >> "$LOG_FILE" 2>&1 || true
         else
             log_warn "⚠️  opencanary.service が未登録です"
         fi

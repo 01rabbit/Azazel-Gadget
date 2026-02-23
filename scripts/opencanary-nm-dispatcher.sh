@@ -34,6 +34,9 @@ fi
 case "${ACTION}" in
   up|dhcp4-change|ipv4-change|connectivity-change)
     systemctl restart azazel-nat.service || true
-    systemctl restart opencanary.service
+    # OpenCanary lifecycle is owned by mode_manager:
+    # - scapegoat: isolated canary is started
+    # - portal/shield: canary remains stopped
+    # Do not restart legacy global opencanary.service here.
     ;;
 esac

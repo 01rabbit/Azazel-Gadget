@@ -1006,6 +1006,33 @@ class FirstMinuteController:
         except Exception as e:
             self.logger.debug(f"snapshot: Suricata alerts gathering failed: {e}")
         
+        attack_summary: Dict[str, object] = {
+            "suricata_alert": False,
+            "suricata_severity": 0,
+            "canary_target_alert": False,
+            "canary_delay_active": False,
+            "canary_delay_target_count": 0,
+            "canary_delay_targets": [],
+        }
+        try:
+            with self.status_ctx_lock:
+                last_signals = self.status_ctx.get("last_signals", {})
+                if not isinstance(last_signals, dict):
+                    last_signals = {}
+                canary_delay_targets = self.status_ctx.get("canary_delay_targets", [])
+                if not isinstance(canary_delay_targets, list):
+                    canary_delay_targets = []
+                attack_summary = {
+                    "suricata_alert": bool(last_signals.get("suricata_alert", False)),
+                    "suricata_severity": int(last_signals.get("suricata_severity", 0) or 0),
+                    "canary_target_alert": bool(last_signals.get("canary_target_alert", False)),
+                    "canary_delay_active": bool(self.status_ctx.get("canary_delay_active", False)),
+                    "canary_delay_target_count": int(self.status_ctx.get("canary_delay_target_count", 0) or 0),
+                    "canary_delay_targets": [str(item) for item in canary_delay_targets],
+                }
+        except Exception:
+            pass
+
         snap = {
             "now_time": time.strftime("%H:%M:%S"),
             "snapshot_epoch": time.time(),
@@ -1050,6 +1077,8 @@ class FirstMinuteController:
             # Suricata IDS alerts
             "suricata_critical": suricata_critical,
             "suricata_warning": suricata_warning,
+            # Attack/deception context shared across WebUI/TUI/EPD.
+            "attack": attack_summary,
             # Default connection section (will be overwritten with persisted state below)
             "connection": self._default_connection_state(),
         }
@@ -1175,13 +1204,59 @@ class FirstMinuteController:
         ssid: str,
         up_ip: str,
         signal_bucket: str,
+        mode_label: str,
         msg: str,
     ) -> tuple:
         # For NORMAL state: only SSID and IP matter; signal strength changes don't warrant refresh
         if mode == "normal":
-            return (mode, ssid, up_ip)
+            return (mode, ssid, up_ip, mode_label)
         # For other states: include message
         return (mode, msg)
+
+    def _get_current_mode_label(self) -> str:
+        """Read current gateway mode label from mode.json (best-effort)."""
+        candidates = [
+            Path("/etc/azazel/mode.json"),
+            Path("/etc/azazel-gadget/mode.json"),
+            Path("/etc/azazel-zero/mode.json"),
+        ]
+        for path in candidates:
+            try:
+                if not path.exists():
+                    continue
+                data = json.loads(path.read_text(encoding="utf-8"))
+                if not isinstance(data, dict):
+                    continue
+                mode = str(data.get("current_mode", "") or "").strip().upper()
+                if mode in {"PORTAL", "SHIELD", "SCAPEGOAT"}:
+                    return mode
+            except Exception:
+                continue
+        return "SHIELD"
+
+    def _is_opencanary_on(self) -> bool:
+        """Best-effort runtime check for OpenCanary process/service state."""
+        try:
+            for unit in ("opencanary@az_canary.service", "opencanary.service"):
+                res = subprocess.run(
+                    ["systemctl", "is-active", unit],
+                    capture_output=True,
+                    text=True,
+                    timeout=2.0,
+                    check=False,
+                )
+                if res.returncode == 0 and res.stdout.strip() == "active":
+                    return True
+            proc = subprocess.run(
+                ["pgrep", "-f", "[o]pencanary.tac"],
+                capture_output=True,
+                text=True,
+                timeout=2.0,
+                check=False,
+            )
+            return proc.returncode == 0
+        except Exception:
+            return False
 
     def _get_risk_status(self, stage: Stage) -> str:
         """Map stage to risk status string for EPD display."""
@@ -1236,26 +1311,34 @@ class FirstMinuteController:
             signal_bucket = "none"
             epd_ip = "No IP"
         
-        # EPD表示用に簡潔なメッセージを作成（文字数制限考慮）
+        # EPD表示用メッセージを作成
         if stage == Stage.DEGRADED:
-            # DEGRADEDの場合、reasonから簡潔な表示を作成
+            # WARNING画面は上段固定で "CAUTION" を表示するため、
+            # ここでは下段2行目に載せる「理由」を優先して渡す。
             if "contain" in reason.lower() and "degraded" in reason.lower():
                 msg = "RECOVERED"  # CONTAIN→DEGRADED の場合
-            elif "degraded" in reason.lower():
-                msg = "CAUTION"    # その他のDEGRADED
+            elif reason:
+                msg = reason
             else:
-                msg = (reason or "LIMITED")[:12]  # 12文字制限
+                msg = "LIMITED"
         else:
             msg = (reason or stage.value)[:12]  # その他のステートも12文字制限
 
         # Get risk assessment (from suspicion score and stage)
         suspicion = int(summary.get("suspicion", 0))
         risk_status = self._get_risk_status(stage)
+        mode_label = self._get_current_mode_label()
+
+        # In SCAPEGOAT mode, keep base EPD screen (mode/SSID) and suppress alert-style
+        # stage rendering from first-minute path. Mode refresh pipeline owns the screen.
+        if mode_label == "SCAPEGOAT" and stage in (Stage.DEGRADED, Stage.CONTAIN, Stage.DECEPTION):
+            self.logger.debug("EPD: Skipping stage alert render in SCAPEGOAT mode (stage=%s)", stage.value)
+            return
         
         if stage in (Stage.INIT, Stage.PROBE, Stage.NORMAL):
             mode = "normal"
             # フィンガープリント：信号強度を除外、risk_statusとsuspicionを含む
-            fp = self._epd_fingerprint(mode, ssid, epd_ip, risk_status, str(suspicion))
+            fp = self._epd_fingerprint(mode, ssid, epd_ip, risk_status, mode_label, str(suspicion))
             
             self.logger.debug(f"EPD: fingerprint check - current={fp}, last={self.epd_last_fp}, match={fp == self.epd_last_fp}")
             self.logger.debug(f"EPD: signal_bucket - current={signal_bucket}, last={self.epd_last_signal_bucket}")
@@ -1271,12 +1354,19 @@ class FirstMinuteController:
                     # 信号強度のアイコンが変わった（例：strong→medium）
                     self.logger.info(f"EPD: Updating display - signal icon changed ({self.epd_last_signal_bucket}→{signal_bucket})")
                     # ここで更新処理に進む（下記のcmd実行へ）
-            cmd = ["python3", str(epd_script), "--state", mode, "--ssid", ssid, "--risk-status", risk_status, "--suspicion", str(suspicion)]
+            cmd = [
+                "python3", str(epd_script),
+                "--state", mode,
+                "--ssid", ssid,
+                "--mode-label", mode_label,
+                "--risk-status", risk_status,
+                "--suspicion", str(suspicion),
+            ]
             if signal_dbm is not None:
                 cmd += ["--signal", str(signal_dbm)]
         elif stage == Stage.DEGRADED:
             mode = "warning"
-            fp = self._epd_fingerprint(mode, "", "", "", msg)
+            fp = self._epd_fingerprint(mode, "", "", "", "", msg)
             self.logger.debug(f"EPD: fingerprint check - current={fp}, last={self.epd_last_fp}, match={fp == self.epd_last_fp}")
             if not force and fp == self.epd_last_fp:
                 self.logger.debug(f"EPD: Skipping update - fingerprint unchanged")
@@ -1286,12 +1376,23 @@ class FirstMinuteController:
             mode = "danger"
             # ★ Phase 2: CONTAIN状態で統一メッセージを表示
             contain_msg = "ATTACK DETECTED"
-            fp = self._epd_fingerprint(mode, "", "", "", contain_msg)
+            fp = self._epd_fingerprint(mode, "", "", "", "", contain_msg)
             self.logger.debug(f"EPD: fingerprint check - current={fp}, last={self.epd_last_fp}, match={fp == self.epd_last_fp}")
             if not force and fp == self.epd_last_fp:
                 self.logger.debug(f"EPD: Skipping update - fingerprint unchanged")
                 return
             cmd = ["python3", str(epd_script), "--state", mode, "--msg", contain_msg]
+        elif stage == Stage.DECEPTION:
+            mode = "danger"
+            # Deception stage indicates active hostile activity under canary decoy.
+            delay_active = bool(self._active_canary_delay_targets(now))
+            deception_msg = "DELAY ACTIVE" if delay_active else "DECEPTION MODE"
+            fp = self._epd_fingerprint(mode, "", "", "", "", deception_msg)
+            self.logger.debug(f"EPD: fingerprint check - current={fp}, last={self.epd_last_fp}, match={fp == self.epd_last_fp}")
+            if not force and fp == self.epd_last_fp:
+                self.logger.debug(f"EPD: Skipping update - fingerprint unchanged")
+                return
+            cmd = ["python3", str(epd_script), "--state", mode, "--msg", deception_msg]
         else:
             self.logger.debug(f"EPD: Unknown stage {stage}, skipping update")
             return
@@ -2203,6 +2304,8 @@ class FirstMinuteController:
                 state == Stage.CONTAIN
                 and self.cfg.deception.get("enable_if_opencanary_present", False)
                 and Path(self.cfg.deception.get("opencanary_cfg", "/etc/opencanaryd/opencanary.conf")).exists()
+                and self._get_current_mode_label() == "SCAPEGOAT"
+                and self._is_opencanary_on()
             ):
                 state = Stage.DECEPTION
             if state != self.current_stage:
