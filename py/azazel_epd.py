@@ -113,6 +113,41 @@ def load_font(size: int, font_name: str = "stardos") -> ImageFont.FreeTypeFont:
         sys.exit(1)
 
 
+def fit_text_single_line(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    font_name: str,
+    max_size: int,
+    min_size: int,
+    max_width: int,
+) -> Tuple[str, ImageFont.FreeTypeFont]:
+    """
+    Fit text to a single line by shrinking font size, then truncating with "...".
+    Returns (fitted_text, fitted_font).
+    """
+    raw = (text or "").strip()
+    if not raw:
+        raw = "-"
+
+    for size in range(max_size, min_size - 1, -1):
+        font = load_font(size, font_name)
+        bbox = draw.textbbox((0, 0), raw, font=font)
+        if (bbox[2] - bbox[0]) <= max_width:
+            return raw, font
+
+    font = load_font(min_size, font_name)
+    trimmed = raw
+    suffix = "..."
+    while len(trimmed) > 1:
+        candidate = f"{trimmed}{suffix}"
+        bbox = draw.textbbox((0, 0), candidate, font=font)
+        if (bbox[2] - bbox[0]) <= max_width:
+            return candidate, font
+        trimmed = trimmed[:-1]
+
+    return suffix, font
+
+
 def load_icon_with_transparency(icon_path: Path, max_size: int = 48) -> Image.Image:
     """
     Load PNG icon and resize while preserving transparency.
@@ -181,7 +216,14 @@ def normalize_signal_dbm(signal: Optional[int]) -> Optional[int]:
     return val
 
 
-def render_normal(ssid: str, icon_dir: Path, signal: Optional[int] = None, risk_status: str = "SAFE", suspicion: int = 0) -> Tuple[Image.Image, Image.Image]:
+def render_normal(
+    ssid: str,
+    icon_dir: Path,
+    signal: Optional[int] = None,
+    risk_status: str = "SAFE",
+    suspicion: int = 0,
+    mode_label: str = "SHIELD",
+) -> Tuple[Image.Image, Image.Image]:
     """
     Render NORMAL state:
     - White background
@@ -203,7 +245,10 @@ def render_normal(ssid: str, icon_dir: Path, signal: Optional[int] = None, risk_
     draw_black = ImageDraw.Draw(black_img)
     
     # Load fonts
-    font_ssid = load_font(23, "stardos")  # ESSID - 23pt (StardosStencilBold, center)
+    # Mode line: icbmss20.ttf (as requested)
+    font_mode = load_font(20, "icbm")
+    # SSID line: keep Stardos and use requested size 15pt
+    font_ssid = load_font(15, "stardos")
     font_evidence = load_font(20, "icbm")  # Evidence (State/Suspicion) - 20pt (icbmss20, bottom)
     
     # Select Wi-Fi icon based on signal strength (dBm)
@@ -227,9 +272,15 @@ def render_normal(ssid: str, icon_dir: Path, signal: Optional[int] = None, risk_
     icon_y = 8
     black_img.paste(wifi_icon_1bit, (icon_x, icon_y))
     
-    # Draw ESSID next to icon (23pt, black) - moved from bottom to center
+    # Draw mode + SSID as two stacked lines (top area), without affecting lower evidence area.
     ssid_x = icon_x + 55  # Icon width + small gap
-    ssid_y = 20
+    mode_text = (mode_label or "SHIELD").strip().upper()
+    if len(mode_text) > 12:
+        mode_text = mode_text[:12]
+    mode_y = 8
+    draw_black.text((ssid_x, mode_y), mode_text, fill=0, font=font_mode)  # 0=black
+
+    ssid_y = 36
     draw_black.text((ssid_x, ssid_y), ssid, fill=0, font=font_ssid)  # 0=black
     
     # Draw horizontal line
@@ -261,51 +312,59 @@ def render_warning(msg: str, icon_dir: Path) -> Tuple[Image.Image, Image.Image]:
     """
     Render WARNING state:
     - White background
-    - Warning icons on left and right (BLACK, 30pt size)
-    - "WARNING" text (center, 30pt, black)
-    - Horizontal line dividing screen in half
+    - Warning icons on left and right (RED, 30pt size)
+    - "WARNING" text (center, 30pt, red)
+    - Horizontal line dividing screen in half (RED)
     - Message (bottom half, 30pt, black)
     """
     # Create layers
     black_img = Image.new('1', (EPD_WIDTH, EPD_HEIGHT), 255)  # White background
-    red_img = Image.new('1', (EPD_WIDTH, EPD_HEIGHT), 255)    # No red
+    red_img = Image.new('1', (EPD_WIDTH, EPD_HEIGHT), 255)    # White/red layer
     
     draw_black = ImageDraw.Draw(black_img)
+    draw_red = ImageDraw.Draw(red_img)
     
     # Load fonts - icbmss20 for WARNING state
     font_warning = load_font(35, "icbm")  # WARNING
-    font_message = load_font(28, "icbm")  # Message
+    # Message font is adaptive for long alerts (e.g., "SURICATA ALERT")
+    msg_max_width = EPD_WIDTH - 20
+    msg_text, font_message = fit_text_single_line(
+        draw_black, msg, "icbm", max_size=28, min_size=16, max_width=msg_max_width
+    )
     
-    # Load warning icon and convert to 1-bit for BLACK layer (35pt size)
+    # Load warning icon and convert to 1-bit for RED layer (35pt size)
     warning_icon_path = icon_dir / ICON_WARNING
     warning_icon = load_icon_with_transparency(warning_icon_path, max_size=35)
     warning_icon_1bit = convert_to_1bit(warning_icon, invert=False)
     
-    # Place warning icons in BLACK on left and right
+    # Place warning icons in RED on left and right
     icon_left_x = 10
     icon_right_x = EPD_WIDTH - 45  # 10px margin + 35px icon
     icon_y = 15
-    black_img.paste(warning_icon_1bit, (icon_left_x, icon_y))
-    black_img.paste(warning_icon_1bit, (icon_right_x, icon_y))
+    red_img.paste(warning_icon_1bit, (icon_left_x, icon_y))
+    red_img.paste(warning_icon_1bit, (icon_right_x, icon_y))
     
-    # Draw "WARNING" text in black (center, top half)
-    warning_bbox = draw_black.textbbox((0, 0), "WARNING", font=font_warning)
+    # Draw "WARNING" text in red (center, top half)
+    warning_bbox = draw_red.textbbox((0, 0), "WARNING", font=font_warning)
     warning_width = warning_bbox[2] - warning_bbox[0]
     warning_x = (EPD_WIDTH - warning_width) // 2
     warning_y = 15
-    draw_black.text((warning_x, warning_y), "WARNING", fill=0, font=font_warning)  # 0=black
+    draw_red.text((warning_x, warning_y), "WARNING", fill=0, font=font_warning)  # 0=red pixel on red layer
     
-    # Draw horizontal line dividing screen in half (y=61 for 122px height)
+    # Draw horizontal line dividing screen in half (y=61 for 122px height, in red)
     line_y = EPD_HEIGHT // 2
     line_margin = 10
-    draw_black.line([(line_margin, line_y), (EPD_WIDTH - line_margin, line_y)], fill=0, width=2)
+    draw_red.line([(line_margin, line_y), (EPD_WIDTH - line_margin, line_y)], fill=0, width=2)
     
     # Draw message (bottom half, centered, 30pt, black)
-    msg_bbox = draw_black.textbbox((0, 0), msg, font=font_message)
+    msg_bbox = draw_black.textbbox((0, 0), msg_text, font=font_message)
     msg_width = msg_bbox[2] - msg_bbox[0]
+    msg_height = msg_bbox[3] - msg_bbox[1]
     msg_x = (EPD_WIDTH - msg_width) // 2
-    msg_y = line_y + 15
-    draw_black.text((msg_x, msg_y), msg, fill=0, font=font_message)  # 0=black
+    bottom_top = line_y + 2
+    bottom_height = EPD_HEIGHT - bottom_top
+    msg_y = bottom_top + max(0, (bottom_height - msg_height) // 2)
+    draw_black.text((msg_x, msg_y), msg_text, fill=0, font=font_message)  # 0=black
     
     return black_img, red_img
 
@@ -331,7 +390,11 @@ def render_danger(msg: str, icon_dir: Path) -> Tuple[Image.Image, Image.Image]:
     
     # Load fonts - icbmss20 for DANGER state
     font_danger = load_font(35, "icbm")
-    font_message = load_font(25, "icbm")
+    # Message font is adaptive for long alerts
+    msg_max_width = EPD_WIDTH - 20
+    msg_text, font_message = fit_text_single_line(
+        draw_white, msg, "icbm", max_size=25, min_size=14, max_width=msg_max_width
+    )
     
     # Load warning icon and convert to white (40pt size)
     warning_icon_path = icon_dir / ICON_WARNING
@@ -358,11 +421,14 @@ def render_danger(msg: str, icon_dir: Path) -> Tuple[Image.Image, Image.Image]:
     draw_white.line([(line_margin, line_y), (EPD_WIDTH - line_margin, line_y)], fill=255, width=2)
     
     # Draw message (bottom half, centered, 25pt, white)
-    msg_bbox = draw_white.textbbox((0, 0), msg, font=font_message)
+    msg_bbox = draw_white.textbbox((0, 0), msg_text, font=font_message)
     msg_width = msg_bbox[2] - msg_bbox[0]
+    msg_height = msg_bbox[3] - msg_bbox[1]
     msg_x = (EPD_WIDTH - msg_width) // 2
-    msg_y = line_y + 15
-    draw_white.text((msg_x, msg_y), msg, fill=255, font=font_message)  # 255=white
+    bottom_top = line_y + 2
+    bottom_height = EPD_HEIGHT - bottom_top
+    msg_y = bottom_top + max(0, (bottom_height - msg_height) // 2)
+    draw_white.text((msg_x, msg_y), msg_text, fill=255, font=font_message)  # 255=white
     
     # Apply white knockout: use ImageChops.lighter to OR the white parts onto red
     red_img = ImageChops.lighter(red_img, white_mask)
@@ -537,6 +603,7 @@ Examples:
                        choices=['normal', 'warning', 'danger', 'stale'],
                        help='Display state')
     parser.add_argument('--ssid', help='Wi-Fi SSID (for normal state)')
+    parser.add_argument('--mode-label', default='SHIELD', help='Gateway mode label shown above SSID (for normal state)')
     parser.add_argument('--signal', type=int, help='Wi-Fi signal strength in dBm (negative, e.g., -55) or 0-100%')
     parser.add_argument('--risk-status', default='SAFE', help='Risk status (for normal state): SAFE, CHECKING, LIMITED, CONTAINED')
     parser.add_argument('--suspicion', type=int, default=0, help='Suspicion score (for normal state, 0-100)')
@@ -568,7 +635,14 @@ Examples:
     print(f"Rendering {args.state.upper()} state...")
     
     if args.state == 'normal':
-        black_img, red_img = render_normal(args.ssid, icon_dir, args.signal, args.risk_status, args.suspicion)
+        black_img, red_img = render_normal(
+            args.ssid,
+            icon_dir,
+            args.signal,
+            args.risk_status,
+            args.suspicion,
+            args.mode_label,
+        )
     elif args.state == 'warning':
         black_img, red_img = render_warning(args.msg, icon_dir)
     elif args.state == 'danger':
