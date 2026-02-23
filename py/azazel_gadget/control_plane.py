@@ -99,7 +99,11 @@ def watch_snapshots(
 
 
 def read_snapshot_from_files(logger: Any = None) -> Tuple[Optional[Dict[str, Any]], Optional[Path]]:
-    for path in snapshot_path_candidates():
+    candidates = snapshot_path_candidates()
+    runtime_only = [p for p in candidates if str(p).startswith("/run/")]
+    if not runtime_only:
+        runtime_only = candidates[:2]
+    for path in runtime_only:
         try:
             if not path.exists():
                 continue

@@ -233,6 +233,10 @@ class FirstMinuteController:
         self._legacy_dnsmasq_warned = False
         self.last_console = 0.0
         self.snapshot_paths = snapshot_path_candidates(home=Path.home())
+        # Sync should only read runtime snapshots; home fallbacks can be stale across users/services.
+        self.snapshot_sync_paths = [p for p in self.snapshot_paths if str(p).startswith("/run/")]
+        if not self.snapshot_sync_paths:
+            self.snapshot_sync_paths = self.snapshot_paths[:2]
         self.snapshot_path = self.snapshot_paths[0]
         self.snapshot_path.parent.mkdir(parents=True, exist_ok=True)
         # Keep Wi-Fi connection state in memory to preserve across snapshots
@@ -1089,7 +1093,7 @@ class FirstMinuteController:
             # This allows wifi_connect.py to update connection info without being overwritten
             # Check both primary and fallback paths to ensure we don't lose data
             existing_connection = None
-            for snap_path in self.snapshot_paths:
+            for snap_path in self.snapshot_sync_paths:
                 try:
                     if not snap_path.exists():
                         continue
@@ -1117,8 +1121,8 @@ class FirstMinuteController:
                 self.logger.debug("snapshot: no connection state available")
             self.persistent_connection_state = snap["connection"].copy()
             
-            # Write snapshot to primary + fallback path for compatibility.
-            for snap_path in self.snapshot_paths[:2] + [self.snapshot_paths[-1]]:
+            # Write snapshot to runtime paths only to avoid stale home snapshot bleed-through.
+            for snap_path in self.snapshot_sync_paths:
                 try:
                     snap_path.parent.mkdir(parents=True, exist_ok=True)
                     snap_path.write_text(json.dumps(snap, ensure_ascii=False), encoding="utf-8")
@@ -1138,7 +1142,7 @@ class FirstMinuteController:
         """
         self.logger.debug(f"sync: checking for connection state updates (current: {self.persistent_connection_state})")
         
-        for path in self.snapshot_paths:
+        for path in self.snapshot_sync_paths:
             try:
                 if path.exists():
                     warn_if_legacy_path(path, logger=self.logger)

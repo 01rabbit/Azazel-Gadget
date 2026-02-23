@@ -318,7 +318,11 @@ def load_control_flags() -> dict:
 
 
 def _snapshot_candidates() -> list[Path]:
-    return snapshot_path_candidates(home=Path.home())
+    candidates = snapshot_path_candidates(home=Path.home())
+    runtime_only = [p for p in candidates if str(p).startswith("/run/")]
+    if runtime_only:
+        return runtime_only
+    return candidates[:2]
 
 
 def read_ui_snapshot() -> dict[str, Any]:
