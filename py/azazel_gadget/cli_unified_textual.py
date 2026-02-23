@@ -13,7 +13,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from rich.text import Text
 from textual.app import App, ComposeResult
@@ -23,7 +23,7 @@ from textual.widgets import Footer, Header, Static
 
 
 SnapshotLoader = Callable[[], Any]
-ActionSender = Callable[[str], None]
+ActionSender = Callable[[str], Dict[str, Any]]
 EpdUpdater = Callable[[Any, bool], None]
 EpdFingerprint = Callable[[Any], Tuple[str, str, str, Optional[int], str]]
 
@@ -253,6 +253,8 @@ class AzazelTextualApp(App):
         self._menu_items = self._build_menu_items()
         self._last_epd_fp: Optional[Tuple[str, str, str, Optional[int], str]] = None
         self._status_message = "Ready"
+        self._confirm_action: Optional[str] = None
+        self._confirm_deadline: float = 0.0
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -276,12 +278,6 @@ class AzazelTextualApp(App):
         ssid_cmd = _maybe_sudo(
             [sys.executable, str(PY_ROOT / "ssid_list.py"), "--textual", "wlan0"]
         )
-        epd_start = _maybe_sudo(
-            [sys.executable, str(PY_ROOT / "boot_splash_epd.py"), "--mode", "start"]
-        )
-        epd_shutdown = _maybe_sudo(
-            [sys.executable, str(PY_ROOT / "boot_splash_epd.py"), "--mode", "shutdown"]
-        )
         return [
             {"label": "Refresh Snapshot", "kind": "refresh"},
             {"label": "Mode: Portal", "kind": "send_action", "action": "mode_portal"},
@@ -290,12 +286,12 @@ class AzazelTextualApp(App):
             {"label": "Stage-Open", "kind": "send_action", "action": "stage_open"},
             {"label": "Re-Probe", "kind": "send_action", "action": "reprobe"},
             {"label": "Contain", "kind": "send_action", "action": "contain"},
+            {"label": "Shutdown System", "kind": "send_action", "action": "shutdown"},
+            {"label": "Reboot System", "kind": "send_action", "action": "reboot"},
             {"label": "Wi-Fi Selector (Textual)", "kind": "interactive_cmd", "cmd": ssid_cmd},
             {"label": "OpenCanary: start", "kind": "run_cmd", "cmd": _maybe_sudo(["systemctl", "start", "opencanary.service"])},
             {"label": "OpenCanary: stop", "kind": "run_cmd", "cmd": _maybe_sudo(["systemctl", "stop", "opencanary.service"])},
             {"label": "OpenCanary: hits (latest)", "kind": "interactive_cmd", "cmd": _maybe_sudo(["journalctl", "-u", "opencanary.service", "-n", "50", "--no-pager"])},
-            {"label": "EPD: start animation (test)", "kind": "run_cmd", "cmd": epd_start},
-            {"label": "EPD: shutdown animation (test)", "kind": "run_cmd", "cmd": epd_shutdown},
             {"label": "Toggle Details", "kind": "toggle_details"},
             {"label": "Close Menu", "kind": "close_menu"},
         ]
@@ -566,13 +562,44 @@ class AzazelTextualApp(App):
 
     async def _send_action(self, action: str, log_line: str) -> None:
         try:
-            await asyncio.to_thread(self._send_command_fn, action)
-            self._status_message = f"Action sent: {action}"
-            self._append_local_evidence(log_line)
+            result = await asyncio.to_thread(self._send_command_fn, action)
+            if isinstance(result, dict) and result.get("ok"):
+                self._status_message = f"Action accepted: {action}"
+                self._append_local_evidence(log_line)
+            else:
+                err = str((result or {}).get("error", "unknown error")) if isinstance(result, dict) else "unexpected response"
+                self._status_message = f"Action failed: {action} ({err})"
+                self._append_local_evidence(f"• action failed: {action} ({err})")
         except Exception as exc:
             self._status_message = f"Action failed: {exc}"
+            self._append_local_evidence(f"• action failed: {action} ({exc})")
         finally:
             self._render_panels()
+
+    def _requires_double_confirm(self, action: str) -> bool:
+        return action in ("shutdown", "reboot")
+
+    def _confirmation_token(self, action: str) -> str:
+        return action.upper()
+
+    def _request_confirm(self, action: str) -> None:
+        self._confirm_action = action
+        self._confirm_deadline = time.time() + 8.0
+        token = self._confirmation_token(action)
+        self._status_message = (
+            f"Confirm {action}: select again within 8s ({token})"
+        )
+        self._render_status_line()
+
+    def _consume_confirm(self, action: str) -> bool:
+        now = time.time()
+        if self._confirm_action == action and now <= self._confirm_deadline:
+            self._confirm_action = None
+            self._confirm_deadline = 0.0
+            return True
+        self._confirm_action = None
+        self._confirm_deadline = 0.0
+        return False
 
     async def action_refresh(self) -> None:
         await self._refresh_snapshot()
@@ -633,6 +660,10 @@ class AzazelTextualApp(App):
         if kind == "send_action":
             action = str(item.get("action", ""))
             if action:
+                if self._requires_double_confirm(action):
+                    if not self._consume_confirm(action):
+                        self._request_confirm(action)
+                        return
                 await self._send_action(action, f"• action: {action} command sent (menu)")
             return
         if kind == "run_cmd":

@@ -4,6 +4,7 @@ Azazel-Gadget full-screen TUI (manual refresh, dark theme, fixed layout).
  - Snapshot JSON is fetched on demand (no auto-refresh).
  - IPC prefers control-plane Unix socket (/run/azazel/control.sock), then file fallback.
  - Actions send commands through control plane first, then command file fallback.
+   shutdown/reboot are daemon-only and do not use command-file fallback.
  - Unicode が不安定なら ASCII 枠＋アイコンに自動フォールバック (--ascii/--unicodeで強制可)。
 """
 from __future__ import annotations
@@ -19,14 +20,14 @@ import time
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.request import urlopen
 
 PY_ROOT = Path(__file__).resolve().parents[1]
 if str(PY_ROOT) not in sys.path:
     sys.path.insert(0, str(PY_ROOT))
 
-from azazel_gadget.control_plane import read_snapshot_payload, send_action_with_fallback
+from azazel_gadget.control_plane import read_snapshot_payload, send_action, send_action_with_fallback
 from azazel_gadget.path_schema import log_dir_candidates, snapshot_path_candidates
 
 DEFAULT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -922,8 +923,11 @@ def default_snapshot() -> Dict[str, object]:
     }
 
 
-def send_command(action: str) -> None:
-    send_action_with_fallback(action, logger=None)
+def send_command(action: str) -> Dict[str, Any]:
+    # Power actions must go through control daemon scripts only.
+    if action in ("shutdown", "reboot"):
+        return send_action(action, timeout_sec=40.0)
+    return send_action_with_fallback(action, logger=None)
 
 
 def _epd_fingerprint(snap: Snapshot) -> Tuple[str, str, str, Optional[int], str]:
@@ -1552,7 +1556,7 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
             stdscr.addnstr(extra_y + 3, 2, no_blocks[: w - 4], cp(1))
 
     # Actions + Hint (絵文字なし、シンプル表示)
-    actions = "[U] Refresh  [A] Stage-Open  [R] Re-Probe  [C] Contain  [L] Details  [M] Menu  [Q] Quit"
+    actions = "[U] Refresh  [A] Stage-Open  [R] Re-Probe  [C] Contain  [S] Shutdown  [B] Reboot  [L] Details  [M] Menu  [Q] Quit"
     
     # 状態遷移フロー表示
     state_flow = "Flow: PROBE → DEGRADED → NORMAL → ✅ SAFE" if unicode_mode else "Flow: PROBE->DEGRADED->NORMAL->SAFE"
@@ -1592,6 +1596,42 @@ def details_view(stdscr, snap: Snapshot, unicode_mode: bool):
         ch = stdscr.getch()
         if ch in (ord("b"), ord("B")):
             break
+
+
+def confirm_keyword(stdscr, keyword: str) -> bool:
+    h, w = stdscr.getmaxyx()
+    prompt = f"Type {keyword} to confirm: "
+    max_input = max(1, w - len(prompt) - 2)
+    y = max(0, h - 1)
+
+    stdscr.move(y, 0)
+    stdscr.clrtoeol()
+    stdscr.addnstr(y, 0, prompt, w - 1, curses.A_BOLD)
+    stdscr.refresh()
+
+    old_cursor = 0
+    try:
+        old_cursor = curses.curs_set(1)
+    except Exception:
+        old_cursor = 0
+    curses.echo()
+    typed = ""
+    try:
+        raw = stdscr.getstr(y, min(len(prompt), w - 2), max_input)
+        typed = raw.decode("utf-8", errors="ignore").strip()
+    except Exception:
+        typed = ""
+    finally:
+        curses.noecho()
+        try:
+            curses.curs_set(old_cursor)
+        except Exception:
+            pass
+        stdscr.move(y, 0)
+        stdscr.clrtoeol()
+        stdscr.refresh()
+
+    return typed == keyword
 
 
 def main():
@@ -1657,6 +1697,15 @@ def main():
 
     def _loop(stdscr):
         nonlocal snap, last_epd_fp
+
+        def _record_action(action: str, label: str) -> None:
+            result = send_command(action)
+            if isinstance(result, dict) and result.get("ok"):
+                snap.evidence.append(f"• action: {label} command sent")
+                return
+            err = str((result or {}).get("error", "unknown error")) if isinstance(result, dict) else "unexpected response"
+            snap.evidence.append(f"• action failed: {label} ({err})")
+
         while True:
             render(stdscr, snap, unicode_mode)
             ch = stdscr.getch()
@@ -1669,14 +1718,21 @@ def main():
                     update_epd(snap, enable_epd)
                     last_epd_fp = fp
             elif ch in (ord("a"), ord("A")):
-                send_command("stage_open")
-                snap.evidence.append("• action: stage-open command sent")
+                _record_action("stage_open", "stage-open")
             elif ch in (ord("r"), ord("R")):
-                send_command("reprobe")
-                snap.evidence.append("• action: reprobe command sent")
+                _record_action("reprobe", "reprobe")
             elif ch in (ord("c"), ord("C")):
-                send_command("contain")
-                snap.evidence.append("• action: contain command sent")
+                _record_action("contain", "contain")
+            elif ch in (ord("s"), ord("S")):
+                if confirm_keyword(stdscr, "SHUTDOWN"):
+                    _record_action("shutdown", "shutdown")
+                else:
+                    snap.evidence.append("• action canceled: shutdown")
+            elif ch in (ord("b"), ord("B")):
+                if confirm_keyword(stdscr, "REBOOT"):
+                    _record_action("reboot", "reboot")
+                else:
+                    snap.evidence.append("• action canceled: reboot")
             elif ch in (ord("l"), ord("L")):
                 details_view(stdscr, snap, unicode_mode)
             elif ch in (ord("m"), ord("M")):

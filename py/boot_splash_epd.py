@@ -222,26 +222,26 @@ def animate_start(epd, bicolor, steps:int=10, min_frame_sec:float=0.25, label="B
         time.sleep(min_frame_sec)
     epd.sleep()
 
-def animate_shutdown(epd, bicolor, hold_sec:float=1.0):
+def animate_shutdown(epd, bicolor, hold_sec:float=1.0) -> bool:
     w, h = epd_dims(epd)
     title_font = pick_font(TITLE_FONT_CANDIDATES, 26)
-    frame = draw_logo_panel(w, h, title_font, invert=True, subtitle="Shutting down…")
-    show_on_epd(frame, epd, bicolor)
-    time.sleep(hold_sec)
-    # 画面消去
     try:
-        # 多くのWaveshareドライバに Clear(0xFF) がある
+        frame = draw_logo_panel(w, h, title_font, invert=True, subtitle="Shutting down…")
+        show_on_epd(frame, epd, bicolor)
+        time.sleep(hold_sec)
+        # 画面消去
         epd.init()
         try:
+            # 多くのWaveshareドライバに Clear(0xFF) がある
             epd.Clear(0xFF)
         except AttributeError:
             # ない場合は全面白のバッファを送る
             blank = Image.new("1", (w, h), 255)
             show_on_epd(blank, epd, bicolor)
         epd.sleep()
+        return True
     except Exception:
-        # 失敗しても沈黙。終了処理だ、静粛に。
-        pass
+        return False
 
 # ---------- Legacy splash (情報パネル) ----------
 def draw_info_panel(ssid: str, ip: str, session: Optional[str], width: int, height: int, debug: bool = False):
@@ -316,7 +316,11 @@ def main():
         return
 
     if args.mode == "shutdown":
-        animate_shutdown(epd, bic, hold_sec=1.0)
+        ok = animate_shutdown(epd, bic, hold_sec=1.0)
+        if not ok:
+            if args.debug:
+                print("EPD shutdown clear failed", file=sys.stderr)
+            sys.exit(2)
         return
 
     # info: 既存の情報スプラッシュ（--no-clear指定時は初回フルクリアを省略）
