@@ -148,6 +148,113 @@ def fit_text_single_line(
     return suffix, font
 
 
+def truncate_to_width(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    font: ImageFont.FreeTypeFont,
+    max_width: int,
+) -> str:
+    """Truncate text with "..." so that it fits max_width."""
+    raw = (text or "").strip()
+    if not raw:
+        return "-"
+
+    bbox = draw.textbbox((0, 0), raw, font=font)
+    if (bbox[2] - bbox[0]) <= max_width:
+        return raw
+
+    suffix = "..."
+    trimmed = raw
+    while len(trimmed) > 1:
+        candidate = f"{trimmed}{suffix}"
+        bbox = draw.textbbox((0, 0), candidate, font=font)
+        if (bbox[2] - bbox[0]) <= max_width:
+            return candidate
+        trimmed = trimmed[:-1]
+
+    return suffix
+
+
+def fit_text_two_lines(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    font_name: str,
+    max_size: int,
+    min_size: int,
+    max_width: int,
+    max_height: int,
+    line_gap: int = 2,
+) -> Tuple[str, str, ImageFont.FreeTypeFont]:
+    """
+    Fit text into two centered lines by trying word-based splits with shrinking font.
+    Returns (line1, line2, font). If unavoidable, line2 is truncated with "...".
+    """
+    raw = " ".join((text or "").strip().split())
+    if not raw:
+        raw = "-"
+    words = raw.split(" ")
+
+    for size in range(max_size, min_size - 1, -1):
+        font = load_font(size, font_name)
+        best = None
+        best_width = None
+
+        if len(words) >= 2:
+            split_points = range(1, len(words))
+            for i in split_points:
+                line1 = " ".join(words[:i]).strip()
+                line2 = " ".join(words[i:]).strip()
+                if not line1 or not line2:
+                    continue
+                b1 = draw.textbbox((0, 0), line1, font=font)
+                b2 = draw.textbbox((0, 0), line2, font=font)
+                w1 = b1[2] - b1[0]
+                w2 = b2[2] - b2[0]
+                h1 = b1[3] - b1[1]
+                h2 = b2[3] - b2[1]
+                total_h = h1 + line_gap + h2
+                if w1 <= max_width and w2 <= max_width and total_h <= max_height:
+                    candidate_w = max(w1, w2)
+                    if best is None or candidate_w < best_width:
+                        best = (line1, line2, font)
+                        best_width = candidate_w
+        else:
+            half = max(1, len(raw) // 2)
+            line1 = raw[:half].strip()
+            line2 = raw[half:].strip()
+            b1 = draw.textbbox((0, 0), line1, font=font)
+            b2 = draw.textbbox((0, 0), line2, font=font)
+            w1 = b1[2] - b1[0]
+            w2 = b2[2] - b2[0]
+            h1 = b1[3] - b1[1]
+            h2 = b2[3] - b2[1]
+            total_h = h1 + line_gap + h2
+            if w1 <= max_width and w2 <= max_width and total_h <= max_height:
+                best = (line1, line2, font)
+
+        if best is not None:
+            return best
+
+    font = load_font(min_size, font_name)
+    if len(words) >= 2:
+        split_idx = max(1, len(words) // 2)
+        line1 = " ".join(words[:split_idx]).strip()
+        line2 = " ".join(words[split_idx:]).strip()
+    else:
+        half = max(1, len(raw) // 2)
+        line1 = raw[:half].strip()
+        line2 = raw[half:].strip()
+    line1 = truncate_to_width(draw, line1, font, max_width)
+    line2 = truncate_to_width(draw, line2, font, max_width)
+    return line1, line2, font
+
+
+def should_force_two_line_alert(msg: str) -> bool:
+    """Force 2-line layout for known labels that clip on one line."""
+    normalized = " ".join((msg or "").strip().split()).lower()
+    return normalized.startswith("suricata alert")
+
+
 def load_icon_with_transparency(icon_path: Path, max_size: int = 48) -> Image.Image:
     """
     Load PNG icon and resize while preserving transparency.
@@ -326,11 +433,8 @@ def render_warning(msg: str, icon_dir: Path) -> Tuple[Image.Image, Image.Image]:
     
     # Load fonts - icbmss20 for WARNING state
     font_warning = load_font(35, "icbm")  # WARNING
-    # Message font is adaptive for long alerts (e.g., "SURICATA ALERT")
-    msg_max_width = EPD_WIDTH - 20
-    msg_text, font_message = fit_text_single_line(
-        draw_black, msg, "icbm", max_size=28, min_size=16, max_width=msg_max_width
-    )
+    # Message font is adaptive; SURICATA ALERT is forced to 2-line to avoid clipping.
+    msg_max_width = EPD_WIDTH - 26
     
     # Load warning icon and convert to 1-bit for RED layer (35pt size)
     warning_icon_path = icon_dir / ICON_WARNING
@@ -356,15 +460,41 @@ def render_warning(msg: str, icon_dir: Path) -> Tuple[Image.Image, Image.Image]:
     line_margin = 10
     draw_red.line([(line_margin, line_y), (EPD_WIDTH - line_margin, line_y)], fill=0, width=2)
     
-    # Draw message (bottom half, centered, 30pt, black)
-    msg_bbox = draw_black.textbbox((0, 0), msg_text, font=font_message)
-    msg_width = msg_bbox[2] - msg_bbox[0]
-    msg_height = msg_bbox[3] - msg_bbox[1]
-    msg_x = (EPD_WIDTH - msg_width) // 2
+    # Draw message (bottom half, centered, black)
     bottom_top = line_y + 2
     bottom_height = EPD_HEIGHT - bottom_top
-    msg_y = bottom_top + max(0, (bottom_height - msg_height) // 2)
-    draw_black.text((msg_x, msg_y), msg_text, fill=0, font=font_message)  # 0=black
+    if should_force_two_line_alert(msg):
+        line1, line2, font_message = fit_text_two_lines(
+            draw_black,
+            msg,
+            "icbm",
+            max_size=24,
+            min_size=14,
+            max_width=msg_max_width,
+            max_height=bottom_height - 2,
+            line_gap=2,
+        )
+        b1 = draw_black.textbbox((0, 0), line1, font=font_message)
+        b2 = draw_black.textbbox((0, 0), line2, font=font_message)
+        w1, h1 = b1[2] - b1[0], b1[3] - b1[1]
+        w2, h2 = b2[2] - b2[0], b2[3] - b2[1]
+        total_h = h1 + 2 + h2
+        y1 = bottom_top + max(0, (bottom_height - total_h) // 2)
+        y2 = y1 + h1 + 2
+        x1 = (EPD_WIDTH - w1) // 2
+        x2 = (EPD_WIDTH - w2) // 2
+        draw_black.text((x1, y1), line1, fill=0, font=font_message)  # 0=black
+        draw_black.text((x2, y2), line2, fill=0, font=font_message)  # 0=black
+    else:
+        msg_text, font_message = fit_text_single_line(
+            draw_black, msg, "icbm", max_size=28, min_size=16, max_width=msg_max_width
+        )
+        msg_bbox = draw_black.textbbox((0, 0), msg_text, font=font_message)
+        msg_width = msg_bbox[2] - msg_bbox[0]
+        msg_height = msg_bbox[3] - msg_bbox[1]
+        msg_x = (EPD_WIDTH - msg_width) // 2
+        msg_y = bottom_top + max(0, (bottom_height - msg_height) // 2)
+        draw_black.text((msg_x, msg_y), msg_text, fill=0, font=font_message)  # 0=black
     
     return black_img, red_img
 
@@ -390,11 +520,8 @@ def render_danger(msg: str, icon_dir: Path) -> Tuple[Image.Image, Image.Image]:
     
     # Load fonts - icbmss20 for DANGER state
     font_danger = load_font(35, "icbm")
-    # Message font is adaptive for long alerts
-    msg_max_width = EPD_WIDTH - 20
-    msg_text, font_message = fit_text_single_line(
-        draw_white, msg, "icbm", max_size=25, min_size=14, max_width=msg_max_width
-    )
+    # Message font is adaptive; SURICATA ALERT is forced to 2-line to avoid clipping.
+    msg_max_width = EPD_WIDTH - 26
     
     # Load warning icon and convert to white (40pt size)
     warning_icon_path = icon_dir / ICON_WARNING
@@ -420,15 +547,41 @@ def render_danger(msg: str, icon_dir: Path) -> Tuple[Image.Image, Image.Image]:
     line_margin = 10
     draw_white.line([(line_margin, line_y), (EPD_WIDTH - line_margin, line_y)], fill=255, width=2)
     
-    # Draw message (bottom half, centered, 25pt, white)
-    msg_bbox = draw_white.textbbox((0, 0), msg_text, font=font_message)
-    msg_width = msg_bbox[2] - msg_bbox[0]
-    msg_height = msg_bbox[3] - msg_bbox[1]
-    msg_x = (EPD_WIDTH - msg_width) // 2
+    # Draw message (bottom half, centered, white)
     bottom_top = line_y + 2
     bottom_height = EPD_HEIGHT - bottom_top
-    msg_y = bottom_top + max(0, (bottom_height - msg_height) // 2)
-    draw_white.text((msg_x, msg_y), msg_text, fill=255, font=font_message)  # 255=white
+    if should_force_two_line_alert(msg):
+        line1, line2, font_message = fit_text_two_lines(
+            draw_white,
+            msg,
+            "icbm",
+            max_size=22,
+            min_size=12,
+            max_width=msg_max_width,
+            max_height=bottom_height - 2,
+            line_gap=2,
+        )
+        b1 = draw_white.textbbox((0, 0), line1, font=font_message)
+        b2 = draw_white.textbbox((0, 0), line2, font=font_message)
+        w1, h1 = b1[2] - b1[0], b1[3] - b1[1]
+        w2, h2 = b2[2] - b2[0], b2[3] - b2[1]
+        total_h = h1 + 2 + h2
+        y1 = bottom_top + max(0, (bottom_height - total_h) // 2)
+        y2 = y1 + h1 + 2
+        x1 = (EPD_WIDTH - w1) // 2
+        x2 = (EPD_WIDTH - w2) // 2
+        draw_white.text((x1, y1), line1, fill=255, font=font_message)  # 255=white
+        draw_white.text((x2, y2), line2, fill=255, font=font_message)  # 255=white
+    else:
+        msg_text, font_message = fit_text_single_line(
+            draw_white, msg, "icbm", max_size=25, min_size=14, max_width=msg_max_width
+        )
+        msg_bbox = draw_white.textbbox((0, 0), msg_text, font=font_message)
+        msg_width = msg_bbox[2] - msg_bbox[0]
+        msg_height = msg_bbox[3] - msg_bbox[1]
+        msg_x = (EPD_WIDTH - msg_width) // 2
+        msg_y = bottom_top + max(0, (bottom_height - msg_height) // 2)
+        draw_white.text((msg_x, msg_y), msg_text, fill=255, font=font_message)  # 255=white
     
     # Apply white knockout: use ImageChops.lighter to OR the white parts onto red
     red_img = ImageChops.lighter(red_img, white_mask)
