@@ -46,6 +46,7 @@ main() {
     
     local critical_services=(
         "usb0-static.service"
+        "azazel-mode.service"
         "azazel-first-minute.service"
     )
     

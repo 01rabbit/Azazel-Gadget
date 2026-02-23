@@ -1,0 +1,15 @@
+[Unit]
+Description=Azazel EPD mode/status refresh
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/run/azazel/epd_state.json
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=-/etc/default/azazel-gadget
+EnvironmentFile=-/etc/default/azazel-zero
+ExecStart=/bin/bash -lc '/usr/local/bin/azazel-epd-refresh || true'
+TimeoutStartSec=60
+StandardOutput=journal
+StandardError=journal

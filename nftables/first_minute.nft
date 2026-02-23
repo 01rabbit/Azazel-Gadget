@@ -38,12 +38,6 @@ table inet azazel_fmc {
     elements = { 22, 80, 443, 8081, 8082, 8084, 6080 }
   }
 
-  # Decoy services exposed to upstream (wlan0)
-  set decoy_ports {
-    type inet_service
-    elements = { 22, 80 }
-  }
-
   chain stage_switch {
     type filter hook prerouting priority -300; policy accept;
     meta mark set $STAGE_PROBE
@@ -67,9 +61,8 @@ table inet azazel_fmc {
     iifname $DOWNSTREAM tcp dport @mgmt_ports accept comment "usb0 management"
     iifname $DOWNSTREAM udp dport { 53, 67, 68 } accept comment "usb0 DHCP/DNS"
     
-    # Phase 2: wlan0 (upstream) はデコイのみ許可
-    iifname $UPSTREAM tcp dport @decoy_ports accept comment "wlan0 decoy only"
-    iifname $UPSTREAM drop comment "wlan0 blocked (production mode)"
+    # Phase 2: upstream 側の開放/遮断は mode applicator (table inet azazel) に委譲
+    iifname $UPSTREAM accept comment "wlan0 policy delegated to mode table"
     
     # Phase 3: その他の入力トラフィック（管理目的で保持）
     # loopback, established, ICMP は既に処理済み
@@ -79,6 +72,7 @@ table inet azazel_fmc {
   chain forward {
     type filter hook forward priority 0; policy drop;
     ct state established,related accept
+    iifname != $DOWNSTREAM accept comment "non-downstream forwarding delegated to mode table"
     iifname $DOWNSTREAM ip daddr $MGMT_IP accept
     iifname $DOWNSTREAM meta mark set meta mark map { 0 : $STAGE_PROBE }
     iifname $DOWNSTREAM ip saddr $MGMT_SUBNET meta mark vmap { $STAGE_PROBE : jump stage_probe, $STAGE_DEGRADED : jump stage_degraded, $STAGE_NORMAL : jump stage_normal, $STAGE_CONTAIN : jump stage_contain, $STAGE_DECEPTION : jump stage_deception }

@@ -287,6 +287,45 @@ body {
     color: #fff;
 }
 
+.badge.mode-portal {
+    background: #27ae60;
+    color: #fff;
+}
+
+.badge.mode-shield {
+    background: #2980b9;
+    color: #fff;
+}
+
+.badge.mode-scapegoat {
+    background: #c0392b;
+    color: #fff;
+}
+
+.mode-buttons {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin: 10px 0;
+}
+
+.mode-btn {
+    justify-content: center;
+    padding: 7px 8px;
+    font-size: 0.85em;
+}
+
+.mode-btn.active {
+    border: 2px solid var(--accent);
+    box-shadow: 0 0 0 1px rgba(0, 212, 255, 0.4);
+}
+
+.mode-note {
+    font-size: 0.82em;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
 /* Evidence Card - Full Width */
 .card-evidence {
     grid-column: 1 / -1;

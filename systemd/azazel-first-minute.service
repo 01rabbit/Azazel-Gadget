@@ -1,8 +1,8 @@
 [Unit]
 Description=Azazel-Gadget First-Minute Control
-After=network-online.target usb0-static.service
-Wants=network-online.target
-Requires=usb0-static.service
+After=network-online.target usb0-static.service azazel-mode.service
+Wants=network-online.target azazel-mode.service
+Requires=usb0-static.service azazel-mode.service
 
 [Service]
 Type=simple

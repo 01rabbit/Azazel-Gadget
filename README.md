@@ -26,6 +26,7 @@ Azazel-Gadget combines active network defense, operator-facing interfaces, and o
 ### 2) Action/control daemon (Unix socket)
 - Dedicated daemon at `/run/azazel/control.sock`.
 - Executes action scripts, Wi-Fi scan/connect handlers, and portal-viewer startup workflow.
+- Proxies deterministic mode switching (`mode_set`, `mode_status`) to `azctl`.
 - Supports control-plane snapshot streaming (`watch_snapshot`) for clients.
 - Includes path-schema actions (`path_schema_status`, `migrate_path_schema`).
 
@@ -45,6 +46,7 @@ Azazel-Gadget combines active network defense, operator-facing interfaces, and o
 - Boot/shutdown splash service.
 - Periodic captive-portal detection display updates.
 - Suricata-linked e-paper alert updates.
+- Mode/state refresh from `/run/azazel/epd_state.json` (event-driven + periodic timer).
 
 ### 6) Optional local monitoring/deception
 - OpenCanary systemd unit and startup wrapper.
@@ -53,6 +55,11 @@ Azazel-Gadget combines active network defense, operator-facing interfaces, and o
 - Optional local ntfy server (`--with-ntfy`) and `/api/events/stream` bridge.
 
 ## Architecture at a Glance
+
+0. `azazel-mode.service` + `azctl`
+- Applies boot/default mode (`shield` unless persisted otherwise) from `mode.json`.
+- Single applicator for firewall/sysctl/OpenCanary orchestration.
+- Writes audit log and EPD state.
 
 1. `azazel-first-minute.service`
 - Produces state snapshot and Status API (`:8082`).
@@ -65,10 +72,37 @@ Azazel-Gadget combines active network defense, operator-facing interfaces, and o
 5. Optional `azazel-portal-viewer.service`
 - noVNC endpoint (default `10.55.0.10:6080`), started on demand by API.
 
+## Modes
+
+- `portal`
+  - Internet gateway behavior for `usb0` clients (NAT via `wlan0`).
+  - Decoy exposure OFF on `wlan0`.
+- `shield` (default)
+  - Drops inbound from `wlan0` while keeping `usb0` client outbound path.
+  - Decoy exposure OFF.
+- `scapegoat`
+  - Exposes only OpenCanary allowlisted ports on `wlan0`.
+  - OpenCanary runs in isolated namespace (`az_canary`) and never gets a path to `usb0`.
+
+Single source of truth:
+- `/etc/azazel/mode.json` (compatibly linked to `/etc/azazel-gadget/mode.json`)
+- Volatile runtime EPD/status state: `/run/azazel/epd_state.json`
+- Audit log: `/var/log/azazel/mode_changes.jsonl`
+
+CLI:
+
+```bash
+sudo azctl mode status
+sudo azctl mode set shield
+sudo azctl mode set portal
+sudo azctl mode set scapegoat
+```
+
 ## Included Services (systemd)
 
 | Unit | Purpose |
 |---|---|
+| `azazel-mode.service` | Boot mode applicator (`azctl mode apply-default`) |
 | `azazel-first-minute.service` | Main control-plane process |
 | `azazel-control-daemon.service` | Unix socket action daemon |
 | `azazel-web.service` | Flask backend API/UI |
@@ -76,10 +110,12 @@ Azazel-Gadget combines active network defense, operator-facing interfaces, and o
 | `usb0-static.service` | Forces static IPv4 on `usb0` |
 | `azazel-nat.service` | iptables-based forwarding/NAT helper |
 | `azazel-epd.service` | E-paper startup status |
+| `azazel-epd-refresh.service` + `.timer` | Mode/state EPD refresh pipeline |
 | `azazel-epd-shutdown.service` | E-paper shutdown clear/splash |
 | `azazel-epd-portal.service` + `.timer` | E-paper captive-portal checks |
 | `suri-epaper.service` | Suricata-driven E-paper updates |
 | `opencanary.service` | Optional deception service |
+| `opencanary@.service` | OpenCanary in a dedicated network namespace |
 
 ## Installation Options
 
@@ -109,6 +145,8 @@ sudo ./install.sh --resume
 |---|---|
 | `GET /` | Dashboard HTML |
 | `GET /api/state` | Snapshot + monitoring + portal-viewer state |
+| `GET /api/mode` | Current mode metadata |
+| `POST /api/mode` | Switch mode (`portal`/`shield`/`scapegoat`) |
 | `GET /api/state/stream` | SSE state stream |
 | `GET /api/events/stream` | SSE ntfy bridge events |
 | `GET /api/portal-viewer` | noVNC state/URL |
@@ -121,7 +159,7 @@ sudo ./install.sh --resume
 | `GET /api/certs/azazel-webui-local-ca.crt` | Local CA download |
 | `GET /health` | Web backend health |
 
-Allowed actions (API): `refresh`, `reprobe`, `contain`, `release`, `details`, `stage_open`, `disconnect`, `wifi_scan`, `wifi_connect`, `portal_viewer_open`, `shutdown`, `reboot`
+Allowed actions (API): `refresh`, `reprobe`, `contain`, `release`, `details`, `stage_open`, `disconnect`, `wifi_scan`, `wifi_connect`, `portal_viewer_open`, `mode_set`, `mode_status`, `mode_get`, `mode_portal`, `mode_shield`, `mode_scapegoat`, `shutdown`, `reboot`
 
 Token auth:
 - Header: `X-AZAZEL-TOKEN` or `X-Auth-Token`
@@ -134,6 +172,28 @@ Token auth:
 - Menu compatibility launcher: `py/azazel_menu.py`
 - Terminal status panel: `py/azazel_status.py`
 - E-paper renderer/controller: `py/azazel_epd.py`, `py/boot_splash_epd.py`
+
+## EPD Indicators
+
+- Transition:
+  - During mode apply: `mode=switching`, target mode shown.
+  - On failure: temporary `FAILED` state then restored steady mode.
+- Steady:
+  - `PORTAL` / `SHIELD` / `SCAPEGOAT` mode reflected from `/run/azazel/epd_state.json`.
+  - Includes internet/DHCP/DNS/OpenCanary fields and exposed decoy ports for scapegoat.
+
+## Security Guarantees
+
+- No new inbound path from `wlan0` to `usb0` in any mode.
+- `shield`: inbound `wlan0` traffic dropped by dedicated mode firewall table.
+- `portal`: NAT for `usb0` clients without decoy exposure.
+- `scapegoat`: only OpenCanary allowlisted ports exposed; canary stack isolated in `az_canary`.
+
+## Known Limits
+
+- Scapegoat netns exposure uses host-level DNAT/forwarding; ensure upstream `wlan0` remains stable.
+- Mode post-check internet test is host-side (`ping/getent`) and not a full usb0 client synthetic transaction.
+- If EPD hardware/driver is unavailable, mode switch still succeeds and only journals EPD refresh errors.
 
 ## Testing
 

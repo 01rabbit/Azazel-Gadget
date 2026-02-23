@@ -71,6 +71,7 @@ class Snapshot:
     evidence: List[str]
     internal: Dict[str, object]
     connection: Dict[str, object]
+    mode: Dict[str, object]
     monitoring: Dict[str, str]
     attack: Dict[str, object]
     age: str = "00:00:00"
@@ -122,6 +123,13 @@ class Snapshot:
                 "internet_check": "UNKNOWN",
                 "captive_portal": "NA",
                 "captive_portal_reason": "NOT_CHECKED",
+            }
+        if self.mode is None:
+            self.mode = {
+                "current_mode": "shield",
+                "last_change": "",
+                "requested_by": "",
+                "config_hash": "",
             }
         if self.monitoring is None:
             self.monitoring = {"suricata": "UNKNOWN", "opencanary": "UNKNOWN", "ntfy": "UNKNOWN"}
@@ -181,6 +189,13 @@ def build_snapshot(data: Dict[str, object], source: str = "SNAPSHOT") -> Snapsho
         "opencanary": str(monitoring.get("opencanary", "UNKNOWN") or "UNKNOWN").upper(),
         "ntfy": str(monitoring.get("ntfy", "UNKNOWN") or "UNKNOWN").upper(),
     }
+    mode_payload = data.get("mode", {}) if isinstance(data.get("mode"), dict) else {}
+    normalized_mode = {
+        "current_mode": str(mode_payload.get("current_mode", "shield") or "shield").lower(),
+        "last_change": str(mode_payload.get("last_change", "") or ""),
+        "requested_by": str(mode_payload.get("requested_by", "") or ""),
+        "config_hash": str(mode_payload.get("config_hash", "") or ""),
+    }
     attack = data.get("attack", {}) if isinstance(data.get("attack"), dict) else {}
     normalized_attack = {
         "suricata_alert": bool(attack.get("suricata_alert", False)),
@@ -214,6 +229,7 @@ def build_snapshot(data: Dict[str, object], source: str = "SNAPSHOT") -> Snapsho
         evidence=data.get("evidence", [])[-6:],  # oldest→newest想定
         internal=internal,
         connection=normalized_connection,
+        mode=normalized_mode,
         monitoring=normalized_monitoring,
         attack=normalized_attack,
         age=age,
@@ -1088,6 +1104,7 @@ def render(stdscr, snap: Snapshot, unicode_mode: bool):
         f"{'📶' if unicode_mode else 'WiFi'} SSID: {snap.ssid}  "
         f"{'⬇️' if unicode_mode else 'Down:'} {snap.down_if}  "
         f"{'⬆️' if unicode_mode else 'Up:'} {snap.up_if}  "
+        f"{'Mode:'} {str(snap.mode.get('current_mode', 'shield')).upper()}  "
         f"{'🕐' if unicode_mode else 'Time:'} {snap.now_time}"
     )
     if battery_icon:

@@ -284,6 +284,9 @@ class AzazelTextualApp(App):
         )
         return [
             {"label": "Refresh Snapshot", "kind": "refresh"},
+            {"label": "Mode: Portal", "kind": "send_action", "action": "mode_portal"},
+            {"label": "Mode: Shield", "kind": "send_action", "action": "mode_shield"},
+            {"label": "Mode: Scapegoat", "kind": "send_action", "action": "mode_scapegoat"},
             {"label": "Stage-Open", "kind": "send_action", "action": "stage_open"},
             {"label": "Re-Probe", "kind": "send_action", "action": "reprobe"},
             {"label": "Contain", "kind": "send_action", "action": "contain"},
@@ -353,9 +356,11 @@ class AzazelTextualApp(App):
         self._apply_state_class(status_widget, state)
         source = self._safe_get(self._snapshot, "source", "SNAPSHOT")
         risk = self._safe_get(self._snapshot, "risk_score", 0)
+        mode_info = self._safe_get(self._snapshot, "mode", {}) or {}
+        mode_name = str(mode_info.get("current_mode", "shield")).upper()
         line = (
             f"State={state}  SSID={ssid}  Risk={risk}/100  "
-            f"Age={self._live_age()}  View={source}  Status={self._status_message}"
+            f"Mode={mode_name}  Age={self._live_age()}  View={source}  Status={self._status_message}"
         )
         status_widget.update(Text(line))
 
@@ -420,6 +425,7 @@ class AzazelTextualApp(App):
         snap = self._snapshot
         connection = self._safe_get(snap, "connection", {}) or {}
         monitoring = self._safe_get(snap, "monitoring", {}) or {}
+        mode_info = self._safe_get(snap, "mode", {}) or {}
         attack = self._safe_get(snap, "attack", {}) or {}
         degrade = self._safe_get(snap, "degrade", {}) or {}
         probe = self._safe_get(snap, "probe", {}) or {}
@@ -443,6 +449,8 @@ class AzazelTextualApp(App):
             f"CPU: {self._safe_get(snap, 'cpu_percent', 0.0)}%  "
             f"Mem: {self._safe_get(snap, 'mem_used_mb', 0)}/{self._safe_get(snap, 'mem_total_mb', 0)}MB "
             f"({self._safe_get(snap, 'mem_percent', 0)}%)  Temp: {self._safe_get(snap, 'temp_c', 0.0)}C\n"
+            f"Mode: {str(mode_info.get('current_mode', 'shield')).upper()}  "
+            f"Changed: {self._safe_get(mode_info, 'last_change', '-')}\n"
             f"Monitoring: Suricata={monitoring.get('suricata', 'UNKNOWN')}  "
             f"OpenCanary={monitoring.get('opencanary', 'UNKNOWN')}  ntfy={monitoring.get('ntfy', 'UNKNOWN')}"
         )
