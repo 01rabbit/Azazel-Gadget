@@ -1,10 +1,16 @@
-# Azazel-Gadget（Azazel-Zero）— Cyber Scapegoat Gateway
+# AZ-02 Azazel-Gadget — Cyber Scapegoat Gateway
 
 Azazel-Gadget（旧称 Azazel-Zero）は、不審な Wi-Fi 環境向けの携行型防御ゲートウェイです。主対象は Raspberry Pi Zero 2 W / Pi 4 クラスです。
 
 <p align="center">
   <img src="images/Azazel-Gadget_logo.png" alt="Azazel-Gadget logo" width="540">
 </p>
+
+## ハードウェア実装バリエーション
+
+| Azazel-Gadget Portable | Azazel-Gadget Shield |
+|---|---|
+| Raspberry Pi Zero W 実装<br>![Azazel-Gadget Portable on Raspberry Pi Zero W](images/Azazel-Gadget_Portable.png) | Raspberry Pi 4 実装<br>![Azazel-Gadget Shield on Raspberry Pi 4](images/Azazel-Gadget_Shield.png) |
 
 ## インターフェース プレビュー
 
