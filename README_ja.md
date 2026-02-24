@@ -13,13 +13,14 @@ Azazel-Gadget（旧称 Azazel-Zero）は、不審な Wi-Fi 環境向けの携行
 
 <p align="center">
   <img src="images/Azazel-Gadget_logo.png" alt="Azazel-Gadget logo" width="540">
+</p>
+<p align="center">
   <img src="https://img.shields.io/badge/-Raspberry%20Pi-C51A4A.svg?logo=raspberry-pi&style=flat">
   <img src="https://img.shields.io/badge/-Python-F9DC3E.svg?logo=python&style=flat">
   <img src="https://img.shields.io/badge/-Flask-000000.svg?logo=flask&style=flat">
   <img src="https://img.shields.io/badge/Javascript-276DC3.svg?logo=javascript&style=flat">
   <img src="https://img.shields.io/badge/-HTML5-333.svg?logo=html5&style=flat">
   <img src="https://img.shields.io/badge/-CSS3-1572B6.svg?logo=css3&style=flat">
-
 </p>
 
 ## コンセプト

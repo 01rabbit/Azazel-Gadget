@@ -78,9 +78,29 @@ def pick_font(paths, size):
             continue
     return ImageFont.load_default()
 
+def text_size(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont) -> Tuple[int, int]:
+    """Return text width/height across Pillow versions."""
+    if hasattr(draw, "textbbox"):
+        l, t, r, b = draw.textbbox((0, 0), text, font=font)
+        return max(0, r - l), max(0, b - t)
+    if hasattr(draw, "textsize"):
+        return draw.textsize(text, font=font)
+    if hasattr(font, "getbbox"):
+        l, t, r, b = font.getbbox(text)
+        return max(0, r - l), max(0, b - t)
+    if hasattr(font, "getsize"):
+        return font.getsize(text)
+    return max(0, len(text) * 8), 16
+
+def text_width(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont) -> float:
+    """Return text width across Pillow versions."""
+    if hasattr(draw, "textlength"):
+        return float(draw.textlength(text, font=font))
+    w, _ = text_size(draw, text, font)
+    return float(w)
+
 def fit_text(draw, text, font, max_w):
-    tl = draw.textlength if hasattr(draw, "textlength") else (lambda s, font: draw.textsize(s, font=font)[0])
-    measure = (lambda s: tl(s, font)) if tl is not draw.textlength else (lambda s: tl(s, font=font))
+    measure = lambda s: text_width(draw, s, font)
     if measure(text) <= max_w:
         return text
     base = text
@@ -175,12 +195,12 @@ def draw_logo_panel(width, height, title_font, invert=True, subtitle: Optional[s
     if invert:
         d.rectangle([(0, 0), (width, logo_h)], fill=0)
     title = "Azazel-Gadget"
-    tw, th = d.textsize(title, font=title_font)
+    tw, th = text_size(d, title, title_font)
     d.text(((width - tw)//2, (logo_h - th)//2), title, font=title_font, fill=(255 if invert else 0))
     if subtitle:
         mono = pick_font(MONO_FONT_CANDIDATES, 14)
         sub = fit_text(d, subtitle, mono, width - 12)
-        sw, sh = d.textsize(sub, font=mono)
+        sw, sh = text_size(d, sub, mono)
         d.text(((width - sw)//2, logo_h + ((height - logo_h - sh)//2)), sub, font=mono, fill=0)
     return img
 
@@ -202,7 +222,7 @@ def draw_progress_frame(width, height, title_font, ratio:float, label:str):
     # ラベル
     mono = pick_font(MONO_FONT_CANDIDATES, 14)
     txt = fit_text(d, label, mono, width - 16)
-    tw, th = d.textsize(txt, font=mono)
+    tw, th = text_size(d, txt, mono)
     d.text(((width - tw)//2, bar_top + bar_h + 4), txt, font=mono, fill=0)
     return img
 
@@ -222,22 +242,29 @@ def animate_start(epd, bicolor, steps:int=10, min_frame_sec:float=0.25, label="B
         time.sleep(min_frame_sec)
     epd.sleep()
 
-def animate_shutdown(epd, bicolor, hold_sec:float=1.0) -> bool:
+def animate_shutdown(epd, bicolor, hold_sec: float = 0.0) -> bool:
+    """
+    Shutdown path: skip decorative animation and clear panel ASAP.
+    """
+    del hold_sec  # Retained for backward-compatible signature.
     w, h = epd_dims(epd)
-    title_font = pick_font(TITLE_FONT_CANDIDATES, 26)
-    try:
-        frame = draw_logo_panel(w, h, title_font, invert=True, subtitle="Shutting down…")
-        show_on_epd(frame, epd, bicolor)
-        time.sleep(hold_sec)
-        # 画面消去
+
+    def _clear_once() -> None:
         epd.init()
         try:
-            # 多くのWaveshareドライバに Clear(0xFF) がある
+            # Most Waveshare drivers expose full white clear.
             epd.Clear(0xFF)
+            return
         except AttributeError:
-            # ない場合は全面白のバッファを送る
-            blank = Image.new("1", (w, h), 255)
-            show_on_epd(blank, epd, bicolor)
+            pass
+        # Fallback for drivers without Clear API.
+        blank = Image.new("1", (w, h), 255)
+        show_on_epd(blank, epd, bicolor, gentle=False)
+
+    try:
+        _clear_once()
+        # Second pass helps remove residual artifacts on some panels.
+        _clear_once()
         epd.sleep()
         return True
     except Exception:
@@ -250,7 +277,7 @@ def draw_info_panel(ssid: str, ip: str, session: Optional[str], width: int, heig
     font_m = pick_font(MONO_FONT_CANDIDATES, 16)
 
     # タイトル帯（反転）
-    t="Azazel-Gadget"; tw,th=d.textsize(t,font=font_b); margin=6
+    t="Azazel-Gadget"; tw,th=text_size(d, t, font_b); margin=6
     d.rectangle([(0,0),(width,th+margin*2)],fill=0)
     d.text(((width-tw)//2,margin),t,font=font_b,fill=255)
 
@@ -316,7 +343,7 @@ def main():
         return
 
     if args.mode == "shutdown":
-        ok = animate_shutdown(epd, bic, hold_sec=1.0)
+        ok = animate_shutdown(epd, bic)
         if not ok:
             if args.debug:
                 print("EPD shutdown clear failed", file=sys.stderr)

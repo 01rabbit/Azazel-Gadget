@@ -13,6 +13,8 @@ Azazel-Gadget (formerly Azazel-Zero) is a portable defensive gateway for untrust
 
 <p align="center">
   <img src="images/Azazel-Gadget_logo.png" alt="Azazel-Gadget logo" width="540">
+</p>
+<p align="center">
   <img src="https://img.shields.io/badge/-Raspberry%20Pi-C51A4A.svg?logo=raspberry-pi&style=flat">
   <img src="https://img.shields.io/badge/-Python-F9DC3E.svg?logo=python&style=flat">
   <img src="https://img.shields.io/badge/-Flask-000000.svg?logo=flask&style=flat">
