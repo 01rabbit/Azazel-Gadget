@@ -1,9 +1,24 @@
 # AZ-02 Azazel-Gadget — Cyber Scapegoat Gateway
 
+<p align="center">
+  <a href="./README_ja.md">
+    <img alt="日本語" src="https://img.shields.io/badge/Language-日本語-2ea44f?style=for-the-badge">
+  </a>
+  <a href="./README.md">
+    <img alt="English" src="https://img.shields.io/badge/Language-English-1f6feb?style=for-the-badge">
+  </a>
+</p>
+
 Azazel-Gadget (formerly Azazel-Zero) is a portable defensive gateway for untrusted Wi-Fi environments on Raspberry Pi Zero 2 W / Pi 4-class devices.
 
 <p align="center">
   <img src="images/Azazel-Gadget_logo.png" alt="Azazel-Gadget logo" width="540">
+  <img src="https://img.shields.io/badge/-Raspberry%20Pi-C51A4A.svg?logo=raspberry-pi&style=flat">
+  <img src="https://img.shields.io/badge/-Python-F9DC3E.svg?logo=python&style=flat">
+  <img src="https://img.shields.io/badge/-Flask-000000.svg?logo=flask&style=flat">
+  <img src="https://img.shields.io/badge/Javascript-276DC3.svg?logo=javascript&style=flat">
+  <img src="https://img.shields.io/badge/-HTML5-333.svg?logo=html5&style=flat">
+  <img src="https://img.shields.io/badge/-CSS3-1572B6.svg?logo=css3&style=flat">
 </p>
 
 ## Concept
