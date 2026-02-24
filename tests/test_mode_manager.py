@@ -3,6 +3,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PY_ROOT = REPO_ROOT / "py"
@@ -85,6 +86,15 @@ class ConfigHashTests(unittest.TestCase):
         h1 = mgr._hash_effective_config(payload)
         h2 = mgr._hash_effective_config(dict(payload))
         self.assertEqual(h1, h2)
+
+
+class ApplyDefaultTests(unittest.TestCase):
+    def test_apply_default_always_uses_shield(self):
+        mgr = ModeManager()
+        with patch.object(mgr, "set_mode", return_value={"ok": True}) as set_mode:
+            result = mgr.apply_default(requested_by="boot")
+        set_mode.assert_called_once_with("shield", requested_by="boot")
+        self.assertEqual(result, {"ok": True})
 
 
 if __name__ == "__main__":

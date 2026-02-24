@@ -218,11 +218,8 @@ class ModeManager:
                 }
 
     def apply_default(self, requested_by: str = "boot") -> Dict[str, Any]:
-        state = self._read_mode_state()
-        desired = str(state.get("current_mode", DEFAULT_MODE)).strip().lower() or DEFAULT_MODE
-        if desired not in MODE_CHOICES:
-            desired = DEFAULT_MODE
-        return self.set_mode(desired, requested_by=requested_by)
+        # Boot default is always shield to prioritize safe startup posture.
+        return self.set_mode(DEFAULT_MODE, requested_by=requested_by)
 
     # ---------- preflight ----------
 

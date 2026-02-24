@@ -76,7 +76,7 @@ Azazel-Gadget combines active network defense, operator-facing interfaces, and o
 ## Architecture at a Glance
 
 0. `azazel-mode.service` + `azctl`
-- Applies boot/default mode (`shield` unless persisted otherwise) from `mode.json`.
+- Applies boot/default mode as `shield` (ignores persisted mode at boot).
 - Single applicator for firewall/sysctl/OpenCanary orchestration.
 - Writes audit log and EPD state.
 
