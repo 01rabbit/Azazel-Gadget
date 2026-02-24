@@ -22,7 +22,9 @@ TIMEOUT_BIN="/usr/bin/timeout"
 
 STOP_WAIT_SEC="${AZAZEL_STOP_WAIT_SEC:-20}"
 EPD_CLEAR_TIMEOUT_SEC="${AZAZEL_EPD_CLEAR_TIMEOUT_SEC:-12}"
-REQUIRE_EPD_CLEAR="${AZAZEL_REQUIRE_EPD_CLEAR:-0}"
+# Fail-safe default: power transition is blocked unless EPD clear succeeds.
+# Override with AZAZEL_REQUIRE_EPD_CLEAR=0 only for explicit best-effort operation.
+REQUIRE_EPD_CLEAR="${AZAZEL_REQUIRE_EPD_CLEAR:-1}"
 
 SAFE_STOP_UNITS=(
     "azazel-portal-viewer.service"
@@ -102,20 +104,21 @@ require_epd_clear() {
         echo "EPD clear failed; continuing ${ACTION} (best-effort clear)" >&2
         return 0
     fi
+    echo "EPD clear completed; continuing ${ACTION}"
     return 0
 }
 
 queue_power_action() {
     if [[ "${ACTION}" == "shutdown" ]]; then
         if "${SYSTEMCTL_BIN}" --no-block poweroff >/dev/null 2>&1; then
-            echo "System shutdown scheduled (services stop requested, EPD clear attempted)"
+            echo "System shutdown scheduled (services stop requested, EPD clear confirmed)"
             return 0
         fi
         echo "Failed to queue system shutdown via systemctl poweroff" >&2
         return 1
     fi
     if "${SYSTEMCTL_BIN}" --no-block reboot >/dev/null 2>&1; then
-        echo "System reboot scheduled (services stop requested, EPD clear attempted)"
+        echo "System reboot scheduled (services stop requested, EPD clear confirmed)"
         return 0
     fi
     echo "Failed to queue system reboot via systemctl reboot" >&2
