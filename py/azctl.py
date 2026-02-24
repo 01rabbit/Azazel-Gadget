@@ -31,7 +31,7 @@ def parse_args() -> argparse.Namespace:
     st_p = mode_sub.add_parser("status", help="Show current mode status")
     st_p.add_argument("--requested-by", default="cli")
 
-    def_p = mode_sub.add_parser("apply-default", help="Apply persisted mode (default shield)")
+    def_p = mode_sub.add_parser("apply-default", help="Apply boot default mode (shield)")
     def_p.add_argument("--requested-by", default="boot")
 
     parser.add_argument("--json", action="store_true", help="Always print JSON")
