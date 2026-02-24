@@ -6,6 +6,19 @@ Azazel-Gadget (formerly Azazel-Zero) is a portable defensive gateway for untrust
   <img src="images/Azazel-Gadget_logo.png" alt="Azazel-Gadget logo" width="540">
 </p>
 
+## Concept
+
+Azazel-Gadget is a "sacrificial shield" you can carry at all times.
+It is a personal tactical device designed for low-trust networks such as public Wi-Fi, built to stand in front of your endpoint and take the first hit directly.
+
+This is not a generic security product that merely blocks traffic. It is structured around attacker behavior: minimizing the exposed defense surface, blocking lateral movement, and controlling exposure when needed. The default posture is full defense (`Shield`), but it can switch to an observational defense posture (`Scapegoat`) when the situation demands it.
+
+Do not defend blindly; defend with awareness of the attack.
+Azazel-Gadget is a dedicated defensive appliance that still requires tactical judgment. It stays quiet in normal conditions, shifts posture on anomalies, and when necessary accepts attacks, observes them, and buys time.
+
+It is a front-line device designed for daily carry.
+Not invisible security, but a shield you consciously raise.
+
 ## Hardware Variants
 
 | Azazel-Gadget Portable | Azazel-Gadget Shield |
