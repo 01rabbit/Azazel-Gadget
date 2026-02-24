@@ -1026,6 +1026,8 @@ def send_control_command(action: str) -> Dict[str, Any]:
         return handler()
     if action == "portal_viewer_open":
         return send_control_command_with_params("portal_viewer_open", {"timeout_sec": 15})
+    if action in ("shutdown", "reboot"):
+        return _send_control_command_socket(action=action, params=None, timeout_sec=45.0)
     return _send_control_command_socket(action=action, params=None, timeout_sec=5.0)
 
 

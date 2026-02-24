@@ -556,7 +556,7 @@ def execute_action(action_name, params=None):
         return {'ok': False, 'error': f'Script not found: {script_path}'}
     
     try:
-        script_timeout = 35 if action_name in ("shutdown", "reboot") else 10
+        script_timeout = 90 if action_name in ("shutdown", "reboot") else 10
         result = subprocess.run(
             ['/bin/bash', script_path],
             timeout=script_timeout,

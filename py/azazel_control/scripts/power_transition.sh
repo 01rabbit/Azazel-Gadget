@@ -20,8 +20,9 @@ SYSTEMCTL_BIN="/bin/systemctl"
 PYTHON3_BIN="/usr/bin/python3"
 TIMEOUT_BIN="/usr/bin/timeout"
 
-STOP_WAIT_SEC="${AZAZEL_STOP_WAIT_SEC:-8}"
+STOP_WAIT_SEC="${AZAZEL_STOP_WAIT_SEC:-20}"
 EPD_CLEAR_TIMEOUT_SEC="${AZAZEL_EPD_CLEAR_TIMEOUT_SEC:-12}"
+REQUIRE_EPD_CLEAR="${AZAZEL_REQUIRE_EPD_CLEAR:-0}"
 
 SAFE_STOP_UNITS=(
     "azazel-portal-viewer.service"
@@ -46,7 +47,8 @@ stop_managed_units() {
     local unit
     for unit in "${SAFE_STOP_UNITS[@]}"; do
         if unit_exists "${unit}"; then
-            "${SYSTEMCTL_BIN}" stop "${unit}" >/dev/null 2>&1 || true
+            # Queue stop jobs without blocking so power transition can remain responsive.
+            "${SYSTEMCTL_BIN}" stop --no-block "${unit}" >/dev/null 2>&1 || true
         fi
     done
 }
@@ -65,7 +67,7 @@ wait_units_inactive() {
             fi
             state="$("${SYSTEMCTL_BIN}" is-active "${unit}" 2>/dev/null || true)"
             case "${state}" in
-                active|activating|deactivating|reloading)
+                active|activating|reloading)
                     pending+=("${unit}:${state}")
                     ;;
             esac
@@ -85,27 +87,44 @@ wait_units_inactive() {
 
 require_epd_clear() {
     if [[ ! -x "${PYTHON3_BIN}" || ! -f "${EPD_SCRIPT}" ]]; then
-        echo "EPD clear script is unavailable: ${EPD_SCRIPT}" >&2
-        return 1
+        if [[ "${REQUIRE_EPD_CLEAR}" == "1" ]]; then
+            echo "EPD clear script is unavailable: ${EPD_SCRIPT}" >&2
+            return 1
+        fi
+        echo "EPD clear skipped: script unavailable (${EPD_SCRIPT})" >&2
+        return 0
     fi
     if ! "${TIMEOUT_BIN}" "${EPD_CLEAR_TIMEOUT_SEC}s" "${PYTHON3_BIN}" "${EPD_SCRIPT}" --mode shutdown >/dev/null 2>&1; then
-        echo "EPD clear failed; aborting ${ACTION}" >&2
-        return 1
+        if [[ "${REQUIRE_EPD_CLEAR}" == "1" ]]; then
+            echo "EPD clear failed; aborting ${ACTION}" >&2
+            return 1
+        fi
+        echo "EPD clear failed; continuing ${ACTION} (best-effort clear)" >&2
+        return 0
     fi
     return 0
 }
 
 queue_power_action() {
     if [[ "${ACTION}" == "shutdown" ]]; then
-        ("${SYSTEMCTL_BIN}" poweroff) >/dev/null 2>&1 &
-        echo "System shutdown scheduled (services stopped, EPD cleared)"
+        if "${SYSTEMCTL_BIN}" --no-block poweroff >/dev/null 2>&1; then
+            echo "System shutdown scheduled (services stop requested, EPD clear attempted)"
+            return 0
+        fi
+        echo "Failed to queue system shutdown via systemctl poweroff" >&2
+        return 1
+    fi
+    if "${SYSTEMCTL_BIN}" --no-block reboot >/dev/null 2>&1; then
+        echo "System reboot scheduled (services stop requested, EPD clear attempted)"
         return 0
     fi
-    ("${SYSTEMCTL_BIN}" reboot) >/dev/null 2>&1 &
-    echo "System reboot scheduled (services stopped, EPD cleared)"
+    echo "Failed to queue system reboot via systemctl reboot" >&2
+    return 1
 }
 
 stop_managed_units
-wait_units_inactive
+if ! wait_units_inactive; then
+    echo "Continuing ${ACTION} despite pending managed services" >&2
+fi
 require_epd_clear
 queue_power_action
