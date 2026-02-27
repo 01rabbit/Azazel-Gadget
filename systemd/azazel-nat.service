@@ -1,0 +1,12 @@
+[Unit]
+Description=Azazel NAT and forwarding rules (usb0 -> dynamic uplink)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/azazel-nat.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

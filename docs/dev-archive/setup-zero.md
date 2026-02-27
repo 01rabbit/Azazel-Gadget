@@ -1,0 +1,374 @@
+# Azazel-Gadget Setup Guide (Raspberry Pi OS Lite Trixie / 64-bit)
+
+English | [日本語](/docs/dev-archive/setup-zero_ja.md)
+
+## Purpose and Target Architecture
+
+This guide explains how to install Raspberry Pi OS Lite (Trixie 64-bit) on a Raspberry Pi Zero 2 W and:
+
+- Enable USB gadget (OTG) using **Mode B**: `dwc2 + g_ether`
+- Fix `usb0` to **10.55.0.10/24**
+- Use `wlan0` as the upstream Wi-Fi interface for Internet access
+- Enable routing / NAT (iptables) from `usb0 → wlan0`
+
+so that you can build the following path:
+
+> Upstream Internet (Wi-Fi) → Raspberry Pi (Azazel-Gadget) → Laptop (via USB)
+
+Laptop-side configuration is expected to be automatic via DHCP from Azazel-Gadget (USB tethering style), without manual route edits.
+
+---
+
+## 0. Prerequisites
+
+- Hardware  
+  - Raspberry Pi Zero 2 W  
+  - USB data-capable cable + USB gadget adapter for Zero  
+- OS  
+  - Raspberry Pi OS Lite (64-bit, Trixie)  
+- Example host environment  
+  - macOS (other OSes are also possible with equivalent steps)
+
+---
+
+## 1. Write Raspberry Pi OS Lite to the SD card
+
+1. Launch Raspberry Pi Imager on your laptop.  
+2. Select **“Raspberry Pi OS Lite (64-bit)”** as the OS.  
+3. Choose the target SD card and start writing.  
+4. After the write completes, remove and reinsert the SD card, then mount the **boot partition** (`bootfs` / `boot`, etc.) on the host.
+
+In the following, this partition is referred to as `BOOT`.
+
+---
+
+## 2. Configuration on the BOOT partition (Mode B)
+
+### 2-1. Create `userconf.txt` (user `pi` / password `raspberry`)
+
+To skip the interactive first-boot setup, create `userconf.txt`:
+
+```bash
+cd /Volumes/bootfs   # On some systems this may be /Volumes/boot
+HASH="$(echo 'raspberry' | openssl passwd -6 -stdin)"
+printf "pi:%s\n" "$HASH" > userconf.txt
+```
+
+### 2-2. Enable SSH (create `ssh` file)
+
+```bash
+touch ssh
+```
+
+This enables SSH from the very first boot.
+
+### 2-3. Enable OTG (`dwc2 + g_ether`)
+
+#### `config.txt`
+
+Open `BOOT/config.txt` and append the following at the end:
+
+```ini
+dtoverlay=dwc2
+```
+
+#### `cmdline.txt`
+
+`BOOT/cmdline.txt` is a file with **exactly one line**.  
+Without adding any newlines, append the following immediately after `rootwait`:
+
+```text
+... rootwait modules-load=dwc2,g_ether ...
+```
+
+> Example: add a single space after `rootwait`, then write `modules-load=dwc2,g_ether`.
+
+### 2-4. Fixed `usb0` IP using `user-data` (cloud-init + systemd)
+
+If `BOOT/user-data` already exists, **delete all its content first** and then overwrite it with the configuration below.  
+If it does not exist, create it with the content below.
+
+```bash
+cat > /Volumes/bootfs/user-data <<'EOF'
+#cloud-config
+hostname: azazel-gadget
+manage_etc_hosts: true
+enable_ssh: true
+
+write_files:
+  - path: /usr/local/sbin/usb0-static.sh
+    permissions: '0755'
+    content: |
+      #!/bin/sh
+      set -eu
+      # Wait a bit until usb0 appears
+      for i in $(seq 1 50); do
+        ip link show usb0 >/dev/null 2>&1 && break
+        sleep 0.2
+      done
+      ip link set usb0 up || true
+      ip addr flush dev usb0 || true
+      ip addr add 10.55.0.10/24 dev usb0 || true
+
+  - path: /etc/systemd/system/usb0-static.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Force static IPv4 on usb0 (USB Gadget)
+      After=local-fs.target
+      Before=network.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/sbin/usb0-static.sh
+      RemainAfterExit=yes
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  - [ sh, -lc, 'systemctl daemon-reload' ]
+  - [ sh, -lc, 'systemctl enable --now usb0-static.service || true' ]
+EOF
+```
+
+With this in place, `usb0-static.service` runs at boot and **sets `usb0=10.55.0.10/24` every time**.  
+It ensures that NetworkManager or other automatic mechanisms do not override the address.
+
+### 2-5. (Optional) g_ether compatibility settings
+
+To improve compatibility with Windows / Linux hosts, you can create `/etc/modprobe.d/g_ether.conf` on the Pi **after boot** and write:
+
+```conf
+options g_ether use_eem=0
+```
+
+This is optional and can be configured later, so here it is described only as a note.
+
+### 2-6. Unmount the SD card
+
+```bash
+sync
+diskutil eject /Volumes/bootfs 2>/dev/null || diskutil eject /Volumes/boot
+```
+
+---
+
+## 3. First boot and logging in over USB (host-side auto-DHCP)
+
+1. Insert the SD card into the Raspberry Pi Zero 2 W.  
+2. Connect the **USB data port of the Zero 2 W (the side labeled “USB”)** to your laptop via the USB gadget adapter.  
+3. Wait about 30–60 seconds for the Pi to boot.
+
+Example (macOS host):
+
+1. Check the interface name of the USB NIC:
+
+   ```bash
+   ifconfig | egrep '^(en[0-9]+:|status:|inet )'
+   ```
+
+   Identify the interface corresponding to `RNDIS/Ethernet Gadget` or `Raspberry Pi USB` (e.g. `en17`).
+
+2. Verify that the USB NIC obtained an address by DHCP:
+
+   ```bash
+   IF=en17  # Replace with the actual interface name
+   ipconfig getifaddr "$IF"    # macOS
+   ```
+
+   If this is empty, renew DHCP once:
+
+   ```bash
+   sudo ipconfig set "$IF" DHCP
+   ```
+
+3. Verify connectivity and log in to the Pi:
+
+   ```bash
+   ping -c 2 10.55.0.10
+   ssh pi@10.55.0.10   # Password: raspberry
+   ```
+
+At this point:
+
+- Pi side: `usb0 = 10.55.0.10/24`  
+- Laptop: `USB NIC = 10.55.0.x/24` (via DHCP)  
+
+and you should be able to log in to the Pi over USB via SSH.
+
+---
+
+## 4. Wi‑Fi connection (via Azazel tools)
+
+From here on, work on the Pi over SSH (`pi@10.55.0.10`).
+
+Wi‑Fi connect/save is done via **Azazel tools (Web UI / Control Daemon)**.  
+The installer does **not** hardcode SSID/PSK.
+
+Shortest path:
+
+1. Run `./install.sh --with-webui` to completion (enables Web UI)
+2. Open `https://10.55.0.10` (Web UI is served via HTTPS/Caddy)
+3. Scan Wi‑Fi → connect (save if needed)
+
+If you want captive portal operation from downstream devices, install portal viewer too:
+
+```bash
+sudo ./install.sh --with-webui --with-portal-viewer
+```
+
+Manual `nmcli` usage should be considered **last resort**.
+
+```bash
+ip -4 a show wlan0
+ip r
+ping -c 3 8.8.8.8
+ping -c 3 google.com
+```
+
+If `wlan0` has a local IP address (e.g. `192.168.40.x`) and can reach the Internet, the connection is successful.
+
+Enable autoconnect:
+
+```bash
+nmcli con show
+sudo nmcli con mod "JCOM_NYRY" connection.autoconnect yes
+```
+
+This ensures that the Pi reconnects to the same SSID automatically after reboot.
+
+---
+
+## 5. Routing / NAT on the Pi (upstream → Pi → downstream)
+
+The following steps turn the Pi into a **USB–Wi-Fi router**.
+
+- Upstream interface: `wlan0` (Wi-Fi)  
+- Downstream interface: `usb0` (USB gadget / laptop side)
+
+The default gateway and DNS are handed out automatically by dnsmasq on Azazel-Gadget.
+
+### 5-1. Persist IPv4 forwarding
+
+First, enable forwarding temporarily for testing:
+
+```bash
+sudo sysctl -w net.ipv4.ip_forward=1
+```
+
+Then add persistent configuration:
+
+```bash
+echo 'net.ipv4.ip_forward=1' | sudo tee /etc/sysctl.d/99-ipforward.conf
+sudo sysctl --system
+```
+
+IPv4 forwarding will now remain enabled after reboot.
+
+### 5-2. Persist NAT / FORWARD rules with a script + systemd
+
+#### 5-2-1. Create the NAT script
+
+```bash
+sudo tee /usr/local/sbin/azazel-nat.sh >/dev/null <<'EOF'
+#!/bin/sh
+set -eu
+
+OUT_IF="wlan0"
+IN_IF="usb0"
+
+# NAT (POSTROUTING) - check first to avoid duplicates
+iptables -t nat -C POSTROUTING -o "$OUT_IF" -j MASQUERADE 2>/dev/null || \
+iptables -t nat -A POSTROUTING -o "$OUT_IF" -j MASQUERADE
+
+# FORWARD (usb0 -> wlan0)
+iptables -C FORWARD -i "$IN_IF" -o "$OUT_IF" -j ACCEPT 2>/dev/null || \
+iptables -A FORWARD -i "$IN_IF" -o "$OUT_IF" -j ACCEPT
+
+# FORWARD (wlan0 -> usb0, return traffic)
+iptables -C FORWARD -i "$OUT_IF" -o "$IN_IF" -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || \
+iptables -A FORWARD -i "$OUT_IF" -o "$IN_IF" -m state --state ESTABLISHED,RELATED -j ACCEPT
+EOF
+
+sudo chmod 0755 /usr/local/sbin/azazel-nat.sh
+```
+
+#### 5-2-2. Create the systemd unit
+
+```bash
+sudo tee /etc/systemd/system/azazel-nat.service >/dev/null <<'EOF'
+[Unit]
+Description=Azazel NAT and forwarding rules (usb0 -> wlan0)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/azazel-nat.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now azazel-nat.service
+```
+
+Check the status:
+
+```bash
+sudo systemctl status azazel-nat.service --no-pager
+sudo iptables -t nat -L -n -v
+sudo iptables -L FORWARD -n -v
+```
+
+If you see a `MASQUERADE` rule in `POSTROUTING` and `usb0` ↔ `wlan0` rules in `FORWARD`, the configuration is applied correctly.
+
+---
+
+## 6. Laptop-side auto-routing check
+
+With DHCP enabled on the laptop USB NIC, Azazel-Gadget provides:
+
+- IP address: `10.55.0.x/24`
+- Default gateway: `10.55.0.10`
+- DNS: `10.55.0.10`
+
+Then traffic flows as:
+
+> Laptop → usb0 (10.55.0.10) → wlan0 → Upstream Internet
+
+Example connectivity checks:
+
+1. From laptop to the Pi:
+
+   ```bash
+   ping 10.55.0.10
+   ```
+
+2. From laptop to the Internet:
+
+   ```bash
+   ping 8.8.8.8
+   ping google.com
+   ```
+
+---
+
+## 7. Positioning for future Azazel-Gadget development
+
+The configuration in this guide provides the **minimal router foundation** for treating Azazel-Gadget as:
+
+- `usb0`: ingress from downstream clients (user devices)  
+- `wlan0`: egress to the upstream Internet  
+
+On top of this, you can build the full Azazel-Gadget gateway by layering:
+
+- Traffic detection with Suricata  
+- Delay-to-Win behavior using tc / iptables / nftables  
+- Decoy services such as OpenCanary  
+- Scoring with Mock-LLM / real LLMs  
+
+to achieve the complete Azazel-Gadget feature set.

@@ -1,0 +1,32 @@
+[Unit]
+Description=Azazel E-Paper Splash
+After=multi-user.target network-online.target
+Wants=network-online.target
+# 実行条件（SPI が無いなら黙ってスキップ）
+ConditionPathExists=/dev/spidev0.0
+# 停止時に必ず先行させる（十分だが過剰でない）
+Before=poweroff.target halt.target shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# SPI/I2C に確実に触れるため root で（RasPi の実情）
+User=root
+EnvironmentFile=-/etc/default/azazel-gadget
+EnvironmentFile=-/etc/default/azazel-zero
+# 起動演出（失敗しても進行の邪魔はしない）
+ExecStart=/bin/bash -lc 'EPD="${EPD_PY:-${AZAZEL_ROOT:-/home/azazel/Azazel-Gadget}/py/boot_splash_epd.py}"; /usr/bin/python3 "$EPD" --mode start --steps=${STEPS:-10} --frame-sec=${FRAME_SEC:-0.25} || true'
+# 停止演出（失敗しても電源断の邪魔はしない）
+ExecStop=/bin/bash -lc 'EPD="${EPD_PY:-${AZAZEL_ROOT:-/home/azazel/Azazel-Gadget}/py/boot_splash_epd.py}"; /usr/bin/python3 "$EPD" --mode shutdown || true'
+
+# 観測しやすくハングしない
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=10s
+TimeoutStopSec=8s
+KillMode=process
+Restart=no
+
+[Install]
+WantedBy=multi-user.target
+Also=azazel-epd-shutdown.service

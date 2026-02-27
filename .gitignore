@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+*.pyo
+.azazel-zero/
+
+# Installer artifacts (secrets, logs, runtime data)
+installer/snapshot/*/
+installer/logs/
+installer/profiles/*.yaml
+!installer/profiles/.gitkeep

@@ -1,0 +1,21 @@
+[Unit]
+Description=Azazel-Gadget Control Daemon (Unix socket action executor)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/
+EnvironmentFile=-/etc/default/azazel-gadget
+EnvironmentFile=-/etc/default/azazel-zero
+ExecStartPre=/bin/bash -lc 'ROOT="${AZAZEL_ROOT:-/home/azazel/Azazel-Gadget}"; test -f "$ROOT/py/azazel_control/daemon.py"'
+ExecStart=/bin/bash -lc 'ROOT="${AZAZEL_ROOT:-/home/azazel/Azazel-Gadget}"; exec /usr/bin/python3 "$ROOT/py/azazel_control/daemon.py"'
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=azazel-daemon
+
+[Install]
+WantedBy=multi-user.target

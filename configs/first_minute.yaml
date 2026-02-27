@@ -1,0 +1,117 @@
+# Azazel-Gadget First-Minute Control default configuration
+# Copy to /etc/azazel-gadget/first_minute.yaml and adjust for your environment.
+
+interfaces:
+  upstream: auto            # Auto-select uplink (prefer Wi-Fi when available)
+  captive_probe: auto       # Captive判定専用IF（upstreamと独立）
+  downstream: usb0          # OTG gadget interface presented to the user device
+  mgmt_ip: 10.55.0.10       # IP bound on downstream for management/API/DNS (fixed)
+  mgmt_subnet: 10.55.0.0/24
+
+captive_probe_policy: wifi_prefer  # wifi_prefer | upstream_same | any
+suppress_auto_wifi: true           # 起動時にdaemonがWi-Fi自動接続を抑止
+
+paths:
+  runtime_dir: /run/azazel-gadget
+  log_dir: /var/log/azazel-gadget
+  dns_log: /var/log/azazel-dnsmasq.log
+  nft_template: /etc/azazel-gadget/nftables/first_minute.nft
+  dnsmasq_conf: /etc/azazel-gadget/dnsmasq-first_minute.conf
+  known_db: /etc/azazel-gadget/known_wifi.json
+  pid_file: /run/azazel-gadget/first_minute.pid
+
+dnsmasq:
+  enable: true
+  listen_addr: 10.55.0.10
+  upstream_servers:
+    - 9.9.9.9
+    - 1.1.1.1
+  block_doh_sni:
+    - cloudflare-dns.com
+    - dns.google
+    - doh.opendns.com
+    - dns.quad9.net
+  cache_size: 256
+
+state_machine:
+  probe_window_sec: 20
+  decay_per_sec: 3
+  degrade_threshold: 20
+  normal_threshold: 8
+  contain_threshold: 50
+  stable_normal_sec: 20     # time below normal_threshold before upgrading from DEGRADED
+  stable_probe_sec: 10      # minimum probe dwell before upgrade
+  
+  # ★ NEW: Suricata アラート抑制
+  suricata_cooldown_sec: 30.0  # アラート 1 回あたりの有効期間（秒）
+  
+  # ★ NEW: CONTAIN 復帰制御
+  contain_min_duration_sec: 20.0  # CONTAIN 状態の最小継続時間（秒）
+  contain_exit_suspicion: 30.0    # CONTAIN から脱出する suspicion 閾値
+  manual_contain_min_duration_sec: 0.0  # WebUI手動Containの最小保持時間（0で即時Release可）
+  manual_release_confirm_window_sec: 0.0  # WebUI手動Releaseの再確認窓（0で単発Release）
+
+probes:
+  captive_portal:
+    url: http://connectivitycheck.gstatic.com/generate_204
+    timeout: 4
+    retries: 1
+  tls:
+    - host: www.debian.org
+      port: 443
+      fingerprint_sha256: ""   # optional pin; leave empty to skip pin check
+      timeout: 4
+    - host: example.com
+      port: 443
+      fingerprint_sha256: ""
+      timeout: 4
+  dns_compare:
+    enabled: true
+    reference_resolver: 9.9.9.9
+    sample_names:
+      - deb.debian.org
+      - example.com
+      - api.github.com
+    max_mismatch: 2
+    timeout: 3
+
+policy:
+  allow_ntp: true
+  allow_ocsp: true
+  probe_allow_ttl: 120      # seconds for probe destinations in nft set
+  dynamic_allow_ttl: 300
+  block_quic_until: NORMAL  # block UDP/443 until reaching this state
+  default_tcp_ratelimit_probe: "50 kbps"
+  default_tcp_ratelimit_degraded: "1 mbps"
+
+status_api:
+  host: 10.55.0.10         # ダウンストリーム USB 管理インターフェース
+  port: 8082               # レガシー JSON API
+  web_host: 10.55.0.10
+  web_port: 8083           # Web UI ダッシュボード（デフォルト）
+  enable_remote_access: true  # リモートアクセスを有効化
+
+suricata:
+  enabled: true
+  eve_path: /var/log/suricata/eve.json
+
+deception:
+  enable_if_opencanary_present: true
+  opencanary_cfg: /etc/opencanaryd/opencanary.conf
+  delay_on_canary_attack: true      # SuricataでCanary宛攻撃を検知した時のみ、対象フローへ遅延
+  canary_delay_window_sec: 45.0     # 攻撃元IP/Portへの遅延保持時間（秒）
+  canary_delay_ms: 650              # Canary応答フローの基本遅延（ms）
+  canary_delay_jitter_ms: 120       # 遅延ジッタ（ms）
+  canary_delay_loss_percent: 0.0    # 必要時のみ >0 を設定
+# ★ ntfy 通知基盤設定
+notify:
+  enabled: true
+  ntfy:
+    base_url: "http://10.55.0.10:8081"  # ntfy サーバベース URL
+    token_file: "/etc/azazel/ntfy.token"  # Bearer トークンファイル（パーミッション 600）
+    topic_alert: "azg-alert-critical"    # 重大イベント用 topic
+    topic_info: "azg-info-status"        # 状態遷移用 topic
+    cooldown_sec: 30                      # イベント重複抑制の冷却時間（秒）
+  thresholds:
+    temp_c_alert: 75                      # CPU 温度アラート閾値（℃）
+    dns_mismatch_alert: 3                 # DNS 不一致検知回数閾値

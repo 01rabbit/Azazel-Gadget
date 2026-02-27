@@ -1,0 +1,18 @@
+[Unit]
+Description=Azazel mode applicator (portal/shield/scapegoat)
+After=network-online.target usb0-static.service
+Wants=network-online.target
+Before=azazel-first-minute.service
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=-/etc/default/azazel-gadget
+EnvironmentFile=-/etc/default/azazel-zero
+ExecStart=/bin/bash -lc 'ROOT="${AZAZEL_ROOT:-/home/azazel/Azazel-Gadget}"; exec /usr/bin/python3 "$ROOT/py/azctl.py" mode apply-default --requested-by boot'
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

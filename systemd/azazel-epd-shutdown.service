@@ -1,0 +1,15 @@
+[Unit]
+Description=Azazel EPD Final Clear (shutdown hook)
+DefaultDependencies=no
+Before=poweroff.target halt.target shutdown.target
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=-/etc/default/azazel-gadget
+EnvironmentFile=-/etc/default/azazel-zero
+ExecStart=/bin/bash -lc 'EPD="${EPD_PY:-${AZAZEL_ROOT:-/home/azazel/Azazel-Gadget}/py/boot_splash_epd.py}"; /usr/bin/python3 "$EPD" --mode shutdown || true'
+TimeoutStartSec=6s
+
+[Install]
+WantedBy=poweroff.target halt.target shutdown.target
