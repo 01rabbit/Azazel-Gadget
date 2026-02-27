@@ -1,4 +1,6 @@
-# AZ-02 Azazel-Gadget Portable & Dock
+# AZ-02 Azazel-Gadget - Personal Tactical Defense Device
+
+> **Codename:** `TACMOD`
 
 <p align="center">
   <a href="./README_ja.md">
