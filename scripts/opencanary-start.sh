@@ -40,4 +40,31 @@ if [[ -z "${IP}" ]]; then
 fi
 
 export AZAZEL_WLAN_IP="${IP}"
-exec /home/azazel/canary-venv/bin/opencanaryd --start --uid=nobody --gid=nogroup
+
+OPENCANARY_BIN="${OPENCANARY_BIN:-/home/azazel/canary-venv/bin/opencanaryd}"
+RUN_USER="${OPENCANARY_RUN_USER:-}"
+RUN_GROUP="${OPENCANARY_RUN_GROUP:-}"
+
+# Default to the opencanary binary owner so venv assets under /home/* stay readable
+# after privilege drop (common when /home/<user> is 0700).
+if [[ -z "$RUN_USER" ]] && [[ -e "$OPENCANARY_BIN" ]]; then
+  RUN_USER="$(stat -c '%U' "$OPENCANARY_BIN" 2>/dev/null || true)"
+fi
+
+if [[ -z "$RUN_USER" ]] || ! id -u "$RUN_USER" >/dev/null 2>&1 || [[ "$RUN_USER" == "root" ]]; then
+  RUN_USER="nobody"
+fi
+
+if [[ -z "$RUN_GROUP" ]]; then
+  RUN_GROUP="$(id -gn "$RUN_USER" 2>/dev/null || true)"
+fi
+if [[ -z "$RUN_GROUP" ]] || ! getent group "$RUN_GROUP" >/dev/null 2>&1; then
+  RUN_GROUP="nogroup"
+fi
+
+drop_priv_args=()
+if [[ "$(id -u)" -eq 0 ]]; then
+  drop_priv_args=(--uid="$RUN_USER" --gid="$RUN_GROUP")
+fi
+
+exec "$OPENCANARY_BIN" --start "${drop_priv_args[@]}"

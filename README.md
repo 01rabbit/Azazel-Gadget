@@ -1,4 +1,4 @@
-# AZ-02 Azazel-Gadget — Cyber Scapegoat Gateway
+# AZ-02 Azazel-Gadget Portable & Dock
 
 <p align="center">
   <a href="./README_ja.md">
@@ -38,9 +38,9 @@ Not invisible security, but a shield you consciously raise.
 
 ## Hardware Variants
 
-| Azazel-Gadget Portable | Azazel-Gadget Shield |
+| Azazel-Gadget Portable | Azazel-Gadget Dock |
 |---|---|
-| Raspberry Pi Zero W implementation<br>![Azazel-Gadget Portable on Raspberry Pi Zero W](images/Azazel-Gadget_Portable.png) | Raspberry Pi 4 implementation<br>![Azazel-Gadget Shield on Raspberry Pi 4](images/Azazel-Gadget_Shield.png) |
+| Raspberry Pi Zero 2 W implementation<br>![Azazel-Gadget Portable on Raspberry Pi Zero W](images/Azazel-Gadget_Portable.png) | Raspberry Pi 3/4/4B implementation<br>![Azazel-Gadget Shield on Raspberry Pi 4](images/Azazel-Gadget_Shield.png) |
 
 ## Interface Preview
 

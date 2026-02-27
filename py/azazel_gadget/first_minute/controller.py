@@ -1122,10 +1122,13 @@ class FirstMinuteController:
             self.persistent_connection_state = snap["connection"].copy()
             
             # Write snapshot to runtime paths only to avoid stale home snapshot bleed-through.
+            payload_text = json.dumps(snap, ensure_ascii=False)
             for snap_path in self.snapshot_sync_paths:
                 try:
                     snap_path.parent.mkdir(parents=True, exist_ok=True)
-                    snap_path.write_text(json.dumps(snap, ensure_ascii=False), encoding="utf-8")
+                    tmp_path = snap_path.with_suffix(snap_path.suffix + ".tmp")
+                    tmp_path.write_text(payload_text, encoding="utf-8")
+                    os.replace(tmp_path, snap_path)
                     warn_if_legacy_path(snap_path, logger=self.logger)
                 except Exception as e:
                     self.logger.debug(f"snapshot: failed to write {snap_path}: {e}")

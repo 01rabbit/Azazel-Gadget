@@ -1,4 +1,4 @@
-# AZ-02 Azazel-Gadget — Cyber Scapegoat Gateway
+# AZ-02 Azazel-Gadget Portable & Dock
 
 <p align="center">
   <a href="./README_ja.md">
@@ -38,9 +38,9 @@ Azazel-Gadget は、防御専用機でありながら、戦術的判断を伴う
 
 ## ハードウェア実装バリエーション
 
-| Azazel-Gadget Portable | Azazel-Gadget Shield |
+| Azazel-Gadget Portable | Azazel-Gadget Dock |
 | --- | --- |
-| Raspberry Pi Zero W 実装  ![Azazel-Gadget Portable on Raspberry Pi Zero W](images/Azazel-Gadget_Portable.png) | Raspberry Pi 4 実装  ![Azazel-Gadget Shield on Raspberry Pi 4](images/Azazel-Gadget_Shield.png) |
+| Raspberry Pi Zero 2 W 実装  ![Azazel-Gadget Portable on Raspberry Pi Zero W](images/Azazel-Gadget_Portable.png) | Raspberry Pi 3/4/4B 実装  ![Azazel-Gadget Shield on Raspberry Pi 4](images/Azazel-Gadget_Shield.png) |
 
 ## インターフェース プレビュー
 

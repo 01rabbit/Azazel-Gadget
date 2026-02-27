@@ -133,7 +133,45 @@ def _same_render(desired: Dict[str, Any], last_payload: Dict[str, Any]) -> bool:
         elif isinstance(last_payload, dict):
             # backward compatibility: raw render dict
             last_render = last_payload
-    return desired == last_render
+
+    return _visual_fingerprint(desired) == _visual_fingerprint(last_render)
+
+
+def _to_int_or_none(value: Any) -> int | None:
+    try:
+        return int(float(str(value).strip()))
+    except Exception:
+        return None
+
+
+def _signal_bucket(signal_value: Any) -> str:
+    # Keep in sync with py/azazel_epd.py:render_normal icon thresholds.
+    signal_dbm = _to_int_or_none(signal_value)
+    if signal_dbm is None:
+        return "none"
+    if signal_dbm >= -60:
+        return "strong"
+    if signal_dbm >= -70:
+        return "medium"
+    return "weak"
+
+
+def _visual_fingerprint(render: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a fingerprint that matches what the panel actually displays."""
+    state = str(render.get("state", "")).strip().lower()
+    if state == "normal":
+        return {
+            "state": "normal",
+            "mode_label": str(render.get("mode_label", "")).strip().upper(),
+            "ssid": str(render.get("ssid", "")).strip(),
+            "risk_status": str(render.get("risk_status", "")).strip().upper(),
+            "suspicion": int(_to_int_or_none(render.get("suspicion")) or 0),
+            "signal_bucket": _signal_bucket(render.get("signal")),
+        }
+    return {
+        "state": state,
+        "msg": str(render.get("msg", "")).strip(),
+    }
 
 
 def main() -> int:
