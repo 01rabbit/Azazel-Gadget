@@ -26,7 +26,7 @@ PY_ROOT = Path(__file__).resolve().parent
 if str(PY_ROOT) not in sys.path:
     sys.path.insert(0, str(PY_ROOT))
 
-from azazel_gadget.path_schema import runtime_dir_candidates
+from azazel_gadget.path_schema import wifi_health_path_candidates
 
 # ---------- helpers ----------
 
@@ -128,17 +128,12 @@ def _supports_emoji() -> bool:
 
 
 def _health_path() -> Path:
-    for run_dir in runtime_dir_candidates():
-        if run_dir.exists() and os.access(run_dir, os.R_OK):
-            return run_dir / "wifi_health.json"
     repo_root = Path(__file__).resolve().parent.parent
-    for fb in (
-        repo_root / ".azazel-gadget" / "run" / "wifi_health.json",
-        repo_root / ".azazel-zero" / "run" / "wifi_health.json",
-    ):
-        if fb.exists():
-            return fb
-    return repo_root / ".azazel-gadget" / "run" / "wifi_health.json"
+    candidates = wifi_health_path_candidates(home=Path.home(), repo_root=repo_root)
+    for path in candidates:
+        if path.exists() and os.access(path, os.R_OK):
+            return path
+    return candidates[0]
 
 
 def _health_status() -> str:

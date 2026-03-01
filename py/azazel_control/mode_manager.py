@@ -17,6 +17,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from azazel_gadget.path_schema import (
+    defaults_file_candidates,
+    first_minute_config_candidates,
+    mode_state_candidates,
+    opencanary_config_candidates,
+)
+
 try:
     import yaml  # type: ignore
 except Exception:  # pragma: no cover
@@ -652,11 +659,7 @@ class ModeManager:
     # ---------- state / config ----------
 
     def _mode_path_candidates(self) -> List[Path]:
-        return [
-            Path("/etc/azazel/mode.json"),
-            Path("/etc/azazel-gadget/mode.json"),
-            Path("/etc/azazel-zero/mode.json"),
-        ]
+        return list(mode_state_candidates())
 
     def _mode_path(self) -> Path:
         for p in self._mode_path_candidates():
@@ -821,12 +824,7 @@ class ModeManager:
         return extract_opencanary_ports(cfg_path)
 
     def _resolve_canary_config_path(self) -> Path:
-        candidates = [
-            Path("/etc/opencanaryd/opencanary.conf"),
-            Path("/etc/azazel-gadget/opencanary.conf"),
-            Path("/etc/azazel-zero/opencanary.conf"),
-            Path(__file__).resolve().parents[2] / "configs" / "opencanary.conf",
-        ]
+        candidates = opencanary_config_candidates(repo_root=Path(__file__).resolve().parents[2])
         for path in candidates:
             if path.exists():
                 return path
@@ -967,7 +965,7 @@ class ModeManager:
 
     def _load_defaults(self) -> Dict[str, str]:
         defaults: Dict[str, str] = {}
-        for path in (Path("/etc/default/azazel-gadget"), Path("/etc/default/azazel-zero")):
+        for path in defaults_file_candidates():
             if not path.exists():
                 continue
             for raw in path.read_text(encoding="utf-8").splitlines():
@@ -984,11 +982,7 @@ class ModeManager:
     def _load_first_minute_config(self) -> Dict[str, Any]:
         if yaml is None:
             return {}
-        candidates = [
-            Path("/etc/azazel-gadget/first_minute.yaml"),
-            Path("/etc/azazel-zero/first_minute.yaml"),
-            Path(__file__).resolve().parents[2] / "configs" / "first_minute.yaml",
-        ]
+        candidates = first_minute_config_candidates() + [Path(__file__).resolve().parents[2] / "configs" / "first_minute.yaml"]
         for path in candidates:
             if not path.exists():
                 continue

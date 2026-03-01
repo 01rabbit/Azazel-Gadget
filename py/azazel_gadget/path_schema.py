@@ -61,6 +61,22 @@ def _home_candidates(schema: Optional[str] = None, home: Optional[Path] = None) 
     return (h / f".{primary_name}", h / f".{legacy_name}")
 
 
+def _schema_names(schema: Optional[str] = None) -> tuple[str, str]:
+    return _order_for(schema)
+
+
+def _dedupe_paths(paths: Iterable[Path]) -> list[Path]:
+    deduped: list[Path] = []
+    seen: set[str] = set()
+    for path in paths:
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(path)
+    return deduped
+
+
 def runtime_dir_candidates(schema: Optional[str] = None) -> list[Path]:
     primary_name, legacy_name = _order_for(schema)
     return [Path(f"/run/{primary_name}"), Path(f"/run/{legacy_name}")]
@@ -108,6 +124,36 @@ def first_minute_config_candidates(schema: Optional[str] = None) -> list[Path]:
     return [cfg_primary / "first_minute.yaml", cfg_legacy / "first_minute.yaml"]
 
 
+def mode_state_candidates(schema: Optional[str] = None) -> list[Path]:
+    cfg_primary, cfg_legacy = config_dir_candidates(schema)
+    return _dedupe_paths(
+        [
+            Path("/etc/azazel/mode.json"),
+            cfg_primary / "mode.json",
+            cfg_legacy / "mode.json",
+        ]
+    )
+
+
+def opencanary_config_candidates(schema: Optional[str] = None, repo_root: Optional[Path] = None) -> list[Path]:
+    cfg_primary, cfg_legacy = config_dir_candidates(schema)
+    candidates: list[Path] = [
+        Path("/etc/opencanaryd/opencanary.conf"),
+        cfg_primary / "opencanary.conf",
+        cfg_legacy / "opencanary.conf",
+    ]
+    if repo_root is not None:
+        candidates.append(Path(repo_root) / "configs" / "opencanary.conf")
+    return _dedupe_paths(candidates)
+
+
+def runtime_snapshot_path_candidates(schema: Optional[str] = None, home: Optional[Path] = None) -> list[Path]:
+    paths = [p for p in snapshot_path_candidates(schema=schema, home=home) if str(p).startswith("/run/")]
+    if paths:
+        return paths
+    return snapshot_path_candidates(schema=schema, home=home)[:2]
+
+
 def portal_env_candidates(schema: Optional[str] = None) -> list[Path]:
     cfg_primary, cfg_legacy = config_dir_candidates(schema)
     return [cfg_primary / "portal-viewer.env", cfg_legacy / "portal-viewer.env"]
@@ -116,6 +162,32 @@ def portal_env_candidates(schema: Optional[str] = None) -> list[Path]:
 def web_token_candidates(schema: Optional[str] = None, home: Optional[Path] = None) -> list[Path]:
     home_primary, home_legacy = _home_candidates(schema, home=home)
     return [home_primary / "web_token.txt", home_legacy / "web_token.txt"]
+
+
+def wifi_health_path_candidates(
+    schema: Optional[str] = None,
+    home: Optional[Path] = None,
+    repo_root: Optional[Path] = None,
+) -> list[Path]:
+    primary_name, legacy_name = _schema_names(schema)
+    run_primary, run_legacy = runtime_dir_candidates(schema)
+    home_primary, home_legacy = _home_candidates(schema, home=home)
+
+    candidates: list[Path] = [
+        run_primary / "wifi_health.json",
+        run_legacy / "wifi_health.json",
+        home_primary / "run" / "wifi_health.json",
+        home_legacy / "run" / "wifi_health.json",
+    ]
+    if repo_root is not None:
+        root = Path(repo_root)
+        candidates.extend(
+            [
+                root / f".{primary_name}" / "run" / "wifi_health.json",
+                root / f".{legacy_name}" / "run" / "wifi_health.json",
+            ]
+        )
+    return _dedupe_paths(candidates)
 
 
 def choose_read_path(paths: Iterable[Path]) -> Path:

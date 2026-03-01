@@ -10,12 +10,11 @@ import sys
 from pathlib import Path
 from typing import Any, Dict
 
+from azazel_gadget.path_schema import runtime_snapshot_path_candidates
+
 EPD_STATE = Path("/run/azazel/epd_state.json")
 EPD_LAST_RENDER = Path("/run/azazel/epd_last_render.json")
-RUNTIME_SNAPSHOT_CANDIDATES = (
-    Path("/run/azazel-gadget/ui_snapshot.json"),
-    Path("/run/azazel-zero/ui_snapshot.json"),
-)
+RUNTIME_SNAPSHOT_CANDIDATES = tuple(runtime_snapshot_path_candidates())
 
 
 def _safe_load(path: Path) -> Dict[str, Any]:

@@ -26,6 +26,33 @@ class PathSchemaTests(unittest.TestCase):
         self.assertTrue(result.get("dry_run"))
         self.assertGreater(len(result.get("actions", [])), 0)
 
+    def test_mode_state_candidates_include_primary_and_legacy(self):
+        candidates = path_schema.mode_state_candidates(schema=path_schema.SCHEMA_V2)
+        self.assertEqual(candidates[0], Path("/etc/azazel/mode.json"))
+        self.assertIn(Path("/etc/azazel-gadget/mode.json"), candidates)
+        self.assertIn(Path("/etc/azazel-zero/mode.json"), candidates)
+
+    def test_runtime_snapshot_candidates_are_runtime_only(self):
+        candidates = path_schema.runtime_snapshot_path_candidates(schema=path_schema.SCHEMA_V2)
+        self.assertGreaterEqual(len(candidates), 2)
+        self.assertTrue(all(str(p).startswith("/run/") for p in candidates))
+
+    def test_wifi_health_candidates_include_repo_and_home_fallbacks(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            home = root / "home"
+            repo = root / "repo"
+            home.mkdir(parents=True)
+            repo.mkdir(parents=True)
+            candidates = path_schema.wifi_health_path_candidates(
+                schema=path_schema.SCHEMA_V2,
+                home=home,
+                repo_root=repo,
+            )
+        self.assertIn(home / ".azazel-gadget" / "run" / "wifi_health.json", candidates)
+        self.assertIn(repo / ".azazel-gadget" / "run" / "wifi_health.json", candidates)
+        self.assertIn(Path("/run/azazel-gadget/wifi_health.json"), candidates)
+
 
 class ControlPlaneFallbackTests(unittest.TestCase):
     def test_write_command_file_fallback_explicit_path(self):

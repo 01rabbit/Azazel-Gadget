@@ -32,7 +32,12 @@ from .probes import ProbeOutcome, run_all
 from .state_machine import FirstMinuteStateMachine, Stage
 from .tc import TcManager
 from .web_api import add_history_event
-from azazel_gadget.path_schema import snapshot_path_candidates, warn_if_legacy_path
+from azazel_gadget.path_schema import (
+    mode_state_candidates,
+    runtime_snapshot_path_candidates,
+    snapshot_path_candidates,
+    warn_if_legacy_path,
+)
 
 
 # Global lock for status_ctx to ensure thread-safe access
@@ -234,9 +239,7 @@ class FirstMinuteController:
         self.last_console = 0.0
         self.snapshot_paths = snapshot_path_candidates(home=Path.home())
         # Sync should only read runtime snapshots; home fallbacks can be stale across users/services.
-        self.snapshot_sync_paths = [p for p in self.snapshot_paths if str(p).startswith("/run/")]
-        if not self.snapshot_sync_paths:
-            self.snapshot_sync_paths = self.snapshot_paths[:2]
+        self.snapshot_sync_paths = runtime_snapshot_path_candidates(home=Path.home())
         self.snapshot_path = self.snapshot_paths[0]
         self.snapshot_path.parent.mkdir(parents=True, exist_ok=True)
         # Keep Wi-Fi connection state in memory to preserve across snapshots
@@ -1229,11 +1232,7 @@ class FirstMinuteController:
 
     def _get_current_mode_label(self) -> str:
         """Read current gateway mode label from mode.json (best-effort)."""
-        candidates = [
-            Path("/etc/azazel/mode.json"),
-            Path("/etc/azazel-gadget/mode.json"),
-            Path("/etc/azazel-zero/mode.json"),
-        ]
+        candidates = mode_state_candidates()
         for path in candidates:
             try:
                 if not path.exists():
@@ -1272,18 +1271,6 @@ class FirstMinuteController:
         except Exception:
             return False
 
-    def _get_risk_status(self, stage: Stage) -> str:
-        """Map stage to risk status string for EPD display."""
-        status_map = {
-            Stage.NORMAL: "SAFE",
-            Stage.INIT: "CHECKING",
-            Stage.PROBE: "CHECKING",
-            Stage.DEGRADED: "LIMITED",
-            Stage.CONTAIN: "CONTAINED",
-            Stage.DECEPTION: "DECEPTION"
-        }
-        return status_map.get(stage, "UNKNOWN")
-    
     def _get_risk_status(self, stage: Stage) -> str:
         """Map stage to risk status string for EPD display."""
         status_map = {

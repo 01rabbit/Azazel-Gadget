@@ -49,8 +49,9 @@ try:
     from azazel_gadget.path_schema import (
         config_dir_candidates,
         first_minute_config_candidates,
+        mode_state_candidates,
         portal_env_candidates,
-        snapshot_path_candidates,
+        runtime_snapshot_path_candidates,
         web_token_candidates,
         warn_if_legacy_path,
     )
@@ -59,16 +60,14 @@ except Exception:
     cp_watch_snapshots = None
     config_dir_candidates = lambda: [Path("/etc/azazel-gadget"), Path("/etc/azazel-zero")]  # type: ignore
     first_minute_config_candidates = lambda: [Path("/etc/azazel-gadget/first_minute.yaml"), Path("/etc/azazel-zero/first_minute.yaml")]  # type: ignore
+    mode_state_candidates = lambda: [Path("/etc/azazel/mode.json"), Path("/etc/azazel-gadget/mode.json"), Path("/etc/azazel-zero/mode.json")]  # type: ignore
     portal_env_candidates = lambda: [Path("/etc/azazel-gadget/portal-viewer.env"), Path("/etc/azazel-zero/portal-viewer.env")]  # type: ignore
-    snapshot_path_candidates = lambda: [Path("/run/azazel-gadget/ui_snapshot.json"), Path("/run/azazel-zero/ui_snapshot.json"), Path(".azazel-gadget/run/ui_snapshot.json"), Path(".azazel-zero/run/ui_snapshot.json")]  # type: ignore
+    runtime_snapshot_path_candidates = lambda: [Path("/run/azazel-gadget/ui_snapshot.json"), Path("/run/azazel-zero/ui_snapshot.json")]  # type: ignore
     web_token_candidates = lambda: [Path.home() / ".azazel-gadget" / "web_token.txt", Path.home() / ".azazel-zero" / "web_token.txt"]  # type: ignore
     warn_if_legacy_path = lambda *args, **kwargs: None  # type: ignore
 
 # Configuration
-_STATE_PATHS = snapshot_path_candidates()
-_RUNTIME_STATE_PATHS = [p for p in _STATE_PATHS if str(p).startswith("/run/")]
-if not _RUNTIME_STATE_PATHS:
-    _RUNTIME_STATE_PATHS = _STATE_PATHS[:2]
+_RUNTIME_STATE_PATHS = runtime_snapshot_path_candidates()
 STATE_PATH = _RUNTIME_STATE_PATHS[0]  # Share TUI snapshot
 FALLBACK_STATE_PATH = _RUNTIME_STATE_PATHS[-1]  # Legacy runtime fallback
 CONTROL_SOCKET = Path("/run/azazel/control.sock")
@@ -646,11 +645,7 @@ def get_mode_state() -> Dict[str, Any]:
     if daemon_payload.get("ok") and isinstance(daemon_payload.get("mode"), dict):
         return daemon_payload
 
-    fallback_paths = [
-        Path("/etc/azazel/mode.json"),
-        Path("/etc/azazel-gadget/mode.json"),
-        Path("/etc/azazel-zero/mode.json"),
-    ]
+    fallback_paths = mode_state_candidates()
     for path in fallback_paths:
         try:
             if not path.exists():
