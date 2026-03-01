@@ -297,5 +297,5 @@ sudo journalctl -u azazel-first-minute -f | grep -i "ntfy\|notif"
 ## 参考資料
 
 - **ntfy.sh 公式**: https://ntfy.sh
-- **Azazel-Gadget**: https://github.com/01rabbit/Azazel-Zero
+- **Azazel-Gadget**: https://github.com/01rabbit/Azazel-Gadget
 - **Issue**: ntfy 通知基盤の実装

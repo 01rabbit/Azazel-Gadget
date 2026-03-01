@@ -1,11 +1,11 @@
 #!/bin/bash
-# Azazel-Zero DHCP/DNS トラブルシューティングスクリプト
+# Azazel-Gadget DHCP/DNS トラブルシューティングスクリプト
 # usb0のセットアップとdnsmasqの動作を診断します
 
 set -u
 
 echo "=================================================="
-echo "Azazel-Zero DHCP/DNS Diagnostics"
+echo "Azazel-Gadget DHCP/DNS Diagnostics"
 echo "=================================================="
 echo ""
 

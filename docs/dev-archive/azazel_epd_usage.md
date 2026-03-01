@@ -304,4 +304,4 @@ red_img = ImageChops.lighter(red_img, white_mask)
 ## License
 
 Part of Azazel-Gadget project  
-Repository: https://github.com/01rabbit/Azazel-Zero
+Repository: https://github.com/01rabbit/Azazel-Gadget

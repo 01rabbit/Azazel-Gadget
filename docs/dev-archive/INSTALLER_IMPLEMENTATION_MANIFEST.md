@@ -262,7 +262,7 @@ Stage 20 実行時：
 問題が見つかった場合：
 1. ログ確認：`tail -100 installer/logs/install_*.log`
 2. 診断ツール：`sudo bash bin/diagnose_dhcp.sh`
-3. GitHub Issues：[01rabbit/Azazel-Zero/issues](https://github.com/01rabbit/Azazel-Zero/issues)
+3. GitHub Issues：[01rabbit/Azazel-Gadget/issues](https://github.com/01rabbit/Azazel-Gadget/issues)
 
 ---
 

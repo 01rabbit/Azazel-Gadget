@@ -279,4 +279,4 @@ sudo systemctl restart azazel-first-minute.service
    ```
 
 3. GitHub Issues で報告
-   https://github.com/01rabbit/Azazel-Zero/issues
+   https://github.com/01rabbit/Azazel-Gadget/issues

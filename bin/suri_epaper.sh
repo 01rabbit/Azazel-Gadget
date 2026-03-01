@@ -12,11 +12,9 @@ done
 if [[ -z "${AZAZEL_ROOT:-}" ]]; then
   for candidate in \
     "$HOME/Azazel-Gadget" \
-    "$HOME/Azazel-Zero" \
     "$HOME/azazel-gadget" \
     "$HOME/azazel-zero" \
-    "/home/azazel/Azazel-Gadget" \
-    "/home/azazel/Azazel-Zero"; do
+    "/home/azazel/Azazel-Gadget"; do
     if [[ -d "$candidate" ]]; then
       AZAZEL_ROOT="$candidate"
       break
