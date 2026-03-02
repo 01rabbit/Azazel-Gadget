@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Operational Flow</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;700&amp;family=Roboto+Mono:wght@300;400;700&amp;family=Rajdhani:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+    body {
+        background-color: #020408;
+        color: #e0e0e0;
+        font-family: 'Roboto Mono', monospace;
+        overflow: hidden;
+    }
+    .font-tech { font-family: 'Rajdhani', sans-serif; }
+    .font-heading { font-family: 'Oswald', sans-serif; }
+
+    /* Tactical Background */
+    .tactical-bg {
+        background-color: #020408;
+        background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h40v40H0z' fill='%23020408'/%3E%3Cpath d='M0 0h1v1H0z' fill='%231f2937' fill-opacity='0.4'/%3E%3C/svg%3E");
+    }
+
+    /* Step Card */
+    .step-card {
+        background: rgba(12, 20, 30, 0.6);
+        border: 1px solid #333;
+        position: relative;
+        flex: 1;
+        height: 340px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 2rem 1rem;
+        transition: all 0.3s ease;
+        z-index: 10;
+        backdrop-filter: blur(4px);
+    }
+    .step-card:hover {
+        background: rgba(20, 30, 45, 0.9);
+        transform: translateY(-5px);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+
+    /* Number Badge */
+    .step-num {
+        font-family: 'Oswald', sans-serif;
+        font-size: 4rem;
+        font-weight: 700;
+        color: rgba(255,255,255,0.03);
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        line-height: 1;
+        z-index: 0;
+        pointer-events: none;
+    }
+    .step-card:hover .step-num {
+        color: rgba(255,255,255,0.08);
+    }
+
+    /* Icons */
+    .icon-wrapper {
+        width: 64px;
+        height: 64px;
+        border: 1px solid #444;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 1.5rem;
+        background: #050a10;
+        position: relative;
+        z-index: 20;
+        transition: all 0.3s ease;
+    }
+    .step-card:hover .icon-wrapper {
+        border-color: var(--accent-color);
+        box-shadow: 0 0 15px var(--accent-glow);
+    }
+    .icon-wrapper i {
+        font-size: 1.75rem;
+        color: #666;
+        transition: color 0.3s;
+    }
+    .step-card:hover .icon-wrapper i {
+        color: var(--accent-color);
+    }
+
+    /* Phases & Colors */
+    .phase-setup { --accent-color: #00f3ff; --accent-glow: rgba(0, 243, 255, 0.2); }
+    .phase-action { --accent-color: #ff2a2a; --accent-glow: rgba(255, 42, 42, 0.2); }
+    .phase-alert { --accent-color: #a855f7; --accent-glow: rgba(168, 85, 247, 0.2); }
+    .phase-restore { --accent-color: #22c55e; --accent-glow: rgba(34, 197, 94, 0.2); }
+
+    /* HUD Markers */
+    .hud-m {
+        position: absolute;
+        width: 6px;
+        height: 6px;
+        background: var(--accent-color);
+        opacity: 0;
+        transition: opacity 0.3s;
+    }
+    .step-card:hover .hud-m { opacity: 1; }
+    .tl { top: -1px; left: -1px; }
+    .tr { top: -1px; right: -1px; }
+    .bl { bottom: -1px; left: -1px; }
+    .br { bottom: -1px; right: -1px; }
+    
+    /* Arrow between cards */
+    .flow-arrow {
+        position: absolute;
+        right: -16px;
+        top: 50px;
+        font-size: 1.2rem;
+        color: #333;
+        z-index: 20;
+    }
+    .step-card:hover .flow-arrow {
+        color: #555;
+    }
+
+    /* Dashed Connector Line */
+    .dashed-line {
+        position: absolute;
+        top: 82px; /* Center of icon approx */
+        left: 80px;
+        right: 80px;
+        border-top: 2px dashed #333;
+        z-index: 0;
+    }
+
+</style>
+</head>
+<body class="w-[1280px] h-[720px] flex flex-col relative tactical-bg">
+<!-- Header -->
+<header class="h-20 flex items-center justify-between px-12 border-b border-gray-800 bg-black/80 backdrop-blur-md z-20">
+<div class="flex items-center gap-4">
+<div class="w-1 h-8 bg-cyan-600"></div>
+<div>
+<h1 class="text-3xl font-heading font-bold text-white tracking-widest uppercase">
+                Operational Flow
+            </h1>
+<p class="text-[10px] font-mono text-cyan-500 tracking-[0.3em] uppercase">PUBLIC WI-FI ENGAGEMENT PROCESS</p>
+</div>
+</div>
+<div class="flex items-center gap-4 text-xs font-mono text-gray-400">
+<div class="px-3 py-1 border border-gray-700 bg-gray-900/50 flex items-center gap-2">
+<i class="fa-solid fa-play-circle text-gray-500"></i>
+<span>SEQUENCE: AUTO_DEFENSE</span>
+</div>
+</div>
+</header>
+<!-- Main Content -->
+<main class="flex-1 w-full p-10 relative z-10 flex items-center justify-center">
+<!-- Flow Container -->
+<div class="w-full max-w-[1200px] relative">
+<!-- Connector Line -->
+<div class="dashed-line"></div>
+<div class="flex gap-4 justify-between relative z-10">
+<!-- Step 1: Connect -->
+<div class="step-card phase-setup group">
+<span class="step-num">01</span>
+<div class="hud-m tl"></div><div class="hud-m tr"></div><div class="hud-m bl"></div><div class="hud-m br"></div>
+<div class="icon-wrapper">
+<i class="fa-solid fa-wifi"></i>
+</div>
+<h3 class="text-xl font-heading text-white mb-3 text-center group-hover:text-cyan-400">CONNECT</h3>
+<p class="text-[11px] font-mono text-gray-400 text-center leading-relaxed">
+                    Bridge client through Azazel-Gadget to public hotspot. Establish transparent tunnel.
+                </p>
+<!-- Arrow -->
+<i class="fa-solid fa-chevron-right flow-arrow"></i>
+</div>
+<!-- Step 2: Observe -->
+<div class="step-card phase-setup group">
+<span class="step-num">02</span>
+<div class="hud-m tl"></div><div class="hud-m tr"></div><div class="hud-m bl"></div><div class="hud-m br"></div>
+<div class="icon-wrapper">
+<i class="fa-solid fa-eye"></i>
+</div>
+<h3 class="text-xl font-heading text-white mb-3 text-center group-hover:text-cyan-400">OBSERVE</h3>
+<p class="text-[11px] font-mono text-gray-400 text-center leading-relaxed">
+                    Suricata inspects ingress traffic. Baseline normal behavior and scan for anomalies.
+                </p>
+<i class="fa-solid fa-chevron-right flow-arrow"></i>
+</div>
+<!-- Step 3: Risk Assess -->
+<div class="step-card phase-action group">
+<span class="step-num">03</span>
+<div class="hud-m tl"></div><div class="hud-m tr"></div><div class="hud-m bl"></div><div class="hud-m br"></div>
+<div class="icon-wrapper">
+<i class="fa-solid fa-scale-balanced"></i>
+</div>
+<h3 class="text-xl font-heading text-white mb-3 text-center group-hover:text-red-400">ASSESS</h3>
+<p class="text-[11px] font-mono text-gray-400 text-center leading-relaxed">
+                    Tactics Engine scores events. Determines if risk threshold for active defense is met.
+                </p>
+<i class="fa-solid fa-chevron-right flow-arrow"></i>
+</div>
+<!-- Step 4: Engage (Delay/Decoy) -->
+<div class="step-card phase-action group border-red-900/40">
+<span class="step-num">04</span>
+<div class="hud-m tl"></div><div class="hud-m tr"></div><div class="hud-m bl"></div><div class="hud-m br"></div>
+<div class="icon-wrapper">
+<i class="fa-solid fa-crosshairs"></i>
+</div>
+<h3 class="text-xl font-heading text-white mb-3 text-center group-hover:text-red-400">ENGAGE</h3>
+<p class="text-[11px] font-mono text-gray-400 text-center leading-relaxed">
+                    Execute <span class="text-red-400 font-bold">DELAY</span> (throttle IP) and <span class="text-red-400 font-bold">DECOY</span> (expose fake services) to trap attacker.
+                </p>
+<i class="fa-solid fa-chevron-right flow-arrow"></i>
+</div>
+<!-- Step 5: Notify -->
+<div class="step-card phase-alert group">
+<span class="step-num">05</span>
+<div class="hud-m tl"></div><div class="hud-m tr"></div><div class="hud-m bl"></div><div class="hud-m br"></div>
+<div class="icon-wrapper">
+<i class="fa-solid fa-bell"></i>
+</div>
+<h3 class="text-xl font-heading text-white mb-3 text-center group-hover:text-purple-400">NOTIFY</h3>
+                <p class="text-[11px] font-mono text-gray-400 text-center leading-relaxed">
+                    Alert user via ntfy and on-device E-Paper display. Log detailed evidence for post-incident forensic analysis.
+                </p>
+<i class="fa-solid fa-chevron-right flow-arrow"></i>
+</div>
+<!-- Step 6: Restore -->
+<div class="step-card phase-restore group">
+<span class="step-num">06</span>
+<div class="hud-m tl"></div><div class="hud-m tr"></div><div class="hud-m bl"></div><div class="hud-m br"></div>
+<div class="icon-wrapper">
+<i class="fa-solid fa-rotate-left"></i>
+</div>
+<h3 class="text-xl font-heading text-white mb-3 text-center group-hover:text-green-400">RESTORE</h3>
+<p class="text-[11px] font-mono text-gray-400 text-center leading-relaxed">
+                    Normalize traffic parameters automatically once threat is contained or disconnected.
+                </p>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="h-10 bg-black/90 border-t border-gray-800 flex items-center justify-between px-12 z-20">
+<div class="flex gap-6 text-[10px] font-mono text-gray-600">
+<span>STATUS: LIVE_MONITORING</span>
+<span>SEQUENCE_ID: 0xFF-A2</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-16 h-1 bg-gray-800 overflow-hidden relative">
+<div class="absolute inset-0 bg-cyan-600 w-1/2 animate-[pulse_2s_infinite]"></div>
+</div>
+<span class="text-[10px] text-gray-500 font-mono">FLOW ACTIVE</span>
+</div>
+</footer>
+</body>
+</html>

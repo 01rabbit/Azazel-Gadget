@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Azazel-Gadget Presentation</title>
+  <style>
+    :root {
+      --bg: #000;
+      --panel: rgba(10, 10, 14, 0.72);
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #22d3ee;
+      --border: rgba(255, 255, 255, 0.15);
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      overflow: hidden;
+    }
+
+    .viewport {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      background: radial-gradient(ellipse at center, #10131d 0%, #030406 60%, #000 100%);
+    }
+
+    .stage-wrap {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      transform-origin: center center;
+      width: 1280px;
+      height: 720px;
+      box-shadow: 0 16px 60px rgba(0, 0, 0, 0.5);
+    }
+
+    iframe {
+      width: 1280px;
+      height: 720px;
+      border: 0;
+      display: block;
+      background: #020408;
+    }
+
+    .hud {
+      position: fixed;
+      left: 16px;
+      right: 16px;
+      bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      backdrop-filter: blur(8px);
+      transition: opacity 0.25s ease;
+      z-index: 1000;
+    }
+
+    .hud.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    button, select {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    button:hover, select:hover {
+      border-color: var(--accent);
+    }
+
+    .info {
+      color: var(--muted);
+      white-space: nowrap;
+      font-size: 13px;
+    }
+
+    .accent {
+      color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <div class="viewport">
+    <div class="stage-wrap" id="stageWrap">
+      <iframe id="slideFrame" title="slide"></iframe>
+    </div>
+  </div>
+
+  <div class="hud" id="hud">
+    <div class="controls">
+      <button id="prevBtn" type="button">Prev</button>
+      <button id="nextBtn" type="button">Next</button>
+      <button id="fsBtn" type="button">Fullscreen</button>
+      <select id="langSelect" aria-label="language">
+        <option value="en">English</option>
+        <option value="ja">日本語</option>
+      </select>
+      <select id="slideSelect" aria-label="slide"></select>
+    </div>
+    <div class="info">
+      <span class="accent" id="status"></span>
+      <span> | ←/→: Move | F: Fullscreen | H: HUD</span>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const TOTAL = 18;
+      const W = 1280;
+      const H = 720;
+      const SAFE = 0.97;
+      const BOTTOM_SAFE_PX = 44;
+
+      const stageWrap = document.getElementById("stageWrap");
+      const frame = document.getElementById("slideFrame");
+      const prevBtn = document.getElementById("prevBtn");
+      const nextBtn = document.getElementById("nextBtn");
+      const fsBtn = document.getElementById("fsBtn");
+      const langSelect = document.getElementById("langSelect");
+      const slideSelect = document.getElementById("slideSelect");
+      const status = document.getElementById("status");
+      const hud = document.getElementById("hud");
+      const viewport = document.querySelector(".viewport");
+
+      let lang = "en";
+      let index = 1;
+      let hideHudTimer = null;
+      let contentScale = 1;
+
+      const pad2 = (n) => String(n).padStart(2, "0");
+
+      const parseQuery = () => {
+        const p = new URLSearchParams(window.location.search);
+        const qLang = p.get("lang");
+        const qSlide = parseInt(p.get("slide"), 10);
+        if (qLang === "en" || qLang === "ja") lang = qLang;
+        if (!Number.isNaN(qSlide) && qSlide >= 1 && qSlide <= TOTAL) index = qSlide;
+      };
+
+      const updateQuery = () => {
+        const p = new URLSearchParams();
+        p.set("lang", lang);
+        p.set("slide", String(index));
+        history.replaceState(null, "", "?" + p.toString());
+      };
+
+      const fitStage = () => {
+        const base = Math.min(window.innerWidth / W, window.innerHeight / H);
+        const scale = base * SAFE * contentScale;
+        stageWrap.style.transform = `translate(-50%, -50%) scale(${scale})`;
+      };
+
+      const slidePath = () => `${lang}/${pad2(index)}.html`;
+
+      const setStatus = () => {
+        status.textContent = `${lang.toUpperCase()} ${pad2(index)} / ${TOTAL}`;
+      };
+
+      const go = (nextIndex) => {
+        index = Math.max(1, Math.min(TOTAL, nextIndex));
+        contentScale = 1;
+        frame.src = slidePath();
+        slideSelect.value = String(index);
+        langSelect.value = lang;
+        setStatus();
+        updateQuery();
+        fitStage();
+      };
+
+      const toggleFullscreen = async () => {
+        try {
+          if (document.fullscreenElement) {
+            await document.exitFullscreen();
+          } else {
+            await document.documentElement.requestFullscreen();
+          }
+        } catch (_) {}
+      };
+
+      const showHudTemporarily = () => {
+        hud.classList.remove("hidden");
+        clearTimeout(hideHudTimer);
+        hideHudTimer = setTimeout(() => hud.classList.add("hidden"), 2500);
+      };
+
+      for (let i = 1; i <= TOTAL; i += 1) {
+        const opt = document.createElement("option");
+        opt.value = String(i);
+        opt.textContent = `Slide ${pad2(i)}`;
+        slideSelect.appendChild(opt);
+      }
+
+      parseQuery();
+      go(index);
+      fitStage();
+      hud.classList.add("hidden");
+
+      frame.addEventListener("load", () => {
+        try {
+          const doc = frame.contentDocument;
+          if (!doc) return;
+          const body = doc.body;
+          const html = doc.documentElement;
+          const bodyRect = body ? body.getBoundingClientRect() : null;
+          const footer = doc.querySelector("footer");
+          const footerRect = footer ? footer.getBoundingClientRect() : null;
+
+          // Ensure footer is fully visible even when slides use absolute layout + overflow hidden.
+          const footerBottom = (bodyRect && footerRect)
+            ? (footerRect.bottom - bodyRect.top + 8)
+            : 0;
+
+          // Fallback for slides where lower content extends past the nominal 720 canvas.
+          let visualBottom = 0;
+          if (bodyRect) {
+            const nodes = doc.querySelectorAll("body *");
+            for (const el of nodes) {
+              const r = el.getBoundingClientRect();
+              const b = r.bottom - bodyRect.top;
+              if (Number.isFinite(b) && b > visualBottom) visualBottom = b;
+            }
+            visualBottom += 8;
+          }
+
+          const usedW = Math.max(
+            body ? body.scrollWidth : 0,
+            html ? html.scrollWidth : 0,
+            W
+          );
+          const usedH = Math.max(
+            body ? body.scrollHeight : 0,
+            html ? html.scrollHeight : 0,
+            footerBottom,
+            visualBottom,
+            H
+          ) + BOTTOM_SAFE_PX;
+          const sx = W / usedW;
+          const sy = H / usedH;
+          contentScale = Math.min(1, sx, sy);
+          fitStage();
+        } catch (_) {
+          contentScale = 1;
+          fitStage();
+        }
+      });
+
+      prevBtn.addEventListener("click", () => go(index - 1));
+      nextBtn.addEventListener("click", () => go(index + 1));
+      fsBtn.addEventListener("click", toggleFullscreen);
+      langSelect.addEventListener("change", (e) => {
+        lang = e.target.value;
+        go(index);
+      });
+      slideSelect.addEventListener("change", (e) => go(parseInt(e.target.value, 10)));
+
+      window.addEventListener("resize", fitStage);
+      viewport.addEventListener("click", showHudTemporarily);
+      window.addEventListener("keydown", (e) => {
+        if (["ArrowRight", "PageDown", " "].includes(e.key)) {
+          e.preventDefault();
+          go(index + 1);
+          return;
+        }
+        if (["ArrowLeft", "PageUp", "Backspace"].includes(e.key)) {
+          e.preventDefault();
+          go(index - 1);
+          return;
+        }
+        if (e.key.toLowerCase() === "f") {
+          e.preventDefault();
+          toggleFullscreen();
+          return;
+        }
+        if (e.key.toLowerCase() === "h") {
+          e.preventDefault();
+          hud.classList.toggle("hidden");
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

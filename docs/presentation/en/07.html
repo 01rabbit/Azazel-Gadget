@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Tactical Flow Diagram</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;700&amp;family=Roboto+Mono:wght@300;400;700&amp;family=Rajdhani:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+    /* Base Styles */
+    body {
+      background-color: #020408;
+      color: #e0e0e0;
+      font-family: 'Roboto Mono', monospace;
+      overflow: hidden;
+    }
+
+    /* SVG Grid Pattern */
+    .tactical-bg {
+      background-color: #020408;
+      background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h40v40H0z' fill='%23020408'/%3E%3Cpath d='M0 0h1v1H0z' fill='%2300f3ff' fill-opacity='0.1'/%3E%3Cpath d='M20 20h1v1H20z' fill='%2300f3ff' fill-opacity='0.05'/%3E%3C/svg%3E");
+    }
+
+    .font-tech { font-family: 'Rajdhani', sans-serif; }
+    .font-heading { font-family: 'Oswald', sans-serif; }
+
+    /* Glows */
+    .glow-cyan { box-shadow: 0 0 15px rgba(0, 243, 255, 0.2); }
+    .glow-amber { box-shadow: 0 0 15px rgba(245, 158, 11, 0.2); }
+    .glow-red { box-shadow: 0 0 15px rgba(255, 42, 42, 0.2); }
+    
+    .text-glow-cyan { text-shadow: 0 0 8px rgba(0, 243, 255, 0.6); }
+    .text-glow-amber { text-shadow: 0 0 8px rgba(245, 158, 11, 0.6); }
+    .text-glow-red { text-shadow: 0 0 8px rgba(255, 42, 42, 0.6); }
+
+    /* Connector Lines */
+    .connector-line {
+      position: absolute;
+      top: 50%;
+      height: 2px;
+      background-color: #333;
+      z-index: 0;
+    }
+    .connector-line::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      height: 100%;
+      width: 100%;
+      background: repeating-linear-gradient(90deg, transparent, transparent 4px, #555 4px, #555 8px);
+    }
+    
+    /* Flow Arrows */
+    .flow-arrow {
+      position: absolute;
+      top: 50%;
+      right: -25px;
+      transform: translateY(-50%);
+      color: #555;
+      font-size: 1.5rem;
+      z-index: 10;
+    }
+    
+    /* Card Styles */
+    .stage-card {
+      background: rgba(10, 15, 20, 0.8);
+      border: 1px solid #333;
+      position: relative;
+      z-index: 10;
+      transition: transform 0.3s ease;
+    }
+    .stage-card:hover {
+      transform: translateY(-5px);
+    }
+
+    /* HUD Borders */
+    .hud-corner {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      border-style: solid;
+      border-color: inherit;
+    }
+    .tl { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+    .tr { top: -1px; right: -1px; border-width: 2px 2px 0 0; }
+    .bl { bottom: -1px; left: -1px; border-width: 0 0 2px 2px; }
+    .br { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+
+    /* Pulse Animation for active dots */
+    @keyframes pulse-dot {
+      0% { opacity: 0.4; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.5); }
+      100% { opacity: 0.4; transform: scale(1); }
+    }
+    .active-dot {
+      animation: pulse-dot 2s infinite;
+    }
+
+</style>
+</head>
+<body class="w-[1280px] h-[720px] flex flex-col relative tactical-bg">
+<!-- Header -->
+<header class="h-20 flex items-center justify-between px-12 border-b border-gray-800 bg-black/80 backdrop-blur-sm z-20">
+<div class="flex items-center gap-4">
+<div class="flex flex-col">
+<h1 class="text-3xl font-heading font-bold text-white tracking-widest uppercase">
+        OFFENSIVE DEFENSE
+      </h1>
+<p class="text-[10px] font-mono text-cyan-500 tracking-[0.3em] uppercase">TACTICAL FLOW DOCTRINE</p>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="border border-cyan-900/50 bg-cyan-900/10 px-4 py-1 flex items-center gap-2">
+<i class="fa-solid fa-code-branch text-cyan-500 text-xs"></i>
+<span class="text-xs font-mono text-gray-300">FLOW: ACTIVE_RESPONSE</span>
+</div>
+</div>
+</header>
+<!-- Main Content -->
+<main class="flex-1 w-full p-12 relative z-10 flex flex-col items-center justify-center">
+<!-- Orchestration Layer (Top) -->
+<div class="absolute top-8 w-full max-w-4xl flex justify-center mb-12">
+<div class="border border-gray-600 bg-gray-900/80 px-6 py-2 rounded-sm flex items-center gap-3">
+<i class="fa-solid fa-brain text-purple-400"></i>
+<span class="font-heading tracking-widest text-gray-200">TACTICS ENGINE</span>
+<span class="text-[10px] font-mono text-gray-500 border-l border-gray-600 pl-3">AUTOMATED DECISION LOGIC</span>
+</div>
+<!-- Vertical Line to Flow -->
+<div class="absolute top-full left-1/2 h-16 w-px bg-gray-600"></div>
+</div>
+<!-- Main Flow Container -->
+<div class="relative w-full max-w-6xl flex items-stretch justify-between gap-8 mt-12">
+<!-- Connecting Lines behind cards -->
+<div class="connector-line left-[16%] right-[83%]"></div>
+<div class="connector-line left-[49%] right-[50%]"></div>
+<!-- Stage 1: Observe -->
+<div class="flex-1 stage-card border-cyan-500/30 glow-cyan p-6 flex flex-col items-center text-center group">
+<div class="hud-corner tl border-cyan-500"></div>
+<div class="hud-corner tr border-cyan-500"></div>
+<div class="hud-corner bl border-cyan-500"></div>
+<div class="hud-corner br border-cyan-500"></div>
+<div class="w-16 h-16 rounded-full border-2 border-cyan-500/50 flex items-center justify-center mb-4 bg-cyan-900/10 group-hover:bg-cyan-900/20 transition-colors">
+<i class="fa-solid fa-eye text-3xl text-cyan-400 text-glow-cyan"></i>
+</div>
+<h2 class="text-2xl font-heading text-white mb-1">01. OBSERVE</h2>
+<p class="text-xs font-mono text-cyan-500 mb-6 tracking-wider">DETECTION &amp; TELEMETRY</p>
+<div class="w-full bg-black/40 border border-cyan-900/30 p-3 text-left">
+<div class="flex items-center justify-between mb-2 border-b border-gray-800 pb-1">
+<span class="text-xs font-bold text-gray-300">CORE TOOL</span>
+<i class="fa-solid fa-network-wired text-cyan-700"></i>
+</div>
+<p class="font-mono text-cyan-400 font-bold text-lg">SURICATA IDS</p>
+<p class="text-[10px] text-gray-400 mt-1 leading-tight">
+          Real-time packet inspection &amp; anomaly detection. Triggers alerts on signature match.
+        </p>
+</div>
+<!-- Arrow to next -->
+<div class="absolute top-1/2 -right-6 transform -translate-y-1/2 z-20">
+<i class="fa-solid fa-chevron-right text-cyan-700 text-2xl animate-pulse"></i>
+</div>
+</div>
+<!-- Stage 2: Delay -->
+<div class="flex-1 stage-card border-amber-500/30 glow-amber p-6 flex flex-col items-center text-center group mt-8"> <!-- Offset down slightly for visual rhythm -->
+<div class="hud-corner tl border-amber-500"></div>
+<div class="hud-corner tr border-amber-500"></div>
+<div class="hud-corner bl border-amber-500"></div>
+<div class="hud-corner br border-amber-500"></div>
+<div class="w-16 h-16 rounded-full border-2 border-amber-500/50 flex items-center justify-center mb-4 bg-amber-900/10 group-hover:bg-amber-900/20 transition-colors">
+<i class="fa-solid fa-hourglass-half text-3xl text-amber-400 text-glow-amber"></i>
+</div>
+<h2 class="text-2xl font-heading text-white mb-1">02. DELAY</h2>
+<p class="text-xs font-mono text-amber-500 mb-6 tracking-wider">SHAPING &amp; CONTAINMENT</p>
+<div class="w-full bg-black/40 border border-amber-900/30 p-3 text-left">
+<div class="flex items-center justify-between mb-2 border-b border-gray-800 pb-1">
+<span class="text-xs font-bold text-gray-300">CORE TOOL</span>
+<i class="fa-solid fa-sliders text-amber-700"></i>
+</div>
+<p class="font-mono text-amber-400 font-bold text-lg">TC / IPTABLES</p>
+<p class="text-[10px] text-gray-400 mt-1 leading-tight">
+          Traffic Control (tc) introduces latency/packet loss. Iptables enforces containment rules.
+        </p>
+</div>
+<!-- Arrow to next -->
+<div class="absolute top-1/2 -right-6 transform -translate-y-1/2 z-20">
+<i class="fa-solid fa-chevron-right text-amber-700 text-2xl animate-pulse"></i>
+</div>
+</div>
+<!-- Stage 3: Decoy -->
+<div class="flex-1 stage-card border-red-500/30 glow-red p-6 flex flex-col items-center text-center group">
+<div class="hud-corner tl border-red-500"></div>
+<div class="hud-corner tr border-red-500"></div>
+<div class="hud-corner bl border-red-500"></div>
+<div class="hud-corner br border-red-500"></div>
+<div class="w-16 h-16 rounded-full border-2 border-red-500/50 flex items-center justify-center mb-4 bg-red-900/10 group-hover:bg-red-900/20 transition-colors">
+<i class="fa-solid fa-bullseye text-3xl text-red-400 text-glow-red"></i>
+</div>
+<h2 class="text-2xl font-heading text-white mb-1">03. DECOY</h2>
+<p class="text-xs font-mono text-red-500 mb-6 tracking-wider">MISDIRECTION &amp; LOGGING</p>
+<div class="w-full bg-black/40 border border-red-900/30 p-3 text-left">
+<div class="flex items-center justify-between mb-2 border-b border-gray-800 pb-1">
+<span class="text-xs font-bold text-gray-300">CORE TOOL</span>
+<i class="fa-solid fa-dungeon text-red-700"></i>
+</div>
+<p class="font-mono text-red-400 font-bold text-lg">OPENCANARY</p>
+<p class="text-[10px] text-gray-400 mt-1 leading-tight">
+          Spins up fake services (SSH, HTTP) to trap attackers and log detailed behavior.
+        </p>
+</div>
+</div>
+</div>
+<!-- Bottom Data Stream visualization -->
+<div class="absolute bottom-12 w-full max-w-6xl h-8 border-t border-b border-gray-800 flex items-center gap-2 overflow-hidden opacity-50">
+<div class="text-[10px] font-mono text-gray-600 whitespace-nowrap">
+      STREAM &gt;&gt; [TCP] 192.168.1.105:443 -&gt; ALERT_ID:9921 // LATENCY_ADDED: 500ms // DECOY_HIT: SSH_LOGIN_ATTEMPT // [LOGGING]
+    </div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="w-full h-10 bg-black/90 border-t border-gray-800 flex items-center justify-between px-12 z-20">
+<div class="flex gap-6 text-[10px] font-mono text-gray-600">
+<span>TACTICAL_PHASE: ENGAGEMENT</span>
+<span>AUTO_RESPONSE: ENABLED</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-red-500 active-dot"></div>
+<span class="text-[10px] text-gray-500 font-mono">LIVE MONITORING</span>
+</div>
+</footer>
+</body>
+</html>

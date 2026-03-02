@@ -261,7 +261,7 @@ Legacy path compatibility is planned through `2026-12-31`.
 | `installer/` | Staged installer |
 | `configs/` | Default runtime configs |
 | `scripts/` | Runtime helpers + tests |
-| `docs/` | Development/archive notes |
+| `docs/` | Development/archive notes + presentation assets (`docs/presentation/`) |
 
 ## License
 

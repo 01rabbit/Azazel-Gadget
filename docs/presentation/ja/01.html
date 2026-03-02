@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+
+<html lang="ja">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Azazel-Gadget Title Slide</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;700&amp;family=Roboto+Mono:wght@300;400;700&amp;family=Rajdhani:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+    /* Custom Styles for Tactical UI */
+    body {
+      background-color: #020408;
+      color: #e0e0e0;
+      font-family: 'Roboto Mono', monospace;
+      overflow: hidden;
+    }
+    
+    /* Background Grid Pattern */
+    .tactical-grid {
+      background-image: 
+        linear-gradient(rgba(0, 243, 255, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 243, 255, 0.05) 1px, transparent 1px);
+      background-size: 60px 60px;
+    }
+    
+    /* Neon Glow Effects */
+    .neon-text-cyan {
+      color: #00f3ff;
+      text-shadow: 0 0 8px rgba(0, 243, 255, 0.6);
+    }
+    .neon-text-red {
+      color: #ff2a2a;
+      text-shadow: 0 0 8px rgba(255, 42, 42, 0.6);
+    }
+    .border-glow-cyan {
+      border-color: #00f3ff;
+      box-shadow: 0 0 10px rgba(0, 243, 255, 0.3), inset 0 0 5px rgba(0, 243, 255, 0.1);
+    }
+    
+    /* HUD Corner Elements */
+    .hud-corner {
+      position: absolute;
+      width: 40px;
+      height: 40px;
+      border: 2px solid #00f3ff;
+      opacity: 0.8;
+      z-index: 20;
+    }
+    .top-left { top: 30px; left: 30px; border-right: none; border-bottom: none; }
+    .top-right { top: 30px; right: 30px; border-left: none; border-bottom: none; }
+    .bottom-left { bottom: 30px; left: 30px; border-right: none; border-top: none; }
+    .bottom-right { bottom: 30px; right: 30px; border-left: none; border-top: none; }
+    
+    /* Subtle Scan Line Animation */
+    .scan-line {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: linear-gradient(to right, transparent, rgba(0, 243, 255, 0.3), transparent);
+      opacity: 0.3;
+      animation: scan 8s linear infinite;
+      z-index: 5;
+      pointer-events: none;
+    }
+    @keyframes scan {
+      0% { top: -10%; }
+      100% { top: 110%; }
+    }
+
+    /* Typography Overrides */
+    .font-tech {
+      font-family: 'Rajdhani', sans-serif;
+    }
+    .font-heading {
+      font-family: 'Oswald', sans-serif;
+    }
+
+    /* Glitch Text Effect (Static CSS implementation) */
+    .glitch-static {
+      position: relative;
+    }
+    .glitch-static::before {
+      content: attr(data-text);
+      position: absolute;
+      left: -2px;
+      text-shadow: 1px 0 #ff2a2a;
+      top: 0;
+      color: white;
+      background: #020408;
+      overflow: hidden;
+      clip: rect(0, 900px, 0, 0); 
+      animation: glitch-anim-1 3s infinite linear alternate-reverse;
+    }
+    .glitch-static::after {
+      content: attr(data-text);
+      position: absolute;
+      left: 2px;
+      text-shadow: -1px 0 #00f3ff;
+      top: 0;
+      color: white;
+      background: #020408;
+      overflow: hidden;
+      clip: rect(0, 900px, 0, 0); 
+      animation: glitch-anim-2 2.5s infinite linear alternate-reverse;
+    }
+    @keyframes glitch-anim-1 {
+      0% { clip: rect(20px, 9999px, 21px, 0); }
+      20% { clip: rect(60px, 9999px, 70px, 0); }
+      100% { clip: rect(10px, 9999px, 15px, 0); }
+    }
+    @keyframes glitch-anim-2 {
+      0% { clip: rect(60px, 9999px, 65px, 0); }
+      20% { clip: rect(10px, 9999px, 15px, 0); }
+      100% { clip: rect(80px, 9999px, 90px, 0); }
+    }
+  </style>
+</head>
+<body class="w-[1280px] h-[720px] flex flex-col relative tactical-grid bg-opacity-95">
+<!-- Scan Line Overlay -->
+<div class="scan-line"></div>
+<!-- HUD Decorators -->
+<div class="hud-corner top-left"></div>
+<div class="hud-corner top-right"></div>
+<div class="hud-corner bottom-left"></div>
+<div class="hud-corner bottom-right"></div>
+<!-- Decorative HUD Lines -->
+<div class="absolute top-8 left-[80px] w-[200px] h-[1px] bg-cyan-500 opacity-50"></div>
+<div class="absolute top-8 right-[80px] w-[200px] h-[1px] bg-cyan-500 opacity-50"></div>
+<div class="absolute bottom-8 left-[80px] w-[300px] h-[1px] bg-red-600 opacity-50"></div>
+<div class="absolute bottom-8 right-[80px] w-[100px] h-[1px] bg-red-600 opacity-50"></div>
+<!-- Header Status Bar -->
+<header class="absolute top-10 left-0 w-full flex justify-between px-24 text-[10px] tracking-[0.2em] text-gray-400 font-mono z-20">
+<div class="flex items-center gap-4">
+<span class="text-cyan-400">sys.status: <span class="text-white">ONLINE</span></span>
+<span>|</span>
+<span>net.scan: <span class="animate-pulse text-red-500">ACTIVE</span></span>
+</div>
+<div class="flex items-center gap-4">
+<span>DATE: 2026.02.25</span>
+<span>LOC: UNKNOWN</span>
+<span class="border border-gray-600 px-1 text-xs">SECURE</span>
+</div>
+</header>
+<!-- Main Content -->
+<main class="flex-1 flex flex-col items-center justify-center z-10 relative mt-4">
+<!-- Background Tech Element (Centered Circle) -->
+<div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+<div class="w-[500px] h-[500px] border border-gray-800 rounded-full opacity-20 border-dashed animate-[spin_60s_linear_infinite]"></div>
+<div class="w-[450px] h-[450px] border border-cyan-900 rounded-full opacity-10 absolute"></div>
+</div>
+<!-- Logo Section -->
+<div class="mb-10 relative group z-20">
+<!-- Glow behind logo -->
+<div class="absolute -inset-4 bg-gradient-to-tr from-cyan-900 via-transparent to-red-900 rounded-full blur-xl opacity-40 group-hover:opacity-60 transition duration-500"></div>
+<!-- Logo Image Container -->
+<div class="relative bg-gradient-to-b from-gray-900/85 to-black/55 backdrop-blur-sm rounded-xl p-4 border border-gray-700 shadow-2xl">
+<img alt="Azazel Logo" class="h-40 object-contain filter drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]" src="../images/Azazel-Gadget_logo.png"/>
+</div>
+<!-- Decorative markers around logo -->
+<div class="absolute -top-2 -left-2 w-4 h-4 border-t-2 border-l-2 border-red-500"></div>
+<div class="absolute -bottom-2 -right-2 w-4 h-4 border-b-2 border-r-2 border-cyan-500"></div>
+</div>
+<!-- Title Section -->
+<div class="text-center relative z-20">
+<h1 class="text-8xl font-bold uppercase tracking-tighter font-heading text-white mb-2 leading-none" data-text="AZAZEL-GADGET">
+        AZAZEL<span class="text-red-600">-</span>GADGET
+      </h1>
+<!-- Separator Line -->
+<div class="flex items-center justify-center gap-2 my-5 opacity-80">
+<div class="h-[2px] w-12 bg-gradient-to-r from-transparent to-cyan-500"></div>
+<div class="h-2 w-2 bg-red-600 transform rotate-45"></div>
+<div class="h-[2px] w-12 bg-gradient-to-l from-transparent to-cyan-500"></div>
+</div>
+<p class="text-3xl neon-text-cyan tracking-[0.3em] font-light font-tech uppercase">
+        Personal Tactical Defense Device
+      </p>
+</div>
+<!-- Sub-info Pillars -->
+<div class="mt-10 flex gap-16 text-sm font-mono tracking-wide z-20">
+<div class="flex flex-col items-center group">
+<div class="text-[10px] text-red-500 mb-1 border-b border-red-900 pb-1 w-full text-center">DOCTRINE</div>
+<div class="font-bold text-gray-200 text-lg">OFFENSIVE DEFENSE</div>
+</div>
+<div class="w-[1px] h-10 bg-gray-800"></div>
+<div class="flex flex-col items-center group">
+<div class="text-[10px] text-cyan-500 mb-1 border-b border-cyan-900 pb-1 w-full text-center">MISSION</div>
+<div class="font-bold text-gray-200 text-lg">PUBLIC WI-FI PROTECTION</div>
+</div>
+<div class="w-[1px] h-10 bg-gray-800"></div>
+<div class="flex flex-col items-center group">
+<div class="text-[10px] text-gray-500 mb-1 border-b border-gray-800 pb-1 w-full text-center">CODENAME</div>
+<div class="font-bold text-gray-200 text-lg">TACMOD</div>
+</div>
+</div>
+</main>
+<!-- Footer Info -->
+<footer class="w-full px-24 pb-6 flex justify-between items-end z-20 pointer-events-none bg-black/30">
+<div class="text-[10px] text-gray-600 font-mono leading-tight max-w-lg mb-2">
+<p class="mb-1"><span class="text-red-700 font-bold">WARNING:</span> 不正な干渉が検知された場合、能動防御プロトコルを起動します。</p>
+<p>起動シーケンス: OBSERVE -&gt; DELAY -&gt; DECOY // 全システム正常。</p>
+</div>
+<!-- Animated Status Dots -->
+<div class="flex flex-col items-end gap-1">
+<div class="flex gap-1">
+<div class="w-1.5 h-1.5 bg-red-600/50"></div>
+<div class="w-1.5 h-1.5 bg-red-600/80"></div>
+<div class="w-1.5 h-1.5 bg-red-600 shadow-[0_0_5px_red] animate-pulse"></div>
+</div>
+<span class="text-[9px] text-cyan-800 tracking-widest font-mono">01RABBIT REPO</span>
+</div>
+</footer>
+</body>
+</html>

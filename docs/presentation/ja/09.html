@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>EPD Display &amp; MODE State Machine</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;700&amp;family=Roboto+Mono:wght@300;400;700&amp;family=Rajdhani:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+        /* Base Styles */
+        body {
+            background-color: #020408;
+            color: #e0e0e0;
+            font-family: 'Roboto Mono', monospace;
+            overflow: hidden;
+            width: 1280px;
+            height: 720px;
+        }
+
+        /* Fonts */
+        .font-tech { font-family: 'Rajdhani', sans-serif; }
+        .font-heading { font-family: 'Oswald', sans-serif; }
+
+        /* Background Pattern */
+        .tactical-bg {
+            background-image: 
+                linear-gradient(rgba(2, 4, 8, 0.95), rgba(2, 4, 8, 0.95)),
+                url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M58 0h2v2h-2zM0 58h2v2H0z' fill='%23333' fill-opacity='0.2'/%3E%3Cpath d='M0 0h60v1H0z' fill='%23333' fill-opacity='0.1'/%3E%3Cpath d='M0 0h1v60H0z' fill='%23333' fill-opacity='0.1'/%3E%3C/svg%3E");
+        }
+
+        /* Container Layout */
+        .main-container {
+            display: flex;
+            height: 100%;
+            flex-direction: column;
+        }
+
+        /* Glow Effects */
+        .glow-cyan { box-shadow: 0 0 10px rgba(0, 243, 255, 0.3); border-color: rgba(0, 243, 255, 0.5); }
+        .glow-red { box-shadow: 0 0 10px rgba(255, 42, 42, 0.3); border-color: rgba(255, 42, 42, 0.5); }
+        .glow-amber { box-shadow: 0 0 10px rgba(245, 158, 11, 0.3); border-color: rgba(245, 158, 11, 0.5); }
+        .glow-green { box-shadow: 0 0 10px rgba(34, 197, 94, 0.3); border-color: rgba(34, 197, 94, 0.5); }
+
+        /* HUD Panels */
+        .hud-panel {
+            background: rgba(12, 20, 30, 0.6);
+            border: 1px solid #333;
+            backdrop-filter: blur(5px);
+            position: relative;
+        }
+
+        /* Corner Markers */
+        .corner {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            border-style: solid;
+            transition: all 0.3s ease;
+        }
+        .tl { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+        .tr { top: -1px; right: -1px; border-width: 2px 2px 0 0; }
+        .bl { bottom: -1px; left: -1px; border-width: 0 0 2px 2px; }
+        .br { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+
+        /* State Nodes */
+        .state-node {
+            width: 160px;
+            height: 100px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: absolute;
+            transition: all 0.3s;
+            z-index: 10;
+        }
+        .state-node:hover {
+            transform: scale(1.05);
+            z-index: 20;
+        }
+        .mode-preview {
+            position: absolute;
+            width: 108px;
+            height: 72px;
+            border: 1px solid #374151;
+            background: rgba(0, 0, 0, 0.65);
+            padding: 4px;
+            z-index: 12;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+        }
+        .mode-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            opacity: 0.96;
+        }
+
+        /* Connector Lines SVG */
+        .connections {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+        .conn-line {
+            fill: none;
+            stroke: #444;
+            stroke-width: 2;
+            stroke-dasharray: 5,5;
+        }
+        .conn-arrow {
+            fill: #444;
+        }
+
+    </style>
+</head>
+<body class="tactical-bg">
+<div class="main-container">
+<!-- Header -->
+<header class="h-20 flex items-center justify-between px-12 border-b border-gray-800 bg-black/80 backdrop-blur-md z-20">
+<div class="flex items-center gap-4">
+<div class="w-1 h-8 bg-cyan-600"></div>
+<div>
+<h1 class="text-3xl font-heading font-bold text-white tracking-widest uppercase">
+                        EPD Display &amp; Mode Logic
+                    </h1>
+<p class="text-[10px] font-mono text-cyan-500 tracking-[0.3em] uppercase">SITUATIONAL AWARENESS &amp; CONTROL</p>
+</div>
+</div>
+<div class="flex items-center gap-4 text-xs font-mono text-gray-400">
+<div class="px-3 py-1 border border-gray-700 bg-gray-900/50 flex items-center gap-2">
+<i class="fa-solid fa-layer-group text-gray-500"></i>
+<span>SYS_STATE: VISUALIZED</span>
+</div>
+</div>
+</header>
+<!-- Main Content -->
+<main class="flex-1 flex p-10 gap-10 overflow-hidden relative">
+<!-- LEFT COLUMN: EPD Role & Specs -->
+<div class="w-1/3 flex flex-col gap-6 z-10">
+<!-- Section Title -->
+<div class="flex items-center gap-2 mb-2">
+<i class="fa-regular fa-square text-cyan-500 text-xs"></i>
+<h2 class="text-lg font-heading text-cyan-400 tracking-wider">TACTICAL HUD SURFACE</h2>
+</div>
+<!-- Role Card -->
+<div class="hud-panel p-6 border-l-4 border-l-cyan-600">
+<div class="corner tr border-cyan-500"></div>
+<div class="corner br border-cyan-500"></div>
+<h3 class="text-white font-bold mb-3 flex items-center gap-2">
+<i class="fa-solid fa-eye text-cyan-400"></i> Zero-Power Persistence
+                    </h3>
+<p class="text-gray-400 text-xs leading-relaxed mb-4">
+                        電子ペーパーディスプレイ（EPD）は、電源喪失時でも直前のシステム状態を保持します。オペレーターはコンソール接続なしで、IP・Mode・Threats の状態を即座に確認できます。
+                    </p>
+<div class="grid grid-cols-2 gap-2 text-[10px] font-mono text-gray-500">
+<div class="bg-black/40 p-2 border border-gray-700 rounded">
+<span class="block text-cyan-600 font-bold">SUNLIGHT</span>
+                            READABLE
+                        </div>
+<div class="bg-black/40 p-2 border border-gray-700 rounded">
+<span class="block text-cyan-600 font-bold">ALWAYS</span>
+                            ON
+                        </div>
+</div>
+</div>
+<!-- Display Info List -->
+<div class="flex-1 hud-panel p-6 flex flex-col justify-center">
+<div class="corner tl border-gray-600"></div>
+<div class="corner br border-gray-600"></div>
+<h4 class="text-gray-300 text-sm font-bold border-b border-gray-700 pb-2 mb-4">DISPLAYED METRICS</h4>
+<ul class="space-y-4 text-xs font-mono">
+<li class="flex items-start gap-3">
+<i class="fa-solid fa-shield-halved text-cyan-500 mt-1"></i>
+<div>
+<span class="text-white font-bold block">CURRENT MODE</span>
+<span class="text-gray-500">Portal / Shield / Scapegoat</span>
+</div>
+</li>
+<li class="flex items-start gap-3">
+<i class="fa-solid fa-chart-simple text-red-500 mt-1"></i>
+<div>
+<span class="text-white font-bold block">THREAT TELEMETRY</span>
+<span class="text-gray-500">Risk Score と Suricata Alert カウンタ</span>
+</div>
+</li>
+<li class="flex items-start gap-3">
+<i class="fa-solid fa-network-wired text-gray-400 mt-1"></i>
+<div>
+<span class="text-white font-bold block">NETWORK HEALTH</span>
+<span class="text-gray-500">WAN IP、リンク状態、DNS/DHCP</span>
+</div>
+</li>
+</ul>
+</div>
+</div>
+<!-- RIGHT COLUMN: State Machine Diagram -->
+<div class="w-2/3 relative hud-panel bg-black/40">
+<div class="corner tl border-gray-600"></div>
+<div class="corner tr border-gray-600"></div>
+<div class="corner bl border-gray-600"></div>
+<div class="corner br border-gray-600"></div>
+<!-- Diagram Title -->
+<div class="absolute top-4 left-6 z-20">
+<h2 class="text-xl font-heading text-white tracking-widest">MODE STATE MACHINE</h2>
+<p class="text-[10px] font-mono text-gray-500">LOGIC FLOW &amp; TRANSITIONS</p>
+</div>
+<!-- Legend -->
+<div class="absolute top-6 right-6 flex gap-4 text-[10px] font-mono z-20">
+<div class="flex items-center gap-1"><div class="w-2 h-2 bg-cyan-900 border border-cyan-500"></div><span class="text-gray-400">DEFENSE</span></div>
+<div class="flex items-center gap-1"><div class="w-2 h-2 bg-red-900 border border-red-500"></div><span class="text-gray-400">TRAP</span></div>
+<div class="flex items-center gap-1"><div class="w-2 h-2 bg-green-900 border border-green-500"></div><span class="text-gray-400">GATEWAY</span></div>
+</div>
+<!-- SVG Connections Background -->
+<svg class="connections">
+<defs>
+<marker id="arrowhead" markerheight="7" markerwidth="10" orient="auto" refx="9" refy="3.5">
+<polygon fill="#555" points="0 0, 10 3.5, 0 7"></polygon>
+</marker>
+</defs>
+<!-- Shield to Scapegoat -->
+<path class="conn-line" d="M400 200 L600 350" marker-end="url(#arrowhead)"></path>
+<path class="conn-line" d="M600 350 L420 220" marker-end="url(#arrowhead)"></path>
+<!-- Shield to Portal -->
+<path class="conn-line" d="M400 200 L200 350" marker-end="url(#arrowhead)"></path>
+<path class="conn-line" d="M200 350 L380 220" marker-end="url(#arrowhead)"></path>
+<!-- Portal to Scapegoat (Horizontal) -->
+<path class="conn-line" d="M200 400 L600 400" opacity="0.5" stroke-dasharray="2,2"></path>
+</svg>
+<!-- 1. SHIELD Node (Center Top) -->
+<div class="state-node glow-cyan bg-cyan-900/10" style="top: 120px; left: 320px;">
+<div class="corner tl border-cyan-500"></div><div class="corner tr border-cyan-500"></div>
+<div class="corner bl border-cyan-500"></div><div class="corner br border-cyan-500"></div>
+<div class="bg-cyan-900/40 px-2 py-0.5 mb-2 text-[9px] text-cyan-300 font-bold border border-cyan-700 rounded">DEFAULT</div>
+<i class="fa-solid fa-shield-halved text-2xl text-cyan-400 mb-1"></i>
+<h3 class="text-lg font-heading text-white">SHIELD</h3>
+<p class="text-[9px] text-cyan-200 text-center">Inbound を遮断<br/>Outbound は許可</p>
+</div>
+<div class="mode-preview border-cyan-700/60" style="top: 110px; left: 470px;">
+<img alt="EPD Shield Preview" src="../images/shield_composite.png"/>
+</div>
+<!-- 2. PORTAL Node (Bottom Left) -->
+<div class="state-node glow-green bg-green-900/10" style="top: 350px; left: 120px;">
+<div class="corner tl border-green-500"></div><div class="corner tr border-green-500"></div>
+<div class="corner bl border-green-500"></div><div class="corner br border-green-500"></div>
+<i class="fa-solid fa-door-open text-2xl text-green-400 mb-1"></i>
+<h3 class="text-lg font-heading text-white">PORTAL</h3>
+<p class="text-[9px] text-green-200 text-center">透過ゲートウェイ<br/>NAT 有効</p>
+</div>
+<div class="mode-preview border-green-700/60" style="top: 446px; left: 10px;">
+<img alt="EPD Portal Preview" src="../images/portal_composite.png"/>
+</div>
+<!-- 3. SCAPEGOAT Node (Bottom Right) -->
+<div class="state-node glow-red bg-red-900/10" style="top: 350px; left: 520px;">
+<div class="corner tl border-red-500"></div><div class="corner tr border-red-500"></div>
+<div class="corner bl border-red-500"></div><div class="corner br border-red-500"></div>
+<i class="fa-solid fa-dungeon text-2xl text-red-500 mb-1"></i>
+<h3 class="text-lg font-heading text-white">SCAPEGOAT</h3>
+<p class="text-[9px] text-red-200 text-center">デコイ公開<br/>封じ込め</p>
+</div>
+<div class="mode-preview border-red-700/60" style="top: 446px; left: 660px;">
+<img alt="EPD Scapegoat Preview" src="../images/scapegoat_composite.png"/>
+</div>
+<!-- 4. WARNING Overlay (Floating) -->
+<div class="absolute top-[260px] left-[340px] w-32 h-20 bg-amber-900/20 border border-amber-500/50 flex flex-col items-center justify-center backdrop-blur-sm animate-pulse z-30">
+<div class="corner tl border-amber-500"></div><div class="corner br border-amber-500"></div>
+<i class="fa-solid fa-triangle-exclamation text-amber-500 mb-1"></i>
+<span class="text-amber-500 font-bold text-xs tracking-wider">WARNING</span>
+<span class="text-[8px] text-amber-300">一時オーバーレイ</span>
+</div>
+<!-- Annotations -->
+<div class="absolute text-[9px] font-mono text-gray-500 bg-black/60 px-1 py-0.5" style="top: 250px; left: 200px;">
+                    手動オーバーライド
+                </div>
+<div class="absolute text-[9px] font-mono text-red-400 bg-black/60 px-1 py-0.5 border-l border-red-500" style="top: 250px; left: 540px;">
+                    脅威検知<br/>自動封じ込め
+                </div>
+</div>
+</main>
+</div>
+</body>
+</html>

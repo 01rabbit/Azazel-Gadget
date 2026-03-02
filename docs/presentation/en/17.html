@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Future Roadmap</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;700&amp;family=Roboto+Mono:wght@300;400;700&amp;family=Rajdhani:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+        /* Base Styles */
+        body {
+            background-color: #020408;
+            color: #e0e0e0;
+            font-family: 'Roboto Mono', monospace;
+            overflow: hidden;
+            width: 1280px;
+            height: 720px;
+        }
+
+        /* Fonts */
+        .font-tech { font-family: 'Rajdhani', sans-serif; }
+        .font-heading { font-family: 'Oswald', sans-serif; }
+
+        /* Tactical Background */
+        .tactical-bg {
+            background-color: #020408;
+            background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h40v40H0z' fill='%23020408'/%3E%3Cpath d='M0 0h1v1H0z' fill='%231f2937' fill-opacity='0.4'/%3E%3Cpath d='M20 20h1v1H20z' fill='%231f2937' fill-opacity='0.2'/%3E%3C/svg%3E");
+        }
+
+        /* Timeline Container */
+        .timeline-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 40px;
+        }
+
+        /* Connecting Line */
+        .timeline-line {
+            position: absolute;
+            top: 50%;
+            left: 60px;
+            right: 60px;
+            height: 2px;
+            background: #333;
+            z-index: 0;
+            transform: translateY(-50%);
+        }
+        
+        .timeline-progress {
+            position: absolute;
+            top: 50%;
+            left: 60px;
+            width: 30%; /* Simulate progress */
+            height: 2px;
+            background: #00f3ff;
+            z-index: 0;
+            transform: translateY(-50%);
+            box-shadow: 0 0 10px rgba(0, 243, 255, 0.5);
+        }
+
+        /* Card Styles */
+        .roadmap-card {
+            width: 260px;
+            height: 360px;
+            background-color: rgba(12, 18, 24, 0.8);
+            border: 1px solid #333;
+            position: relative;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            padding: 2px; /* For border effect */
+            transition: all 0.4s ease;
+            backdrop-filter: blur(5px);
+        }
+
+        .roadmap-card:hover {
+            transform: translateY(-10px);
+            background-color: rgba(15, 25, 35, 0.95);
+            border-color: var(--card-accent);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6), 0 0 15px var(--card-glow);
+        }
+
+        /* Inner Content */
+        .card-inner {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            border: 1px solid rgba(255,255,255,0.05);
+            background: rgba(0,0,0,0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Node Point on Timeline */
+        .timeline-node {
+            width: 16px;
+            height: 16px;
+            background: #020408;
+            border: 2px solid var(--card-accent);
+            border-radius: 50%;
+            position: absolute;
+            top: -48px; /* Position above card relative to line */
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 20;
+            transition: all 0.3s;
+        }
+        
+        /* Connector from Node to Card */
+        .node-connector {
+            position: absolute;
+            top: -40px;
+            left: 50%;
+            width: 2px;
+            height: 40px;
+            background: #333;
+            transform: translateX(-50%);
+            z-index: 5;
+            transition: background 0.3s;
+        }
+
+        .roadmap-card:hover .timeline-node {
+            background: var(--card-accent);
+            box-shadow: 0 0 10px var(--card-accent);
+        }
+        .roadmap-card:hover .node-connector {
+            background: var(--card-accent);
+        }
+
+        /* Alternate Layout: Even cards go down, Odd cards go up? 
+           For this design, let's keep them aligned but stagger the content or margin
+           Actually, let's align them all central but use margin-top/bottom to stagger visually if needed.
+           Simple uniform alignment is cleaner for "Tactical".
+        */
+
+        /* Icon styling */
+        .icon-hex {
+            width: 50px;
+            height: 58px; /* Hexagon approximation ratio */
+            background: rgba(255,255,255,0.05);
+            clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 15px;
+            border-left: 2px solid var(--card-accent);
+            border-right: 2px solid var(--card-accent);
+            transition: all 0.3s;
+        }
+        .roadmap-card:hover .icon-hex {
+            background: var(--card-dim);
+            transform: scale(1.1);
+        }
+        .icon-hex i {
+            font-size: 1.5rem;
+            color: var(--card-accent);
+        }
+
+        /* Typography */
+        .phase-tag {
+            font-size: 0.65rem;
+            letter-spacing: 2px;
+            color: var(--card-accent);
+            margin-bottom: 5px;
+            font-family: 'Roboto Mono', monospace;
+            text-transform: uppercase;
+        }
+        
+        .card-title {
+            font-family: 'Oswald', sans-serif;
+            font-size: 1.5rem;
+            color: white;
+            line-height: 1.1;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+        }
+
+        .card-desc {
+            font-size: 0.8rem;
+            color: #9ca3af;
+            line-height: 1.5;
+            flex: 1;
+        }
+
+        /* HUD Corners */
+        .hud-c {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            border-style: solid;
+            border-color: var(--card-accent);
+            opacity: 0.3;
+            transition: opacity 0.3s;
+        }
+        .roadmap-card:hover .hud-c { opacity: 1; }
+        .tl { top: 0; left: 0; border-width: 2px 0 0 2px; }
+        .tr { top: 0; right: 0; border-width: 2px 2px 0 0; }
+        .bl { bottom: 0; left: 0; border-width: 0 0 2px 2px; }
+        .br { bottom: 0; right: 0; border-width: 0 2px 2px 0; }
+
+        /* Themes */
+        .theme-cyan { 
+            --card-accent: #00f3ff; 
+            --card-glow: rgba(0, 243, 255, 0.3);
+            --card-dim: rgba(0, 243, 255, 0.1);
+        }
+        .theme-purple { 
+            --card-accent: #a855f7; 
+            --card-glow: rgba(168, 85, 247, 0.3);
+            --card-dim: rgba(168, 85, 247, 0.1);
+        }
+        .theme-red { 
+            --card-accent: #ff2a2a; 
+            --card-glow: rgba(255, 42, 42, 0.3);
+            --card-dim: rgba(255, 42, 42, 0.1);
+        }
+        .theme-green { 
+            --card-accent: #22c55e; 
+            --card-glow: rgba(34, 197, 94, 0.3);
+            --card-dim: rgba(34, 197, 94, 0.1);
+        }
+
+        /* Scanlines */
+        .scanlines {
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.2));
+            background-size: 100% 4px;
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            pointer-events: none;
+            opacity: 0.1;
+            z-index: 50;
+        }
+
+        /* Staggered Vertical Alignment */
+        .stagger-up { margin-bottom: 60px; }
+        .stagger-down { margin-top: 60px; }
+        
+        /* Connector adjustments for staggered */
+        .stagger-up .node-connector {
+            top: auto; bottom: -40px; height: 40px;
+        }
+        .stagger-up .timeline-node {
+            top: auto; bottom: -48px;
+        }
+
+    </style>
+</head>
+<body class="flex flex-col relative tactical-bg">
+<!-- Scanline Overlay -->
+<div class="scanlines"></div>
+<!-- Header -->
+<header class="h-20 flex items-center justify-between px-12 border-b border-gray-800 bg-black/80 backdrop-blur-md z-20">
+<div class="flex items-center gap-4">
+<div class="w-1 h-8 bg-cyan-600"></div>
+<div>
+<h1 class="text-3xl font-heading font-bold text-white tracking-widest uppercase">
+                    Future Expansion
+                </h1>
+<p class="text-[10px] font-mono text-cyan-500 tracking-[0.3em] uppercase">SYSTEM ROADMAP &amp; EVOLUTION</p>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="px-3 py-1 border border-gray-700 bg-gray-900/50 flex items-center gap-2">
+<i class="fa-solid fa-code-branch text-gray-400 text-xs"></i>
+<span class="text-xs font-mono text-gray-300">V2.0_ALPHA</span>
+</div>
+</div>
+</header>
+<!-- Main Content -->
+<main class="flex-1 w-full relative z-10 overflow-hidden">
+<div class="timeline-container">
+<!-- Timeline Line Background -->
+<div class="timeline-line"></div>
+<!-- Progress Highlight (Optional) -->
+<div class="timeline-progress"></div>
+<!-- Card 1: AI Sophistication (Cyan) - Staggered UP -->
+<article class="roadmap-card theme-cyan stagger-up">
+<div class="node-connector"></div>
+<div class="timeline-node"></div>
+<div class="card-inner">
+<div class="hud-c tl"></div><div class="hud-c tr"></div>
+<div class="hud-c bl"></div><div class="hud-c br"></div>
+<div class="icon-hex">
+<i class="fa-solid fa-brain"></i>
+</div>
+<p class="phase-tag">PHASE 01 // INTELLIGENCE</p>
+<h2 class="card-title">AI Advanced Logic</h2>
+<p class="card-desc">
+                        Implementation of dynamic risk scoring and automated rule tuning based on behavioral analysis. Self-learning threat prioritization.
+                    </p>
+<div class="mt-4 pt-4 border-t border-gray-700/50">
+<div class="flex justify-between items-center text-[10px] font-mono text-gray-500">
+<span>STATUS: DEV</span>
+<span class="text-cyan-400">75%</span>
+</div>
+<div class="w-full h-1 bg-gray-800 mt-1">
+<div class="h-full bg-cyan-500 w-3/4"></div>
+</div>
+</div>
+</div>
+</article>
+<!-- Card 2: Tactical Modules (Purple) - Staggered DOWN -->
+<article class="roadmap-card theme-purple stagger-down">
+<div class="node-connector"></div>
+<div class="timeline-node"></div>
+<div class="card-inner">
+<div class="hud-c tl"></div><div class="hud-c tr"></div>
+<div class="hud-c bl"></div><div class="hud-c br"></div>
+<div class="icon-hex">
+<i class="fa-solid fa-puzzle-piece"></i>
+</div>
+<p class="phase-tag">PHASE 02 // EXPANSION</p>
+<h2 class="card-title">Tactical Modules</h2>
+<p class="card-desc">
+                        Pluggable architecture for custom playbooks. Community-driven offensive/defensive scripts and scenario plugins.
+                    </p>
+<div class="mt-4 pt-4 border-t border-gray-700/50">
+<div class="flex justify-between items-center text-[10px] font-mono text-gray-500">
+<span>STATUS: PLAN</span>
+<span class="text-purple-400">40%</span>
+</div>
+<div class="w-full h-1 bg-gray-800 mt-1">
+<div class="h-full bg-purple-500 w-2/5"></div>
+</div>
+</div>
+</div>
+</article>
+<!-- Card 3: Edge AI (Red) - Staggered UP -->
+<article class="roadmap-card theme-red stagger-up">
+<div class="node-connector"></div>
+<div class="timeline-node"></div>
+<div class="card-inner">
+<div class="hud-c tl"></div><div class="hud-c tr"></div>
+<div class="hud-c bl"></div><div class="hud-c br"></div>
+<div class="icon-hex">
+<i class="fa-solid fa-microchip"></i>
+</div>
+<p class="phase-tag">PHASE 03 // HARDWARE</p>
+<h2 class="card-title">Edge AI Inference</h2>
+<p class="card-desc">
+                        On-device NPU utilization for zero-latency threat detection. Eliminates cloud dependency for advanced pattern matching.
+                    </p>
+<div class="mt-4 pt-4 border-t border-gray-700/50">
+<div class="flex justify-between items-center text-[10px] font-mono text-gray-500">
+<span>STATUS: R&amp;D</span>
+<span class="text-red-400">15%</span>
+</div>
+<div class="w-full h-1 bg-gray-800 mt-1">
+<div class="h-full bg-red-500 w-[15%]"></div>
+</div>
+</div>
+</div>
+</article>
+<!-- Card 4: UX Improvement (Green) - Staggered DOWN -->
+<article class="roadmap-card theme-green stagger-down">
+<div class="node-connector"></div>
+<div class="timeline-node"></div>
+<div class="card-inner">
+<div class="hud-c tl"></div><div class="hud-c tr"></div>
+<div class="hud-c bl"></div><div class="hud-c br"></div>
+<div class="icon-hex">
+<i class="fa-solid fa-mobile-screen"></i>
+</div>
+<p class="phase-tag">PHASE 04 // INTERFACE</p>
+<h2 class="card-title">UX Evolution</h2>
+<p class="card-desc">
+                        Next-gen HUD dashboard for desktop and a dedicated Mobile Companion App for remote tactical control and alerts.
+                    </p>
+<div class="mt-4 pt-4 border-t border-gray-700/50">
+<div class="flex justify-between items-center text-[10px] font-mono text-gray-500">
+<span>STATUS: CONCEPT</span>
+<span class="text-green-400">10%</span>
+</div>
+<div class="w-full h-1 bg-gray-800 mt-1">
+<div class="h-full bg-green-500 w-[10%]"></div>
+</div>
+</div>
+</div>
+</article>
+</div>
+</main>
+<!-- Footer -->
+<footer class="h-10 bg-black/90 border-t border-gray-800 flex items-center justify-between px-12 z-20">
+<div class="flex gap-6 text-[10px] font-mono text-gray-600">
+<span>PROJECT_TIMELINE: FY2026-2027</span>
+<span>RESOURCE_ALLOCATION: OPTIMAL</span>
+</div>
+<div class="flex items-center gap-2">
+<i class="fa-solid fa-forward text-gray-600 text-xs"></i>
+<span class="text-[10px] text-gray-500 font-mono">NEXT GEN LOADING...</span>
+</div>
+</footer>
+</body>
+</html>

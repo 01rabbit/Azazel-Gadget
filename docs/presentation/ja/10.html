@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>MODE Definitions &amp; Display Layer Stack</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;700&amp;family=Rajdhani:wght@500;600;700&amp;family=Roboto+Mono:wght@300;400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+        body {
+            width: 1280px;
+            height: 720px;
+            background-color: #050505;
+            color: #e0e0e0;
+            font-family: 'Roboto Mono', monospace;
+            overflow: hidden;
+            background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h40v40H0z' fill='%23050505'/%3E%3Cpath d='M0 0h1v1H0z' fill='%23333' fill-opacity='0.4'/%3E%3C/svg%3E");
+        }
+
+        /* Typography */
+        .font-oswald { font-family: 'Oswald', sans-serif; }
+        .font-rajdhani { font-family: 'Rajdhani', sans-serif; }
+
+        /* Custom Borders & HUD Elements */
+        .hud-border {
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+            background: rgba(10, 15, 20, 0.85);
+            backdrop-filter: blur(4px);
+        }
+
+        .corner {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            border-style: solid;
+            transition: all 0.3s ease;
+            z-index: 10;
+        }
+        .tl { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+        .tr { top: -1px; right: -1px; border-width: 2px 2px 0 0; }
+        .bl { bottom: -1px; left: -1px; border-width: 0 0 2px 2px; }
+        .br { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+
+        /* Mode Cards */
+        .mode-card {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            border-left: 4px solid transparent;
+            transition: transform 0.2s;
+        }
+        .mode-card:hover {
+            transform: translateX(5px);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        /* Layer Stack Visualization */
+        .layer-stack-container {
+            position: relative;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            perspective: 1200px;
+        }
+
+        .layer-plate {
+            width: 290px;
+            height: 65px;
+            margin: 2px 0; /* Tightened vertical spacing */
+            background: rgba(20, 30, 40, 0.9);
+            border: 1px solid #444;
+            transform: rotateX(45deg) rotateZ(-10deg) translateX(-78px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 1.5rem;
+            position: relative;
+            transition: all 0.3s;
+            z-index: 1;
+        }
+        
+        .layer-plate:hover {
+            transform: rotateX(45deg) rotateZ(-10deg) translateX(-46px) translateY(-10px);
+            z-index: 10;
+            background: rgba(30, 45, 60, 0.95);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+        }
+
+        .layer-plate.layer-5 { border-color: #f59e0b; color: #f59e0b; z-index: 6; }
+        .layer-plate.layer-4 { border-color: #06b6d4; color: #06b6d4; z-index: 5; }
+        .layer-plate.layer-3 { border-color: #94a3b8; color: #94a3b8; z-index: 4; }
+        .layer-plate.layer-2 { border-color: #ef4444; color: #ef4444; z-index: 3; }
+        .layer-plate.layer-1 { border-color: #475569; color: #475569; z-index: 2; }
+
+        /* Connecting Lines for Labels */
+        .connector {
+            position: absolute;
+            height: 1px;
+            background: #555;
+            width: 36px;
+            right: -36px;
+            top: 50%;
+        }
+        .label-box {
+            position: absolute;
+            right: -220px;
+            width: 200px;
+            text-align: left;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        /* Grid Background Overlay */
+        .grid-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-size: 50px 50px;
+            background-image:
+                linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            pointer-events: none;
+            z-index: 0;
+        }
+    </style>
+</head>
+<body class="flex flex-col">
+<!-- Header -->
+<header class="h-20 flex-none flex items-center justify-between px-12 border-b border-gray-800 bg-black/90 z-20">
+<div class="flex items-center gap-4">
+<div class="w-1 h-8 bg-cyan-600"></div>
+<div>
+<h1 class="text-3xl font-oswald font-bold text-white tracking-widest uppercase">
+                    MODE Definitions &amp; Layer Stack
+                </h1>
+<p class="text-[10px] font-mono text-cyan-500 tracking-[0.3em] uppercase">
+                    SYSTEM ARCHITECTURE &amp; VISUALIZATION HIERARCHY
+                </p>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<div class="px-3 py-1 border border-gray-700 bg-gray-900/50 flex items-center gap-2 rounded-sm">
+<i class="fa-solid fa-layer-group text-cyan-500 text-xs"></i>
+<span class="text-xs font-mono text-gray-400">STACK: V2.5</span>
+</div>
+<div class="px-3 py-1 border border-gray-700 bg-gray-900/50 flex items-center gap-2 rounded-sm">
+<i class="fa-solid fa-code text-cyan-500 text-xs"></i>
+<span class="text-xs font-mono text-gray-400">SRC: /etc/azazel/mode.json</span>
+</div>
+</div>
+</header>
+<!-- Main Content -->
+<main class="flex-1 flex w-full relative z-10">
+<!-- Left Column: MODE Definitions -->
+<div class="w-[54%] p-8 flex flex-col justify-start border-r border-gray-800/50 bg-black/20">
+<div class="mb-4">
+<h2 class="text-xl font-oswald text-white mb-1 flex items-center gap-2">
+<i class="fa-solid fa-sliders text-cyan-500"></i> OPERATIONAL MODES
+                </h2>
+<p class="text-[11px] font-mono text-gray-500 uppercase tracking-wider mb-3">DEFINING BEHAVIOR &amp; EXPOSURE SURFACES</p>
+</div>
+<!-- SHIELD MODE -->
+<div class="hud-border mode-card border-l-cyan-500 group">
+<div class="w-12 h-12 flex items-center justify-center bg-cyan-900/20 border border-cyan-500/30 rounded-sm group-hover:bg-cyan-900/40">
+<i class="fa-solid fa-shield-halved text-2xl text-cyan-400"></i>
+</div>
+<div>
+<div class="flex items-baseline gap-2">
+<h3 class="text-lg font-rajdhani font-bold text-white">SHIELD</h3>
+<span class="text-[10px] text-cyan-500 font-bold bg-cyan-900/30 px-1 border border-cyan-800 rounded">DEFAULT</span>
+</div>
+<p class="text-xs text-gray-400 leading-tight mt-1">
+<span class="text-cyan-400 font-bold">wlan0 の Inbound を遮断</span>。usb0 の Outbound は許可。日常携行向けの安全モードで、デコイは公開しません。
+                    </p>
+</div>
+</div>
+<!-- PORTAL MODE -->
+<div class="hud-border mode-card border-l-green-500 group">
+<div class="w-12 h-12 flex items-center justify-center bg-green-900/20 border border-green-500/30 rounded-sm group-hover:bg-green-900/40">
+<i class="fa-solid fa-door-open text-2xl text-green-400"></i>
+</div>
+<div>
+<h3 class="text-lg font-rajdhani font-bold text-white">PORTAL</h3>
+<p class="text-xs text-gray-400 leading-tight mt-1">
+                        <span class="text-green-400 font-bold">透過ゲートウェイ</span>として動作し、usb0 クライアント向けに NAT を有効化。導入時の手間を最小化し、デコイは公開しません。
+                    </p>
+</div>
+</div>
+<!-- SCAPEGOAT MODE -->
+<div class="hud-border mode-card border-l-red-500 group">
+<div class="w-12 h-12 flex items-center justify-center bg-red-900/20 border border-red-500/30 rounded-sm group-hover:bg-red-900/40">
+<i class="fa-solid fa-dungeon text-2xl text-red-500"></i>
+</div>
+<div>
+<h3 class="text-lg font-rajdhani font-bold text-white">SCAPEGOAT</h3>
+<p class="text-xs text-gray-400 leading-tight mt-1">
+<span class="text-red-400 font-bold">DECOY を有効化</span>し、OpenCanary ポートを公開。`az_canary` のネットワーク名前空間（netns）で分離し、誘導・追跡を実行します。
+                    </p>
+</div>
+</div>
+<!-- Design Philosophy Footer -->
+<div class="mt-6 pt-4 border-t border-gray-800">
+<h4 class="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider">CONTROL LOGIC &amp; INVARIANTS</h4>
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-gray-900/50 p-3 border border-gray-700 rounded-sm">
+<p class="text-[10px] text-gray-400 mb-1 font-bold">SINGLE SOURCE OF TRUTH</p>
+<p class="text-[10px] text-gray-500 font-mono">/etc/azazel/mode.json</p>
+</div>
+<div class="bg-gray-900/50 p-3 border border-gray-700 rounded-sm">
+<p class="text-[10px] text-gray-400 mb-1 font-bold">SECURITY INVARIANT</p>
+<p class="text-[10px] text-gray-500 font-mono">wlan0 -&gt; usb0 の Inbound は常に禁止。</p>
+</div>
+</div>
+<div class="mt-0.5 flex items-center gap-2 text-[10px] text-gray-500 font-mono">
+<i class="fa-solid fa-terminal"></i>
+<span>CLI: </span>
+<span class="text-cyan-600">sudo azctl mode set {portal|shield|scapegoat}</span>
+</div>
+</div>
+</div>
+<!-- Right Column: EPD Layer Stack -->
+<div class="w-[46%] relative bg-gray-900/10 flex flex-col items-center justify-start pt-2 overflow-hidden">
+<!-- Grid BG -->
+<div class="grid-overlay"></div>
+<div class="absolute top-10 right-6 z-20 text-right">
+<h2 class="text-xl font-oswald text-white mb-1">
+                    DISPLAY COMPOSITION
+                </h2>
+<p class="text-[11px] font-mono text-gray-500 uppercase tracking-wider">5-LAYER PRIORITY STACK</p>
+</div>
+<div class="layer-stack-container mt-1 -ml-8">
+<!-- Layer 5 -->
+<div class="layer-plate layer-5">
+<span class="font-rajdhani font-bold text-lg tracking-wider">LAYER 05</span>
+<i class="fa-solid fa-triangle-exclamation text-xl"></i>
+<div class="connector"><div class="label-box">
+<p class="text-amber-500 font-bold text-xs mb-1">ALERT / OVERLAY</p>
+<p class="text-[10px] text-gray-400">遮断系オーバーレイ（WARNING、SWITCHING）。最優先で割り込み表示。</p>
+</div></div>
+</div>
+<!-- Layer 4 -->
+<div class="layer-plate layer-4">
+<span class="font-rajdhani font-bold text-lg tracking-wider">LAYER 04</span>
+<i class="fa-solid fa-id-badge text-xl"></i>
+<div class="connector"><div class="label-box">
+<p class="text-cyan-400 font-bold text-xs mb-1">MODE BADGE</p>
+<p class="text-[10px] text-gray-400">主要ステータス（PORTAL/SHIELD）。高視認フォントで常時表示。</p>
+</div></div>
+</div>
+<!-- Layer 3 -->
+<div class="layer-plate layer-3">
+<span class="font-rajdhani font-bold text-lg tracking-wider">LAYER 03</span>
+<i class="fa-solid fa-network-wired text-xl"></i>
+<div class="connector"><div class="label-box">
+<p class="text-gray-300 font-bold text-xs mb-1">NETWORK STATE</p>
+<p class="text-[10px] text-gray-400">WAN IP、リンク健全性、DNS/DHCP 状態、Captive Portal 情報。</p>
+</div></div>
+</div>
+<!-- Layer 2 -->
+<div class="layer-plate layer-2">
+<span class="font-rajdhani font-bold text-lg tracking-wider">LAYER 02</span>
+<i class="fa-solid fa-crosshairs text-xl"></i>
+<div class="connector"><div class="label-box">
+<p class="text-red-400 font-bold text-xs mb-1">THREAT TELEMETRY</p>
+<p class="text-[10px] text-gray-400">Risk Score、Suricata カウンタ、Canary ヒット。</p>
+</div></div>
+</div>
+<!-- Layer 1 -->
+<div class="layer-plate layer-1">
+<span class="font-rajdhani font-bold text-lg tracking-wider">LAYER 01</span>
+<i class="fa-solid fa-info-circle text-xl"></i>
+<div class="connector"><div class="label-box">
+<p class="text-gray-400 font-bold text-xs mb-1">FOOTER / META</p>
+<p class="text-[10px] text-gray-500">タイムスタンプ、デバイスID、更新マーカー。</p>
+</div></div>
+</div>
+<!-- Vertical Axis Line -->
+<div class="absolute left-[-118px] top-10 bottom-10 w-[2px] bg-gradient-to-b from-transparent via-gray-600 to-transparent"></div>
+<div class="absolute left-[-122px] top-10 bottom-10 flex items-center text-[10px] font-mono text-gray-500 [writing-mode:vertical-rl] tracking-[0.2em]">
+                    RENDER PRIORITY Z-INDEX
+                </div>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="h-10 flex-none bg-black/90 border-t border-gray-800 flex items-center justify-between px-12 z-20">
+<div class="flex gap-6 text-[10px] font-mono text-gray-600">
+<span>RENDER_ENGINE: EPD_V2_PYTHON</span>
+<span>REFRESH_RATE: EVENT_DRIVEN</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></div>
+<span class="text-[10px] text-cyan-700 font-mono">DISPLAY_DAEMON_ACTIVE</span>
+</div>
+</footer>
+</body>
+</html>

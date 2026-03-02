@@ -218,7 +218,7 @@ sudo ./install.sh --resume
 | `installer/` | 段階的インストーラ |
 | `configs/` | 既定設定テンプレート |
 | `scripts/` | 実行補助とテストスクリプト |
-| `docs/` | 開発/アーカイブ文書 |
+| `docs/` | 開発/アーカイブ文書 + プレゼン資料（`docs/presentation/`） |
 
 ## ライセンス
 

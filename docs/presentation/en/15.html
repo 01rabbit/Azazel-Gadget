@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Scenario 02: Business Travel / Overseas</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;700&amp;family=Roboto+Mono:wght@300;400;700&amp;family=Rajdhani:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+        /* Base Styles */
+        body {
+            background-color: #020408;
+            color: #e0e0e0;
+            font-family: 'Roboto Mono', monospace;
+            overflow: hidden;
+            width: 1280px;
+            height: 720px;
+        }
+
+        /* Fonts */
+        .font-tech { font-family: 'Rajdhani', sans-serif; }
+        .font-heading { font-family: 'Oswald', sans-serif; }
+
+        /* Background Pattern */
+        .tactical-bg {
+            background-color: #020408;
+            background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h40v40H0z' fill='%23020408'/%3E%3Cpath d='M0 0h1v1H0z' fill='%231f2937' fill-opacity='0.4'/%3E%3Cpath d='M20 20h1v1H20z' fill='%231f2937' fill-opacity='0.2'/%3E%3C/svg%3E");
+        }
+
+        /* Grid Layout for Phases */
+        .scenario-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 14px;
+            height: 100%;
+            position: relative;
+        }
+
+        /* Phase Card Styles */
+        .phase-card {
+            background: rgba(12, 18, 24, 0.7);
+            border: 1px solid #333;
+            padding: 18px;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            backdrop-filter: blur(4px);
+            transition: all 0.3s ease;
+        }
+
+        .phase-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 2px;
+            background: var(--phase-color);
+            opacity: 0.5;
+        }
+
+        .phase-card:hover {
+            background: rgba(20, 30, 40, 0.9);
+            border-color: var(--phase-color);
+            box-shadow: 0 0 20px var(--phase-glow);
+        }
+
+        /* Phase Colors */
+        .p-setup { --phase-color: #00f3ff; --phase-glow: rgba(0, 243, 255, 0.1); }
+        .p-event { --phase-color: #f59e0b; --phase-glow: rgba(245, 158, 11, 0.1); }
+        .p-action { --phase-color: #ff2a2a; --phase-glow: rgba(255, 42, 42, 0.1); }
+        .p-outcome { --phase-color: #22c55e; --phase-glow: rgba(34, 197, 94, 0.1); }
+
+        /* HUD Corners */
+        .hud-corner {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            border-style: solid;
+            border-color: var(--phase-color);
+            opacity: 0.5;
+        }
+        .tl { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+        .tr { top: -1px; right: -1px; border-width: 2px 2px 0 0; }
+        .bl { bottom: -1px; left: -1px; border-width: 0 0 2px 2px; }
+        .br { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+
+        /* Connecting Lines */
+        .connector-h {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 40px;
+            height: 2px;
+            background: #333;
+            z-index: 0;
+        }
+        .connector-v {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 2px;
+            height: 40px;
+            background: #333;
+            z-index: 0;
+        }
+        
+        /* Central Node */
+        .central-node {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 60px;
+            height: 60px;
+            background: #000;
+            border: 1px solid #333;
+            border-radius: 50%;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+        }
+        .central-node i {
+            color: #555;
+            font-size: 1.2rem;
+        }
+
+        /* Icon Circle */
+        .icon-circle {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: rgba(0,0,0,0.4);
+            border: 1px solid var(--phase-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 16px;
+            box-shadow: 0 0 10px var(--phase-glow);
+        }
+        .icon-circle i {
+            color: var(--phase-color);
+            font-size: 1.2rem;
+        }
+        
+        /* Decorative Elements */
+        .tech-line {
+            height: 1px;
+            width: 100%;
+            background: linear-gradient(90deg, transparent, var(--phase-color), transparent);
+            opacity: 0.3;
+            margin: 12px 0;
+        }
+
+    </style>
+</head>
+<body class="flex flex-col relative tactical-bg">
+<!-- Header -->
+<header class="h-20 flex items-center justify-between px-12 border-b border-gray-800 bg-black/80 backdrop-blur-md z-20">
+<div class="flex items-center gap-4">
+<div class="w-1 h-8 bg-cyan-600"></div>
+<div>
+<h1 class="text-3xl font-heading font-bold text-white tracking-widest uppercase">
+                    Scenario 02 // Overseas / Hotel
+                </h1>
+<p class="text-[10px] font-mono text-cyan-500 tracking-[0.3em] uppercase">HIGH-RISK ENVIRONMENT LOG</p>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="px-3 py-1 border border-gray-700 bg-gray-900/50 flex items-center gap-2">
+<i class="fa-solid fa-hotel text-cyan-500 text-xs"></i>
+<span class="text-xs font-mono text-gray-300">ENV: HOTEL_UNTRUSTED</span>
+</div>
+<div class="text-right">
+<p class="text-[10px] text-gray-500 font-mono">OP_ID: AZ-HOTEL-X1</p>
+<p class="text-[10px] text-gray-500 font-mono">STATUS: <span class="text-green-500">CONTAINED</span></p>
+</div>
+</div>
+</header>
+<!-- Main Content -->
+<main class="flex-1 w-full p-10 relative z-10">
+<div class="w-full h-full max-w-[1100px] mx-auto relative">
+<!-- Central Connection Hub -->
+<div class="central-node">
+<i class="fa-solid fa-network-wired"></i>
+</div>
+<!-- Connectors behind cards -->
+<div class="absolute top-1/2 left-0 w-full h-[1px] bg-gray-800 -z-10"></div>
+<div class="absolute top-0 left-1/2 w-[1px] h-full bg-gray-800 -z-10"></div>
+<div class="scenario-grid">
+<!-- Phase 1: Setup -->
+<div class="phase-card p-setup group">
+<div class="hud-corner tl"></div><div class="hud-corner tr"></div><div class="hud-corner bl"></div><div class="hud-corner br"></div>
+<div class="flex justify-between items-start">
+<div class="icon-circle">
+<i class="fa-solid fa-wifi"></i>
+</div>
+<span class="text-4xl font-heading text-gray-800 font-bold select-none group-hover:text-gray-700 transition-colors">01</span>
+</div>
+<h2 class="text-xl font-heading text-white mb-0.5">SETUP &amp; INITIALIZATION</h2>
+<p class="text-xs text-cyan-500 font-mono mb-1">STATUS: CONNECTED (CAUTION)</p>
+<div class="tech-line"></div>
+<ul class="text-sm font-mono text-gray-400 space-y-1.5 mt-1">
+<li class="flex items-start gap-2">
+<i class="fa-solid fa-angle-right text-cyan-600 mt-1"></i>
+<p>Connect to Hotel Guest Wi-Fi via Azazel-Gadget.</p>
+</li>
+<li class="flex items-start gap-2">
+<i class="fa-solid fa-angle-right text-cyan-600 mt-1"></i>
+<p><strong>Captive Portal:</strong> Detected and safely negotiated in sandbox.</p>
+</li>
+<li class="flex items-start gap-2">
+<i class="fa-solid fa-angle-right text-cyan-600 mt-1"></i>
+<p>Baseline traffic monitoring for local subnet noise.</p>
+</li>
+</ul>
+</div>
+<!-- Phase 2: Event -->
+<div class="phase-card p-event group">
+<div class="hud-corner tl"></div><div class="hud-corner tr"></div><div class="hud-corner bl"></div><div class="hud-corner br"></div>
+<div class="flex justify-between items-start">
+<div class="icon-circle">
+<i class="fa-solid fa-eye-slash"></i>
+</div>
+<span class="text-4xl font-heading text-gray-800 font-bold select-none group-hover:text-gray-700 transition-colors">02</span>
+</div>
+<h2 class="text-xl font-heading text-white mb-0.5">THREAT DETECTION</h2>
+<p class="text-xs text-amber-500 font-mono mb-1">STATUS: ANOMALY CONFIRMED</p>
+<div class="tech-line"></div>
+<ul class="text-sm font-mono text-gray-400 space-y-1.5 mt-1">
+<li class="flex items-start gap-2">
+<i class="fa-solid fa-angle-right text-amber-600 mt-1"></i>
+<p><strong>MITM Attack:</strong> SSL Stripping/Downgrade attempt observed.</p>
+</li>
+<li class="flex items-start gap-2">
+<i class="fa-solid fa-angle-right text-amber-600 mt-1"></i>
+<p><strong>DNS Poisoning:</strong> Rogue responses for primary domains.</p>
+</li>
+<li class="flex items-start gap-2">
+<i class="fa-solid fa-angle-right text-amber-600 mt-1"></i>
+<p>Risk Score escalated to <span class="text-amber-400">HIGH (78/100)</span>.</p>
+</li>
+</ul>
+</div>
+<!-- Phase 3: Action -->
+<div class="phase-card p-action group">
+<div class="hud-corner tl"></div><div class="hud-corner tr"></div><div class="hud-corner bl"></div><div class="hud-corner br"></div>
+<div class="flex justify-between items-start">
+<div class="icon-circle">
+<i class="fa-solid fa-shield-virus"></i>
+</div>
+<span class="text-4xl font-heading text-gray-800 font-bold select-none group-hover:text-gray-700 transition-colors">03</span>
+</div>
+<h2 class="text-xl font-heading text-white mb-0.5">TACTICAL RESPONSE</h2>
+<p class="text-xs text-red-500 font-mono mb-1">STATUS: COUNTERMEASURES</p>
+<div class="tech-line"></div>
+<ul class="text-sm font-mono text-gray-400 space-y-1.5 mt-1">
+<li class="flex items-start gap-2">
+<i class="fa-solid fa-angle-right text-red-600 mt-1"></i>
+<p><strong>Enforce:</strong> DNS Pinning (DoH) to trusted resolver immediately.</p>
+</li>
+<li class="flex items-start gap-2">
+<i class="fa-solid fa-angle-right text-red-600 mt-1"></i>
+<p><strong>Delay:</strong> Suspicious MAC addresses throttled via <span class="text-red-300">tc</span>.</p>
+</li>
+<li class="flex items-start gap-2">
+<i class="fa-solid fa-angle-right text-red-600 mt-1"></i>
+<p><strong>Decoy:</strong> Fake SSH service deployed to lure attacker scan.</p>
+</li>
+</ul>
+</div>
+<!-- Phase 4: Outcome -->
+<div class="phase-card p-outcome group">
+<div class="hud-corner tl"></div><div class="hud-corner tr"></div><div class="hud-corner bl"></div><div class="hud-corner br"></div>
+<div class="flex justify-between items-start">
+<div class="icon-circle">
+<i class="fa-solid fa-file-contract"></i>
+</div>
+<span class="text-4xl font-heading text-gray-800 font-bold select-none group-hover:text-gray-700 transition-colors">04</span>
+</div>
+<h2 class="text-xl font-heading text-white mb-0.5">MISSION OUTCOME</h2>
+<p class="text-xs text-green-500 font-mono mb-1">STATUS: SECURED</p>
+<div class="tech-line"></div>
+<ul class="text-sm font-mono text-gray-400 space-y-1.5 mt-1">
+<li class="flex items-start gap-2">
+<i class="fa-solid fa-check text-green-600 mt-1"></i>
+<p>Attack surface exposure window reduced to &lt; 3 seconds.</p>
+</li>
+<li class="flex items-start gap-2">
+<i class="fa-solid fa-check text-green-600 mt-1"></i>
+<p>Attacker isolated to decoy; real session encrypted via VPN.</p>
+</li>
+<li class="flex items-start gap-2">
+<i class="fa-solid fa-check text-green-600 mt-1"></i>
+<p>Forensic logs preserved for post-trip reporting.</p>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="h-10 bg-black/90 border-t border-gray-800 flex items-center justify-between px-12 z-20">
+<div class="flex gap-6 text-[10px] font-mono text-gray-600">
+<span>TACTICAL_VIEW: QUADRANT_LOG</span>
+<span>DATA_SOURCE: LIVE_TELEMETRY</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></div>
+<span class="text-[10px] text-gray-500 font-mono">SCENARIO VISUALIZATION ACTIVE</span>
+</div>
+</footer>
+</body>
+</html>

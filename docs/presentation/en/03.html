@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Why Existing Measures Fall Short</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;700&amp;family=Roboto+Mono:wght@300;400;700&amp;family=Rajdhani:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+    /* Custom Styles for Tactical UI */
+    body {
+      background-color: #020408;
+      color: #e0e0e0;
+      font-family: 'Roboto Mono', monospace;
+      overflow: hidden;
+    }
+    
+    /* Grid Pattern using SVG to avoid CSS gradients */
+    .tactical-bg {
+      background-color: #020408;
+      background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h40v40H0z' fill='%23020408'/%3E%3Cpath d='M0 0h1v40H0z' fill='%2300f3ff' fill-opacity='0.03'/%3E%3Cpath d='M0 0h40v1H0z' fill='%2300f3ff' fill-opacity='0.03'/%3E%3C/svg%3E");
+    }
+
+    /* Fonts */
+    .font-tech { font-family: 'Rajdhani', sans-serif; }
+    .font-heading { font-family: 'Oswald', sans-serif; }
+
+    /* Tactical Borders */
+    .tactical-border {
+      position: relative;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background-color: rgba(10, 15, 20, 0.6);
+    }
+    
+    .corner-accents::before {
+      content: '';
+      position: absolute;
+      top: -1px; left: -1px;
+      width: 10px; height: 10px;
+      border-top: 2px solid #ff2a2a;
+      border-left: 2px solid #ff2a2a;
+    }
+    .corner-accents::after {
+      content: '';
+      position: absolute;
+      bottom: -1px; right: -1px;
+      width: 10px; height: 10px;
+      border-bottom: 2px solid #ff2a2a;
+      border-right: 2px solid #ff2a2a;
+    }
+
+    /* Status Indicators */
+    .status-dot {
+      height: 8px;
+      width: 8px;
+      background-color: #333;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 4px;
+    }
+    .status-dot.active {
+      background-color: #ff2a2a;
+      box-shadow: 0 0 5px #ff2a2a;
+    }
+
+    /* Glitch/Scanline aesthetics */
+    .scan-line-overlay {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: url("data:image/svg+xml,%3Csvg width='100%25' height='4px' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='100%25' height='1px' fill='%23000000' opacity='0.2'/%3E%3C/svg%3E");
+      opacity: 0.2;
+      pointer-events: none;
+      z-index: 50;
+    }
+</style>
+</head>
+<body class="w-[1280px] h-[720px] flex flex-col relative tactical-bg">
+<!-- Header -->
+<header class="w-full h-16 flex items-center justify-between px-12 border-b border-gray-800 bg-black/40 backdrop-blur-sm z-20">
+<div class="flex items-center gap-3">
+<div class="w-2 h-2 bg-red-600"></div>
+<h2 class="text-xl font-heading tracking-widest text-gray-300">SYSTEM GAP ANALYSIS</h2>
+</div>
+<div class="flex items-center gap-4 text-xs font-mono">
+<span class="text-gray-500">DEFENSE_MODE: <span class="text-white">PASSIVE (LEGACY)</span></span>
+<span class="text-red-500 border border-red-900 px-2 py-0.5">INSUFFICIENT</span>
+</div>
+</header>
+<!-- Main Content -->
+<main class="flex-1 flex flex-col px-12 pt-6 pb-3 z-10 relative">
+<!-- Title Section -->
+<div class="mb-4">
+<p class="text-cyan-500 text-sm font-mono tracking-[0.2em] mb-2">CURRENT LIMITATIONS</p>
+<h1 class="text-5xl font-heading font-bold text-white uppercase leading-none">
+      WHY EXISTING MEASURES<br/>
+<span class="text-red-600">FALL SHORT</span>
+</h1>
+</div>
+<!-- Grid Layout for 4 Points -->
+<div class="grid grid-cols-2 gap-4 h-full pb-1">
+<!-- Item 1: VPN -->
+<div class="tactical-border corner-accents p-5 flex flex-col justify-between group hover:bg-white/5 transition-colors duration-300">
+<div class="flex justify-between items-start">
+<div class="p-3 bg-red-900/20 border border-red-900/50 rounded-sm">
+<i class="fa-solid fa-shield-halved text-2xl text-red-500"></i>
+</div>
+<span class="text-[10px] font-mono text-gray-500">ERR_CODE: 0x01_VPN</span>
+</div>
+<div>
+<h3 class="text-2xl font-tech font-bold text-white mb-2 group-hover:text-red-400 transition-colors">VPN DEPENDENCY</h3>
+<p class="text-sm text-gray-400 leading-relaxed font-mono">
+          Traditional VPNs are often blocked by captive portals or throttle speeds significantly. Crucially, they leak data packets during the "handshake" phase before the tunnel is fully established.
+        </p>
+</div>
+<div class="w-full h-[1px] bg-gray-800 mt-4 relative">
+<div class="absolute right-0 top-[-1px] w-1/3 h-[1px] bg-red-800"></div>
+</div>
+</div>
+<!-- Item 2: Passive Defense -->
+<div class="tactical-border corner-accents p-5 flex flex-col justify-between group hover:bg-white/5 transition-colors duration-300">
+<div class="flex justify-between items-start">
+<div class="p-3 bg-red-900/20 border border-red-900/50 rounded-sm">
+<i class="fa-solid fa-eye-slash text-2xl text-red-500"></i>
+</div>
+<span class="text-[10px] font-mono text-gray-500">ERR_CODE: 0x02_PASSIVE</span>
+</div>
+<div>
+<h3 class="text-2xl font-tech font-bold text-white mb-2 group-hover:text-red-400 transition-colors">PASSIVE DEFENSE</h3>
+<p class="text-sm text-gray-400 leading-relaxed font-mono">
+          Standard tools only "detect" and "alert" after the fact. They lack the capability to actively delay, confuse, or counter-engage an attacker in real-time.
+        </p>
+</div>
+<div class="w-full h-[1px] bg-gray-800 mt-4 relative">
+<div class="absolute right-0 top-[-1px] w-1/3 h-[1px] bg-red-800"></div>
+</div>
+</div>
+<!-- Item 3: Visibility -->
+<div class="tactical-border corner-accents p-5 flex flex-col justify-between group hover:bg-white/5 transition-colors duration-300">
+<div class="flex justify-between items-start">
+<div class="p-3 bg-red-900/20 border border-red-900/50 rounded-sm">
+<i class="fa-solid fa-chart-line text-2xl text-red-500 opacity-50"></i>
+</div>
+<span class="text-[10px] font-mono text-gray-500">ERR_CODE: 0x03_BLIND</span>
+</div>
+<div>
+<h3 class="text-2xl font-tech font-bold text-white mb-2 group-hover:text-red-400 transition-colors">POOR VISIBILITY</h3>
+<p class="text-sm text-gray-400 leading-relaxed font-mono">
+          Users are flying blind. There is no real-time HUD showing who else is on the network, what traffic is anomalous, or if a scan is in progress.
+        </p>
+</div>
+<div class="w-full h-[1px] bg-gray-800 mt-4 relative">
+<div class="absolute right-0 top-[-1px] w-1/3 h-[1px] bg-red-800"></div>
+</div>
+</div>
+<!-- Item 4: Endpoint Gaps -->
+<div class="tactical-border corner-accents p-5 flex flex-col justify-between group hover:bg-white/5 transition-colors duration-300">
+<div class="flex justify-between items-start">
+<div class="p-3 bg-red-900/20 border border-red-900/50 rounded-sm">
+<i class="fa-solid fa-laptop-medical text-2xl text-red-500"></i>
+</div>
+<span class="text-[10px] font-mono text-gray-500">ERR_CODE: 0x04_WEAK</span>
+</div>
+<div>
+<h3 class="text-2xl font-tech font-bold text-white mb-2 group-hover:text-red-400 transition-colors">ENDPOINT GAPS</h3>
+<p class="text-sm text-gray-400 leading-relaxed font-mono">
+          Relying solely on HTTPS isn't enough. Misconfigured apps, weak session tokens, and DNS leaks still leave the device exposed to sophisticated MITM attacks.
+        </p>
+</div>
+<div class="w-full h-[1px] bg-gray-800 mt-4 relative">
+<div class="absolute right-0 top-[-1px] w-1/3 h-[1px] bg-red-800"></div>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="w-full px-12 pb-4 flex justify-between items-end border-t border-gray-800 pt-2 z-20 bg-black/30">
+<div class="flex gap-4">
+<div class="flex items-center gap-2 text-[10px] text-gray-500 font-mono">
+<div class="w-2 h-2 bg-red-900 rounded-full"></div>
+<span>VPN: UNSTABLE</span>
+</div>
+<div class="flex items-center gap-2 text-[10px] text-gray-500 font-mono">
+<div class="w-2 h-2 bg-red-900 rounded-full"></div>
+<span>FIREWALL: PASSIVE</span>
+</div>
+</div>
+<div class="text-[10px] font-mono text-red-800 animate-pulse">
+    WARNING: LEGACY DEFENSE PROTOCOLS DETECTED
+  </div>
+</footer>
+<!-- Scanline Overlay -->
+<div class="scan-line-overlay"></div>
+</body>
+</html>

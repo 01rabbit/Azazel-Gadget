@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Summary &amp; Closing</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;700&amp;family=Roboto+Mono:wght@300;400;700&amp;family=Rajdhani:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+        /* Base Styles */
+        body {
+            background-color: #020408;
+            color: #e0e0e0;
+            font-family: 'Roboto Mono', monospace;
+            overflow: hidden;
+            width: 1280px;
+            height: 720px;
+        }
+
+        /* Fonts */
+        .font-tech { font-family: 'Rajdhani', sans-serif; }
+        .font-heading { font-family: 'Oswald', sans-serif; }
+
+        /* Tactical Background */
+        .tactical-bg {
+            background-color: #020408;
+            background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h40v40H0z' fill='%23020408'/%3E%3Cpath d='M0 0h1v1H0z' fill='%231f2937' fill-opacity='0.4'/%3E%3Cpath d='M20 20h1v1H20z' fill='%231f2937' fill-opacity='0.2'/%3E%3C/svg%3E");
+        }
+
+        /* Hero Section */
+        .hero-title {
+            font-family: 'Oswald', sans-serif;
+            font-size: 4rem;
+            line-height: 1;
+            letter-spacing: 2px;
+            background: linear-gradient(to bottom, #fff, #9ca3af); /* Fallback/Simulated */
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            color: white; /* Fallback */
+            text-transform: uppercase;
+            text-shadow: 0 0 20px rgba(0, 243, 255, 0.3);
+        }
+
+        .hero-subtitle {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1.5rem;
+            letter-spacing: 4px;
+            color: #00f3ff;
+            text-transform: uppercase;
+            margin-bottom: 2rem;
+            position: relative;
+            display: inline-block;
+        }
+
+        .hero-subtitle::before, .hero-subtitle::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            width: 40px;
+            height: 2px;
+            background: #00f3ff;
+            opacity: 0.5;
+        }
+        .hero-subtitle::before { left: -60px; }
+        .hero-subtitle::after { right: -60px; }
+
+        /* Pillar Cards */
+        .pillar-container {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .pillar-card {
+            background: rgba(12, 18, 24, 0.6);
+            border: 1px solid #333;
+            width: 280px;
+            padding: 1.5rem;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            backdrop-filter: blur(4px);
+            transition: all 0.3s ease;
+        }
+
+        .pillar-card:hover {
+            background: rgba(20, 30, 45, 0.9);
+            border-color: var(--accent-color);
+            transform: translateY(-5px);
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+        }
+
+        .pillar-icon {
+            font-size: 2rem;
+            color: var(--accent-color);
+            margin-bottom: 1rem;
+            filter: drop-shadow(0 0 5px var(--accent-glow));
+        }
+
+        .pillar-title {
+            font-family: 'Oswald', sans-serif;
+            font-size: 1.25rem;
+            color: white;
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+        }
+
+        .pillar-desc {
+            font-size: 0.85rem;
+            color: #9ca3af;
+            line-height: 1.4;
+        }
+
+        /* Repo Box */
+        .repo-box {
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid #00f3ff;
+            padding: 1rem 3rem;
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            position: relative;
+            box-shadow: 0 0 20px rgba(0, 243, 255, 0.1);
+            transition: all 0.3s;
+        }
+
+        .repo-box:hover {
+            box-shadow: 0 0 30px rgba(0, 243, 255, 0.25);
+            background: rgba(5, 10, 15, 0.9);
+        }
+
+        .repo-link {
+            font-family: 'Roboto Mono', monospace;
+            font-size: 1.5rem;
+            color: #fff;
+            letter-spacing: 1px;
+        }
+
+        .repo-label {
+            position: absolute;
+            top: -10px;
+            left: 20px;
+            background: #020408;
+            padding: 0 10px;
+            font-size: 0.75rem;
+            color: #00f3ff;
+            font-family: 'Rajdhani', sans-serif;
+            letter-spacing: 2px;
+        }
+
+        /* HUD Decorations */
+        .hud-bracket {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #555;
+            transition: border-color 0.3s;
+        }
+        .pillar-card:hover .hud-bracket { border-color: var(--accent-color); }
+        
+        .tl { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+        .tr { top: -1px; right: -1px; border-left: 0; border-bottom: 0; }
+        .bl { bottom: -1px; left: -1px; border-right: 0; border-top: 0; }
+        .br { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
+
+        /* Accents */
+        .acc-cyan { --accent-color: #00f3ff; --accent-glow: rgba(0, 243, 255, 0.4); }
+        .acc-red { --accent-color: #ff2a2a; --accent-glow: rgba(255, 42, 42, 0.4); }
+        .acc-purple { --accent-color: #a855f7; --accent-glow: rgba(168, 85, 247, 0.4); }
+
+        /* Scanline Overlay */
+        .scanlines {
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.1) 50%, rgba(0,0,0,0.1));
+            background-size: 100% 4px;
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            pointer-events: none;
+            z-index: 50;
+        }
+
+    </style>
+</head>
+<body class="flex flex-col relative tactical-bg">
+<!-- Scanline Overlay -->
+<div class="scanlines"></div>
+<!-- Header -->
+<header class="h-20 flex items-center justify-between px-12 border-b border-gray-800 bg-black/80 backdrop-blur-md z-20">
+<div class="flex items-center gap-4">
+<div class="w-1 h-8 bg-cyan-600"></div>
+<div>
+<h1 class="text-3xl font-heading font-bold text-white tracking-widest uppercase">
+                    Mission Summary
+                </h1>
+<p class="text-[10px] font-mono text-cyan-500 tracking-[0.3em] uppercase">SYSTEM READY FOR DEPLOYMENT</p>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="px-3 py-1 border border-gray-700 bg-gray-900/50 flex items-center gap-2">
+<i class="fa-solid fa-check-circle text-green-500 text-xs"></i>
+<span class="text-xs font-mono text-gray-300">ALL SYSTEMS GO</span>
+</div>
+</div>
+</header>
+<!-- Main Content -->
+<main class="flex-1 w-full flex flex-col items-center justify-center relative z-10 p-8">
+<!-- Hero Title -->
+<div class="text-center mb-8">
+<h1 class="hero-title">AZAZEL-GADGET</h1>
+<p class="hero-subtitle">Personal Tactical Defense Device</p>
+</div>
+<!-- Three Pillars Recap -->
+<div class="pillar-container">
+<!-- Pillar 1: Brand -->
+<div class="pillar-card acc-cyan">
+<div class="hud-bracket tl"></div><div class="hud-bracket tr"></div>
+<div class="hud-bracket bl"></div><div class="hud-bracket br"></div>
+<i class="fa-solid fa-user-shield pillar-icon"></i>
+<h3 class="pillar-title">Tactical Brand</h3>
+<p class="pillar-desc">
+                    Not just a tool, but a personal electronic warfare asset.
+                </p>
+</div>
+<!-- Pillar 2: Solution -->
+<div class="pillar-card acc-purple">
+<div class="hud-bracket tl"></div><div class="hud-bracket tr"></div>
+<div class="hud-bracket bl"></div><div class="hud-bracket br"></div>
+<i class="fa-solid fa-wifi pillar-icon"></i>
+<h3 class="pillar-title">Public Shield</h3>
+<p class="pillar-desc">
+                    Specialized protection for high-risk untrusted networks.
+                </p>
+</div>
+<!-- Pillar 3: Doctrine -->
+<div class="pillar-card acc-red">
+<div class="hud-bracket tl"></div><div class="hud-bracket tr"></div>
+<div class="hud-bracket bl"></div><div class="hud-bracket br"></div>
+<i class="fa-solid fa-crosshairs pillar-icon"></i>
+<h3 class="pillar-title">Offensive Defense</h3>
+<p class="pillar-desc">
+                    Observe <i class="fa-solid fa-arrow-right text-[10px] mx-1"></i> Delay <i class="fa-solid fa-arrow-right text-[10px] mx-1"></i> Decoy
+                </p>
+</div>
+</div>
+<!-- Repository Link / CTA -->
+<div class="flex flex-col items-center gap-4">
+<p class="text-xs font-mono text-gray-500 tracking-widest uppercase mb-1">ACCESS REPOSITORY FOR DEPLOYMENT</p>
+<div class="repo-box">
+<span class="repo-label">SOURCE // GITHUB</span>
+<i class="fa-brands fa-github text-4xl text-white"></i>
+<span class="repo-link">github.com/01rabbit/Azazel</span>
+<i class="fa-solid fa-external-link-alt text-cyan-500 text-sm ml-2"></i>
+</div>
+<div class="flex gap-4 mt-6 text-xs font-mono text-gray-400">
+<span class="flex items-center gap-2">
+<i class="fa-solid fa-microchip text-gray-500"></i> GADGET PORTABLE (Pi Zero 2 W)
+                </span>
+<span class="text-gray-700">|</span>
+<span class="flex items-center gap-2">
+<i class="fa-solid fa-server text-gray-500"></i> EDGE GATEWAY (Pi 5)
+                </span>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="h-10 bg-black/90 border-t border-gray-800 flex items-center justify-between px-12 z-20">
+<div class="flex gap-6 text-[10px] font-mono text-gray-600">
+<span>SESSION: END</span>
+<span>LOGS: ARCHIVED</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-16 h-1 bg-gray-800 overflow-hidden relative">
+<div class="absolute inset-0 bg-green-500 w-full"></div>
+</div>
+<span class="text-[10px] text-green-500 font-mono">COMPLETE</span>
+</div>
+</footer>
+</body>
+</html>

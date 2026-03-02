@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Concept: A New Category</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;700&amp;family=Roboto+Mono:wght@300;400;700&amp;family=Rajdhani:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+    body {
+      background-color: #020408;
+      color: #e0e0e0;
+      font-family: 'Roboto Mono', monospace;
+      overflow: hidden;
+    }
+
+    /* SVG Grid Pattern */
+    .tactical-bg {
+      background-color: #020408;
+      background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h40v40H0z' fill='%23020408'/%3E%3Cpath d='M0 0h1v1H0z' fill='%2300f3ff' fill-opacity='0.15'/%3E%3C/svg%3E");
+    }
+
+    .font-tech { font-family: 'Rajdhani', sans-serif; }
+    .font-heading { font-family: 'Oswald', sans-serif; }
+
+    /* Glow Effects */
+    .text-glow-cyan { text-shadow: 0 0 10px rgba(0, 243, 255, 0.6); }
+    .text-glow-red { text-shadow: 0 0 10px rgba(255, 42, 42, 0.6); }
+    
+    .box-glow-cyan { box-shadow: 0 0 15px rgba(0, 243, 255, 0.15), inset 0 0 10px rgba(0, 243, 255, 0.05); }
+
+    /* Tactical Border Elements */
+    .tech-border-l {
+      border-left: 2px solid #333;
+      position: relative;
+    }
+    .tech-border-l::before {
+      content: '';
+      position: absolute;
+      top: 0; left: -2px;
+      height: 20%;
+      width: 2px;
+      background-color: #00f3ff;
+    }
+    .tech-border-l::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: -2px;
+      height: 20%;
+      width: 2px;
+      background-color: #00f3ff;
+    }
+
+    /* Strikethrough Effect */
+    .strike-diagonal {
+      position: relative;
+      color: #555;
+    }
+    .strike-diagonal::after {
+      content: '';
+      position: absolute;
+      top: 50%; left: -5%;
+      width: 110%;
+      height: 2px;
+      background-color: #ff2a2a;
+      transform: rotate(-2deg);
+      opacity: 0.7;
+    }
+
+    /* HUD Elements */
+    .hud-bracket {
+      width: 20px;
+      height: 20px;
+      border: 2px solid #444;
+      position: absolute;
+    }
+    .hud-tl { top: 0; left: 0; border-right: none; border-bottom: none; }
+    .hud-tr { top: 0; right: 0; border-left: none; border-bottom: none; }
+    .hud-bl { bottom: 0; left: 0; border-right: none; border-top: none; }
+    .hud-br { bottom: 0; right: 0; border-left: none; border-top: none; }
+
+</style>
+</head>
+<body class="w-[1280px] h-[720px] flex flex-col relative tactical-bg">
+<!-- Header -->
+<header class="w-full h-20 flex items-center justify-between px-16 border-b border-gray-800 bg-black/60 z-20">
+<div class="flex items-center gap-3">
+<div class="h-8 w-1 bg-cyan-500"></div>
+<h1 class="text-2xl font-heading tracking-widest text-white uppercase">
+            CONCEPT DEFINITION
+        </h1>
+</div>
+<div class="text-xs font-mono text-cyan-500 bg-cyan-900/10 px-4 py-1 border border-cyan-900/30">
+        CATEGORY: <span class="text-white">TACTICAL_GEAR</span>
+</div>
+</header>
+<!-- Main Content -->
+<main class="flex-1 w-full px-16 flex items-center justify-between relative z-10">
+<!-- Left: The Big Statement -->
+<div class="w-1/2 pr-12 relative z-20">
+<div class="mb-6">
+<p class="text-sm font-mono text-gray-500 tracking-[0.3em] mb-2 uppercase">// SHIFTING PARADIGMS</p>
+<div class="mb-4">
+<p class="font-heading text-4xl text-gray-600 strike-diagonal inline-block mb-2">PASSIVE SECURITY TOOL</p>
+</div>
+<div class="flex items-center gap-4 mb-4">
+<i class="fa-solid fa-arrow-down text-3xl text-cyan-500 animate-bounce"></i>
+</div>
+<h2 class="text-7xl font-heading font-bold text-white leading-none mb-6">
+<span class="text-transparent bg-clip-text bg-white text-glow-cyan">PERSONAL</span><br/>
+<span class="text-cyan-400 text-glow-cyan">TACTICAL GEAR</span>
+</h2>
+</div>
+<div class="tech-border-l pl-6 py-2 bg-black/40 backdrop-blur-sm">
+<p class="text-lg font-tech text-gray-300 leading-relaxed">
+                Azazel-Gadget isn't software you install—it's <span class="text-white font-bold">equipment you deploy</span>. 
+                It empowers the individual with <span class="text-red-400">electronic warfare capabilities</span> 
+                typically reserved for state actors, scaled down for personal defense.
+            </p>
+</div>
+</div>
+<!-- Right: Specs / Visuals -->
+<div class="w-1/2 h-[500px] relative flex flex-col items-center justify-center">
+<!-- Central Hexagon / Shield Graphic Placeholder -->
+<div class="relative w-[400px] h-[400px] flex items-center justify-center">
+<!-- Rotating rings (CSS animation) -->
+<div class="absolute inset-0 border border-gray-700 rounded-full opacity-30"></div>
+<div class="absolute inset-10 border border-dashed border-cyan-900 rounded-full opacity-50"></div>
+<!-- Central Icon -->
+<div class="relative z-10 bg-black/80 border border-cyan-500/30 p-10 rounded-lg box-glow-cyan">
+<i class="fa-solid fa-shield-cat text-8xl text-cyan-500 opacity-90"></i>
+<!-- HUD Corners on Icon Box -->
+<div class="hud-bracket hud-tl border-cyan-500"></div>
+<div class="hud-bracket hud-tr border-cyan-500"></div>
+<div class="hud-bracket hud-bl border-cyan-500"></div>
+<div class="hud-bracket hud-br border-cyan-500"></div>
+</div>
+<!-- Orbiting Nodes -->
+<div class="absolute top-0 right-10 bg-black border border-gray-600 px-3 py-1 text-[10px] text-gray-300 font-mono">
+<span class="text-red-500">●</span> OFFENSIVE
+            </div>
+<div class="absolute bottom-10 left-0 bg-black border border-gray-600 px-3 py-1 text-[10px] text-gray-300 font-mono">
+<span class="text-cyan-500">●</span> PORTABLE
+            </div>
+<div class="absolute top-1/2 right-[-20px] bg-black border border-gray-600 px-3 py-1 text-[10px] text-gray-300 font-mono">
+<span class="text-green-500">●</span> AUTONOMOUS
+            </div>
+</div>
+<!-- Feature List Below -->
+<div class="mt-8 grid grid-cols-2 gap-4 w-full max-w-lg">
+<div class="flex items-center gap-3 border-b border-gray-800 pb-2">
+<i class="fa-solid fa-microchip text-cyan-600"></i>
+<p class="font-tech text-lg text-gray-300">Hardware-Based</p>
+</div>
+<div class="flex items-center gap-3 border-b border-gray-800 pb-2">
+<i class="fa-solid fa-briefcase text-cyan-600"></i>
+<p class="font-tech text-lg text-gray-300">Field Deployable</p>
+</div>
+<div class="flex items-center gap-3 border-b border-gray-800 pb-2">
+<i class="fa-solid fa-eye text-red-500"></i>
+<p class="font-tech text-lg text-gray-300">Active Monitoring</p>
+</div>
+<div class="flex items-center gap-3 border-b border-gray-800 pb-2">
+<i class="fa-solid fa-hand-fist text-red-500"></i>
+<p class="font-tech text-lg text-gray-300">Counter-Measures</p>
+</div>
+</div>
+</div>
+<!-- Background Decorative Elements -->
+<div class="absolute bottom-10 right-10 text-[120px] font-heading font-bold text-gray-800 opacity-10 pointer-events-none z-0">
+        GEAR
+    </div>
+</main>
+<!-- Footer Status Bar -->
+<footer class="w-full h-12 bg-black/80 border-t border-gray-800 flex items-center px-16 justify-between z-20">
+<div class="flex gap-6 text-[10px] font-mono text-gray-500">
+<p>CLASS: ELECTRONIC_WARFARE</p>
+<p>TYPE: PERSONAL_DEFENSE</p>
+</div>
+<div class="flex items-center gap-2">
+<div class="h-1 w-12 bg-cyan-900"></div>
+<div class="h-1 w-2 bg-red-900"></div>
+<p class="text-[10px] text-cyan-700 font-mono ml-2">DESIGN_REF: AZ-CON-05</p>
+</div>
+</footer>
+</body>
+</html>
