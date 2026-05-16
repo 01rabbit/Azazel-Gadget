@@ -2,38 +2,18 @@
 
 > **コードネーム:** `TACMOD`
 
-<p align="center">
-  <a href="https://github.com/01rabbit/Azazel-Gadget/releases">
-    <img alt="Release" src="https://img.shields.io/github/v/release/01rabbit/Azazel-Gadget">
-  </a>
-  <a href="https://github.com/01rabbit/Azazel-Gadget/actions/workflows/ci-tests.yml">
-    <img alt="CI Tests" src="https://github.com/01rabbit/Azazel-Gadget/actions/workflows/ci-tests.yml/badge.svg">
-  </a>
-  <a href="https://github.com/01rabbit/Azazel-Gadget/actions/workflows/pages.yml">
-    <img alt="Pages" src="https://github.com/01rabbit/Azazel-Gadget/actions/workflows/pages.yml/badge.svg">
-  </a>
-</p>
-
-<p align="center">
-  <a href="./README_ja.md">
-    <img alt="日本語" src="https://img.shields.io/badge/Language-日本語-2ea44f?style=for-the-badge">
-  </a>
-  <a href="./README.md">
-    <img alt="English" src="https://img.shields.io/badge/Language-English-1f6feb?style=for-the-badge">
-  </a>
-</p>
-
-<p align="center">
-  <img src="images/Azazel-Gadget_logo.png" alt="Azazel-Gadget logo" width="540">
-</p>
-<p align="center">
-  <img src="https://img.shields.io/badge/-Raspberry%20Pi-C51A4A.svg?logo=raspberry-pi&style=flat" alt="Raspberry Pi">
-  <img src="https://img.shields.io/badge/-Python-F9DC3E.svg?logo=python&style=flat" alt="Python">
-  <img src="https://img.shields.io/badge/-Flask-000000.svg?logo=flask&style=flat" alt="Flask">
-  <img src="https://img.shields.io/badge/Javascript-276DC3.svg?logo=javascript&style=flat" alt="JavaScript">
-  <img src="https://img.shields.io/badge/-HTML5-333.svg?logo=html5&style=flat" alt="HTML5">
-  <img src="https://img.shields.io/badge/-CSS3-1572B6.svg?logo=css3&style=flat" alt="CSS3">
-</p>
+![Azazel-Gadget Logo](images/Azazel-Gadget_logo.png)
+[![CI](https://github.com/01rabbit/Azazel-Gadget/actions/workflows/ci-tests.yml/badge.svg)](https://github.com/01rabbit/Azazel-Gadget/actions/workflows/ci-tests.yml)
+[![Release](https://img.shields.io/github/v/release/01rabbit/Azazel-Gadget)](https://github.com/01rabbit/Azazel-Gadget/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Docs](https://img.shields.io/badge/docs-index-blue)](docs/INDEX.md)
+[![Pages](https://github.com/01rabbit/Azazel-Gadget/actions/workflows/pages.yml/badge.svg)](https://github.com/01rabbit/Azazel-Gadget/actions/workflows/pages.yml)
+![Platform: Raspberry Pi](https://img.shields.io/badge/Platform-Raspberry%20Pi-C51A4A?logo=raspberry-pi)
+![Python](https://img.shields.io/badge/Python-3.x-3776AB?logo=python&logoColor=white)
+![Flask](https://img.shields.io/badge/Flask-Web%20UI-000000?logo=flask)
+![JavaScript](https://img.shields.io/badge/JavaScript-UI-F7DF1E?logo=javascript&logoColor=black)
+[![Language: Japanese](https://img.shields.io/badge/Language-日本語-2ea44f)](./README_ja.md)
+[![Language: English](https://img.shields.io/badge/Language-English-1f6feb)](./README.md)
 
 Azazel-Gadget は Azazel システムの AZ-02 ポータブル構成であり、低信頼 Wi-Fi・敵対的ローカルセグメント・現場運用向けのパーソナル戦術防御ゲートウェイ / Cyber Scapegoat Gateway です。ユーザー端末と周辺ネットワークの間に立ち、初期ネットワーク挙動を観測し、`portal` / `shield` / `scapegoat` の決定論的モードで露出を制御し、Web UI・TUI・E-paper・（任意）ローカル通知で運用状態を可視化します。
 
@@ -236,4 +216,4 @@ Azazel-Gadget が主張しないこと:
 
 ## ライセンス
 
-このリポジトリには現在、トップレベル `LICENSE` ファイルはありません。
+このプロジェクトは MIT License で提供されます。詳細は [LICENSE](LICENSE) を参照してください。
