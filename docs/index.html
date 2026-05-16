@@ -3,158 +3,997 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="AZ-02 Azazel-Gadget — Personal Tactical Defense Gateway and portable Cyber Scapegoat Gateway for untrusted Wi-Fi and hostile local segments." />
+  <meta name="description" content="AZ-02 Azazel-Gadget — Personal Tactical Defense Gateway. A portable Cyber Scapegoat Gateway for untrusted Wi-Fi and hostile networks. Built by a hacker, for defense." />
   <title>AZ-02 Azazel-Gadget | Personal Tactical Defense Gateway</title>
   <style>
+    /* ── Variables ── */
     :root {
-      --bg: #05090b;
-      --bg2: #0a151a;
-      --card: #0f1e24;
-      --line: #1f3a45;
-      --text: #e8f6fb;
-      --muted: #a8c3cf;
-      --accent: #16d3de;
-      --accent2: #4ef4a8;
-      --warn: #ffd166;
+      --bg:      #070a0e;
+      --bg1:     #0c1117;
+      --bg2:     #111820;
+      --card:    #0e1620;
+      --border:  #1a2d3a;
+      --border2: #1e3547;
+      --text:    #c8d8e4;
+      --muted:   #6a8a9a;
+      --dim:     #3a5a6a;
+      --cyan:    #00e5ff;
+      --green:   #39ff14;
+      --orange:  #ff8c00;
+      --red:     #ff3366;
+      --yellow:  #ffd700;
     }
-    * { box-sizing: border-box; }
+
+    /* ── Reset ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
     body {
-      margin: 0;
-      font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+      font-family: "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
       color: var(--text);
-      background:
-        radial-gradient(1200px 700px at 90% -10%, #0e3b47 0%, transparent 55%),
-        radial-gradient(900px 500px at -10% 10%, #12303a 0%, transparent 60%),
-        linear-gradient(180deg, var(--bg), var(--bg2));
-      line-height: 1.6;
+      line-height: 1.65;
+      overflow-x: hidden;
     }
-    .shell { max-width: 1080px; margin: 0 auto; padding: 28px 20px 64px; }
-    .top {
+    a { color: var(--cyan); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    img { max-width: 100%; display: block; }
+    ul { list-style: none; }
+
+    /* ── Keyframes ── */
+    @keyframes glitch-1 {
+      0%,100% { clip-path: inset(0 0 98% 0); transform: translate(-2px,0); }
+      20%     { clip-path: inset(30% 0 60% 0); transform: translate(2px,0); }
+      40%     { clip-path: inset(70% 0 10% 0); transform: translate(-1px,0); }
+      60%     { clip-path: inset(10% 0 80% 0); transform: translate(3px,0); }
+      80%     { clip-path: inset(50% 0 40% 0); transform: translate(-3px,0); }
+    }
+    @keyframes glitch-2 {
+      0%,100% { clip-path: inset(0 0 98% 0); transform: translate(2px,0); color: var(--red); }
+      20%     { clip-path: inset(60% 0 30% 0); transform: translate(-2px,0); }
+      40%     { clip-path: inset(20% 0 70% 0); transform: translate(1px,0); color: var(--cyan); }
+      60%     { clip-path: inset(80% 0 5%  0); transform: translate(-1px,0); }
+      80%     { clip-path: inset(40% 0 50% 0); transform: translate(2px,0); }
+    }
+    @keyframes pulse-border {
+      0%,100% { box-shadow: 0 0 0 1px var(--border), 0 0 16px rgba(0,229,255,.06); }
+      50%     { box-shadow: 0 0 0 1px var(--cyan),   0 0 28px rgba(0,229,255,.18); }
+    }
+    @keyframes scanline {
+      0%   { background-position: 0 0; }
+      100% { background-position: 0 100vh; }
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+    @keyframes float {
+      0%,100% { transform: translateY(0); }
+      50%     { transform: translateY(-6px); }
+    }
+    @keyframes fade-up {
+      from { opacity:0; transform: translateY(24px); }
+      to   { opacity:1; transform: translateY(0); }
+    }
+    @keyframes flicker {
+      0%,100%{opacity:1} 92%{opacity:1} 93%{opacity:.7} 94%{opacity:1} 96%{opacity:.9} 97%{opacity:1}
+    }
+    @keyframes grid-fade {
+      from { opacity: 0; }
+      to   { opacity: 0.04; }
+    }
+    @keyframes rotate-slow {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+
+    /* ── Scanline overlay ── */
+    body::after {
+      content: '';
+      position: fixed; inset: 0; z-index: 9999;
+      pointer-events: none;
+      background: repeating-linear-gradient(
+        to bottom,
+        rgba(0,0,0,0) 0px, rgba(0,0,0,0) 1px,
+        rgba(0,0,0,.12) 1px, rgba(0,0,0,.12) 2px
+      );
+    }
+
+    /* ── Grid background ── */
+    .grid-bg {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 40px 40px;
+      animation: grid-fade 1s ease forwards;
+    }
+
+    /* ── Layout ── */
+    .wrap { position: relative; z-index: 1; max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+
+    /* ── Nav ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(7,10,14,.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-inner {
+      max-width: 1120px; margin: 0 auto; padding: 0 20px;
       display: flex; align-items: center; justify-content: space-between;
-      gap: 16px; margin-bottom: 18px;
-      border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px;
-      background: rgba(8, 19, 23, 0.85);
+      height: 52px;
     }
-    .id { font-weight: 700; letter-spacing: .04em; }
-    .tag { color: var(--muted); font-size: 14px; }
+    .nav-logo {
+      font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+      font-size: 13px; font-weight: 700; letter-spacing: .12em;
+      color: var(--cyan);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .nav-logo .az { color: var(--muted); font-weight: 400; }
+    .nav-links {
+      display: flex; align-items: center; gap: 6px;
+    }
+    .nav-links a {
+      font-size: 12px; font-weight: 600; letter-spacing: .06em;
+      color: var(--muted); padding: 6px 10px; border-radius: 6px;
+      transition: color .15s, background .15s;
+    }
+    .nav-links a:hover { color: var(--text); background: rgba(255,255,255,.04); text-decoration: none; }
+    .nav-links .gh-btn {
+      border: 1px solid var(--border2); color: var(--text);
+      background: rgba(255,255,255,.03);
+    }
+    .nav-links .gh-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+
+    /* ── Hero ── */
     .hero {
-      border: 1px solid var(--line); border-radius: 16px;
-      overflow: hidden; background: rgba(7, 17, 21, 0.9);
+      min-height: 100vh;
+      display: flex; flex-direction: column; justify-content: center;
+      padding: 100px 20px 60px;
+      position: relative; overflow: hidden;
     }
-    .hero img { width: 100%; display: block; }
-    .hero-body { padding: 22px; }
-    h1 { margin: 0 0 8px; font-size: clamp(24px, 4vw, 36px); }
-    .sub { margin: 0 0 14px; color: var(--muted); }
-    .lead { margin: 0 0 10px; }
-    .lead strong { color: var(--accent2); }
-    .not-this {
-      margin-top: 10px; color: var(--warn); font-weight: 600;
+    .hero::before {
+      content: '';
+      position: absolute; inset: 0; z-index: 0;
+      background:
+        radial-gradient(ellipse 80vw 60vh at 75% 40%, rgba(0,229,255,.06) 0%, transparent 70%),
+        radial-gradient(ellipse 60vw 50vh at 10% 70%, rgba(57,255,20,.04) 0%, transparent 60%);
     }
-    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+    .hero-inner {
+      position: relative; z-index: 1;
+      max-width: 1120px; margin: 0 auto; width: 100%;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: center;
+    }
+    .hero-label {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 11px; letter-spacing: .2em; text-transform: uppercase;
+      color: var(--cyan); margin-bottom: 16px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .hero-label::before {
+      content: ''; width: 32px; height: 1px; background: var(--cyan);
+    }
+    .hero-title {
+      font-size: clamp(32px, 5vw, 58px);
+      font-weight: 800; line-height: 1.1; letter-spacing: -.02em;
+      margin-bottom: 8px;
+      position: relative;
+    }
+    .hero-title .glitch {
+      position: relative; display: inline-block;
+      color: var(--cyan);
+      animation: flicker 6s infinite;
+    }
+    .hero-title .glitch::before,
+    .hero-title .glitch::after {
+      content: attr(data-text);
+      position: absolute; inset: 0;
+      color: var(--cyan);
+    }
+    .hero-title .glitch::before {
+      animation: glitch-1 4s infinite;
+      color: var(--red);
+    }
+    .hero-title .glitch::after {
+      animation: glitch-2 4s .15s infinite;
+      color: var(--cyan);
+    }
+    .hero-sub {
+      font-size: 18px; color: var(--muted); margin-bottom: 20px; line-height: 1.5;
+    }
+    .hero-tagline {
+      font-size: 14px; line-height: 1.7; color: var(--text);
+      border-left: 2px solid var(--cyan); padding-left: 14px;
+      margin-bottom: 28px;
+    }
+    .hero-tagline strong { color: var(--cyan); }
+    .hero-not {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 11px; color: var(--dim); letter-spacing: .04em;
+      margin-bottom: 28px;
+    }
+    .hero-not span { color: var(--orange); }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+
     .btn {
       display: inline-flex; align-items: center; gap: 8px;
+      font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+      padding: 10px 18px; border-radius: 8px; border: 1px solid transparent;
+      cursor: pointer; transition: all .15s; text-decoration: none;
+    }
+    .btn-primary {
+      background: rgba(0,229,255,.12); border-color: var(--cyan); color: var(--cyan);
+    }
+    .btn-primary:hover { background: rgba(0,229,255,.22); text-decoration: none; }
+    .btn-ghost {
+      background: rgba(255,255,255,.03); border-color: var(--border2); color: var(--muted);
+    }
+    .btn-ghost:hover { border-color: var(--text); color: var(--text); text-decoration: none; }
+
+    .hero-visual {
+      position: relative; animation: fade-up .8s .2s both;
+    }
+    .hero-img-wrap {
+      border-radius: 16px; overflow: hidden;
+      border: 1px solid var(--border2);
+      box-shadow: 0 0 0 1px var(--border), 0 0 60px rgba(0,229,255,.1), 0 40px 80px rgba(0,0,0,.6);
+      animation: pulse-border 4s ease-in-out infinite;
+      position: relative;
+    }
+    .hero-img-wrap::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(to bottom, transparent 60%, rgba(7,10,14,.8) 100%);
+    }
+    .hero-img-wrap img { width: 100%; }
+    .status-bar {
+      position: absolute; bottom: 0; left: 0; right: 0; z-index: 2;
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 16px;
+      font-family: "SF Mono", "Fira Code", monospace; font-size: 11px;
+    }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+    }
+    .status-text { color: var(--green); letter-spacing: .1em; }
+    .status-mode {
+      margin-left: auto;
+      background: rgba(0,229,255,.1); border: 1px solid rgba(0,229,255,.3);
+      color: var(--cyan); padding: 2px 10px; border-radius: 4px;
+      letter-spacing: .12em;
+    }
+
+    /* ── Section common ── */
+    section { padding: 80px 20px; position: relative; z-index: 1; }
+    .section-label {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 11px; letter-spacing: .2em; text-transform: uppercase;
+      color: var(--cyan); margin-bottom: 12px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .section-label::before { content: '//'; color: var(--dim); }
+    .section-title {
+      font-size: clamp(24px, 3vw, 36px); font-weight: 800; letter-spacing: -.02em;
+      margin-bottom: 10px;
+    }
+    .section-desc { color: var(--muted); font-size: 16px; max-width: 560px; margin-bottom: 40px; }
+
+    /* ── Divider ── */
+    .divider {
+      border: none; border-top: 1px solid var(--border);
+      margin: 0 20px; position: relative; z-index: 1;
+    }
+
+    /* ── Concept block ── */
+    .concept-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(300px,1fr));
+      gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 16px;
+      overflow: hidden;
+    }
+    .concept-item {
+      background: var(--card); padding: 28px 24px;
+      transition: background .15s;
+    }
+    .concept-item:hover { background: #111e28; }
+    .concept-num {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 11px; color: var(--dim); letter-spacing: .1em; margin-bottom: 12px;
+    }
+    .concept-icon { font-size: 28px; margin-bottom: 12px; }
+    .concept-item h3 { font-size: 18px; font-weight: 700; margin-bottom: 8px; color: var(--text); }
+    .concept-item p { font-size: 14px; color: var(--muted); line-height: 1.6; }
+    .concept-item strong { color: var(--cyan); font-weight: 600; }
+
+    /* ── Modes ── */
+    .modes-tabs { display: flex; gap: 4px; margin-bottom: 24px; }
+    .mode-tab {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+      padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border2);
+      background: transparent; color: var(--muted);
+      cursor: pointer; transition: all .15s;
+    }
+    .mode-tab:hover { color: var(--text); border-color: var(--text); }
+    .mode-tab.active-portal { color: var(--yellow); border-color: var(--yellow); background: rgba(255,215,0,.08); }
+    .mode-tab.active-shield { color: var(--cyan);   border-color: var(--cyan);   background: rgba(0,229,255,.08); }
+    .mode-tab.active-scapegoat { color: var(--orange); border-color: var(--orange); background: rgba(255,140,0,.08); }
+
+    .mode-panels { position: relative; }
+    .mode-panel { display: none; }
+    .mode-panel.active { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: start; }
+
+    .mode-info { order: 1; }
+    .mode-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+      padding: 4px 12px; border-radius: 20px; margin-bottom: 16px;
+    }
+    .badge-portal   { background: rgba(255,215,0,.1);  border: 1px solid rgba(255,215,0,.3);  color: var(--yellow); }
+    .badge-shield   { background: rgba(0,229,255,.1);  border: 1px solid rgba(0,229,255,.3);  color: var(--cyan); }
+    .badge-scapegoat{ background: rgba(255,140,0,.1);  border: 1px solid rgba(255,140,0,.3);  color: var(--orange); }
+    .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor;
+                 box-shadow: 0 0 6px currentColor; }
+
+    .mode-info h3 { font-size: 26px; font-weight: 800; letter-spacing: -.02em; margin-bottom: 10px; }
+    .mode-info p { color: var(--muted); font-size: 15px; line-height: 1.65; margin-bottom: 16px; }
+    .mode-details {
+      font-family: "SF Mono", "Fira Code", monospace; font-size: 12px;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .mode-detail-row { display: flex; gap: 10px; }
+    .mode-detail-key { color: var(--dim); width: 120px; flex-shrink: 0; }
+    .mode-detail-val { color: var(--text); }
+
+    .mode-visual { order: 2; }
+    .mode-img-frame {
+      border-radius: 12px; overflow: hidden;
+      border: 1px solid var(--border2);
+      background: var(--bg1);
+    }
+    .mode-img-frame img { width: 100%; }
+
+    /* ── Feature grid ── */
+    .feature-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(240px,1fr));
+      gap: 16px;
+    }
+    .feature-card {
+      border: 1px solid var(--border); border-radius: 12px;
+      background: var(--card); padding: 20px;
+      transition: border-color .15s, background .15s;
+    }
+    .feature-card:hover {
+      border-color: var(--border2); background: #111e28;
+    }
+    .feature-icon {
+      font-size: 22px; margin-bottom: 10px;
+      filter: grayscale(.3);
+    }
+    .feature-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 6px; color: var(--text); }
+    .feature-card p { font-size: 13px; color: var(--muted); line-height: 1.55; }
+
+    /* ── Architecture ── */
+    .arch-wrap {
+      border: 1px solid var(--border); border-radius: 16px;
+      background: var(--bg1); padding: 32px;
+      overflow-x: auto;
+    }
+    .arch-flow {
+      display: flex; align-items: center; gap: 0;
+      min-width: 560px; justify-content: center;
+    }
+    .arch-node {
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      min-width: 100px;
+    }
+    .arch-box {
+      border: 1px solid var(--border2); border-radius: 10px;
+      padding: 10px 16px; text-align: center;
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 12px; font-weight: 600; letter-spacing: .06em;
+      background: var(--card); color: var(--text);
+      white-space: nowrap;
+    }
+    .arch-box.endpoint { border-color: rgba(57,255,20,.4); color: var(--green); background: rgba(57,255,20,.06); }
+    .arch-box.gateway  { border-color: var(--cyan); color: var(--cyan); background: rgba(0,229,255,.08);
+                         box-shadow: 0 0 20px rgba(0,229,255,.12);
+                         animation: pulse-border 3s ease-in-out infinite; }
+    .arch-box.portal   { border-color: rgba(255,215,0,.4); color: var(--yellow); background: rgba(255,215,0,.06); }
+    .arch-box.shield   { border-color: rgba(0,229,255,.4); color: var(--cyan); background: rgba(0,229,255,.06); }
+    .arch-box.scapegoat{ border-color: rgba(255,140,0,.4); color: var(--orange); background: rgba(255,140,0,.06); }
+    .arch-box.threat   { border-color: rgba(255,51,102,.4); color: var(--red); background: rgba(255,51,102,.06); }
+    .arch-label { font-size: 10px; color: var(--dim); letter-spacing: .08em; }
+    .arch-arrow {
+      display: flex; align-items: center; color: var(--border2);
+      font-size: 18px; padding: 0 4px; margin-top: -22px;
+    }
+    .arch-col {
+      display: flex; flex-direction: column; gap: 10px; align-items: center;
+    }
+
+    /* ── Terminal ── */
+    .terminal {
+      background: #050810; border: 1px solid var(--border2); border-radius: 14px;
+      overflow: hidden; font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+      box-shadow: 0 0 40px rgba(0,229,255,.08), 0 24px 48px rgba(0,0,0,.5);
+    }
+    .term-bar {
+      display: flex; align-items: center; gap: 8px;
+      background: #0a0f18; padding: 12px 16px; border-bottom: 1px solid var(--border);
+    }
+    .term-dot { width: 12px; height: 12px; border-radius: 50%; }
+    .term-dot.r { background: #ff5f56; }
+    .term-dot.y { background: #ffbd2e; }
+    .term-dot.g { background: #27c93f; }
+    .term-title {
+      margin-left: 8px; font-size: 12px; color: var(--dim); letter-spacing: .06em;
+    }
+    .term-body { padding: 24px; }
+    .term-line { font-size: 13px; line-height: 1.9; }
+    .term-prompt { color: var(--cyan); }
+    .term-cmd { color: var(--text); }
+    .term-comment { color: var(--dim); }
+    .term-out { color: var(--green); }
+    .term-warn { color: var(--orange); }
+    .cursor {
+      display: inline-block; width: 8px; height: 14px;
+      background: var(--cyan); margin-left: 2px; vertical-align: middle;
+      animation: blink 1s step-end infinite;
+    }
+
+    /* ── Hardware ── */
+    .hw-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 24px;
+    }
+    .hw-card {
+      border: 1px solid var(--border); border-radius: 16px;
+      background: var(--card); overflow: hidden;
+      transition: border-color .2s;
+    }
+    .hw-card:hover { border-color: var(--cyan); }
+    .hw-img { background: var(--bg1); border-bottom: 1px solid var(--border); }
+    .hw-img img { width: 100%; max-height: 220px; object-fit: contain; padding: 20px; }
+    .hw-info { padding: 20px; }
+    .hw-tag {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
+      color: var(--cyan); margin-bottom: 8px;
+    }
+    .hw-info h3 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+    .hw-info p { font-size: 13px; color: var(--muted); }
+
+    /* ── Links ── */
+    .links-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr));
+      gap: 12px;
+    }
+    .link-card {
+      border: 1px solid var(--border); border-radius: 10px;
+      background: var(--card); padding: 16px 18px;
+      display: flex; align-items: center; gap: 12px;
+      transition: border-color .15s, background .15s;
       text-decoration: none; color: var(--text);
-      border: 1px solid var(--line); border-radius: 10px;
-      padding: 10px 14px; font-weight: 600;
-      background: #0d1e25;
     }
-    .btn.primary { border-color: #1ba8b1; background: #0e2f36; }
-    .btn:hover { filter: brightness(1.1); }
-    .grid {
-      margin-top: 18px;
-      display: grid; gap: 14px;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    }
-    .card {
-      border: 1px solid var(--line); border-radius: 12px;
-      background: var(--card); padding: 14px;
-    }
-    .card h2 { margin: 0 0 8px; font-size: 18px; }
-    .card p { margin: 0 0 8px; color: var(--muted); }
-    ul { margin: 0; padding-left: 18px; }
-    li { margin: 4px 0; }
+    .link-card:hover { border-color: var(--cyan); background: rgba(0,229,255,.04); text-decoration: none; }
+    .link-icon { font-size: 20px; flex-shrink: 0; }
+    .link-label { font-size: 13px; font-weight: 600; color: var(--text); }
+    .link-desc { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .link-arrow { margin-left: auto; color: var(--dim); font-size: 16px; }
+
+    /* ── Footer ── */
     footer {
-      margin-top: 18px; color: var(--muted); font-size: 14px;
-      border-top: 1px solid var(--line); padding-top: 12px;
+      position: relative; z-index: 1;
+      border-top: 1px solid var(--border); padding: 32px 20px;
     }
-    code { color: var(--accent2); }
+    .footer-inner {
+      max-width: 1120px; margin: 0 auto;
+      display: flex; align-items: center; justify-content: space-between; gap: 20px;
+      flex-wrap: wrap;
+    }
+    .footer-logo {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 12px; color: var(--dim); letter-spacing: .1em;
+    }
+    .footer-logo span { color: var(--cyan); }
+    .footer-links { display: flex; gap: 16px; }
+    .footer-links a { font-size: 12px; color: var(--dim); }
+    .footer-links a:hover { color: var(--text); }
+    .footer-copy { font-size: 11px; color: var(--dim); }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      .hero-inner { grid-template-columns: 1fr; gap: 32px; }
+      .hero-visual { order: -1; }
+      .mode-panel.active { grid-template-columns: 1fr; }
+      .hw-grid { grid-template-columns: 1fr; }
+      .nav-links .hide-mobile { display: none; }
+    }
+    @media (max-width: 480px) {
+      section { padding: 56px 16px; }
+      .arch-flow { flex-direction: column; min-width: unset; }
+      .arch-arrow { transform: rotate(90deg); }
+    }
   </style>
 </head>
 <body>
-  <div class="shell">
-    <div class="top">
-      <div>
-        <div class="id">AZ-02 AZAZEL-GADGET</div>
-        <div class="tag">Codename: TACMOD</div>
+
+<!-- Background grid -->
+<div class="grid-bg"></div>
+
+<!-- ── Nav ── -->
+<nav>
+  <div class="nav-inner">
+    <div class="nav-logo">
+      <span class="az">AZ-02</span>&nbsp;AZAZEL-GADGET
+    </div>
+    <div class="nav-links">
+      <a href="#concept" class="hide-mobile">Concept</a>
+      <a href="#modes" class="hide-mobile">Modes</a>
+      <a href="#install" class="hide-mobile">Install</a>
+      <a href="https://github.com/01rabbit/Azazel-Gadget" target="_blank" rel="noopener" class="btn gh-btn">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ── Hero ── -->
+<section class="hero">
+  <div class="hero-inner">
+    <div class="hero-copy" style="animation: fade-up .7s .1s both;">
+      <div class="hero-label">Codename: TACMOD &nbsp;|&nbsp; Personal Tactical Defense Gateway</div>
+      <h1 class="hero-title">
+        <span class="glitch" data-text="Azazel-Gadget">Azazel-Gadget</span>
+      </h1>
+      <p class="hero-sub">Portable Cyber Scapegoat Gateway for hostile networks.</p>
+      <p class="hero-tagline">
+        A hacker who learned to attack — and chose to defend.<br>
+        <strong>Move the target. Keep your endpoint invisible.</strong><br>
+        The network thinks it's talking to you. It's talking to Azazel.
+      </p>
+      <p class="hero-not">
+        <span>NOT</span> a VPN. <span>NOT</span> a travel router.
+        <span>NOT</span> a promise of complete protection.
+      </p>
+      <div class="hero-actions">
+        <a href="#install" class="btn btn-primary">Quick Install</a>
+        <a href="#modes" class="btn btn-ghost">Explore Modes</a>
+        <a href="https://github.com/01rabbit/Azazel-Gadget" target="_blank" rel="noopener" class="btn btn-ghost">GitHub</a>
       </div>
-      <a class="btn" href="https://github.com/01rabbit/Azazel-Gadget" target="_blank" rel="noopener">GitHub Repository</a>
     </div>
 
-    <section class="hero">
-      <img src="../images/Azazel-Gadget_Banner.png" alt="Azazel-Gadget banner" />
-      <div class="hero-body">
-        <h1>Personal Tactical Defense Gateway</h1>
-        <p class="sub">Portable Cyber Scapegoat Gateway for untrusted Wi-Fi and hostile local segments.</p>
-        <p class="lead"><strong>Core:</strong> Azazel-Gadget moves the first-contact surface away from the user's endpoint.</p>
-        <p class="not-this">Not a VPN. Not a general-purpose travel router. Not a promise of complete attack prevention.</p>
-        <div class="actions">
-          <a class="btn primary" href="../README.md">README (EN)</a>
-          <a class="btn" href="../README_ja.md">README (JA)</a>
-          <a class="btn" href="INDEX.md">Docs Index</a>
-          <a class="btn" href="CHANGELOG.md">Changelog</a>
+    <div class="hero-visual">
+      <div class="hero-img-wrap">
+        <img src="../images/Azazel-Gadget_Banner.png" alt="Azazel-Gadget" />
+        <div class="status-bar">
+          <div class="status-dot"></div>
+          <div class="status-text">SYSTEM ACTIVE</div>
+          <div class="status-mode">SHIELD</div>
         </div>
       </div>
-    </section>
-
-    <section class="grid">
-      <article class="card">
-        <h2>Demo & Submission</h2>
-        <p>Review flow and evidence checklist for live demonstrations and submission preparation.</p>
-        <ul>
-          <li><a href="demo/submission-demo-profile.md">Submission Demo Profile</a></li>
-          <li><a href="demo/evidence-checklist.md">Demo Evidence Checklist</a></li>
-        </ul>
-      </article>
-
-      <article class="card">
-        <h2>Concept Documents</h2>
-        <p>Product framing and system relationship documentation.</p>
-        <ul>
-          <li><a href="concepts/personal-cyber-scapegoat-gateway.md">Personal Cyber Scapegoat Gateway</a></li>
-          <li><a href="concepts/first-contact-surface-relocation.md">First-Contact Surface Relocation</a></li>
-          <li><a href="concepts/azazel-system-product-map.md">Azazel System Product Map</a></li>
-        </ul>
-      </article>
-
-      <article class="card">
-        <h2>Presentation Archive</h2>
-        <p>
-          The currently used GitHub Pages content was a presentation deck used in past talks.
-          It remains useful for grasping the overall picture quickly.
-        </p>
-        <ul>
-          <li><a href="presentation/index.html">Open Presentation Slides</a></li>
-          <li><a href="presentation/README.md">Presentation README</a></li>
-          <li><a href="presentation/ja/01.html">Start JA Slides</a> / <a href="presentation/en/01.html">Start EN Slides</a></li>
-        </ul>
-      </article>
-
-      <article class="card">
-        <h2>Operations & Release</h2>
-        <p>Repository governance, release process, and claim boundaries.</p>
-        <ul>
-          <li><a href="RELEASE_PROCESS.md">Release Process</a></li>
-          <li><a href="RELEASE_NOTES_TEMPLATE.md">Release Notes Template</a></li>
-          <li><a href="SECURITY_CLAIM_POLICY.md">Security Claim Policy</a></li>
-          <li><a href="SERIES_POSITIONING_AND_TERMS.md">Series Positioning and Terms</a></li>
-        </ul>
-      </article>
-    </section>
-
-    <footer>
-      AZ-02 Azazel-Gadget docs portal. For full project files and implementation details, use the
-      <a href="https://github.com/01rabbit/Azazel-Gadget" target="_blank" rel="noopener">GitHub repository</a>.
-    </footer>
+    </div>
   </div>
+</section>
+
+<hr class="divider" />
+
+<!-- ── Concept ── -->
+<section id="concept">
+  <div class="wrap">
+    <div class="section-label">Core Concept</div>
+    <h2 class="section-title">Why Azazel?</h2>
+    <p class="section-desc">Public Wi-Fi exposes your endpoint to the local segment the moment you connect. Azazel-Gadget puts itself between you and the threat — and becomes the target instead.</p>
+
+    <div class="concept-grid">
+      <div class="concept-item">
+        <div class="concept-num">01</div>
+        <div class="concept-icon">&#128247;</div>
+        <h3>First-Contact Relocation</h3>
+        <p>Azazel-Gadget connects to the untrusted network. <strong>Your laptop connects to Azazel</strong> over USB. Probes, scanners, and recon tools hit the gadget — not you.</p>
+      </div>
+      <div class="concept-item">
+        <div class="concept-num">02</div>
+        <div class="concept-icon">&#128737;</div>
+        <h3>Deterministic Mode Control</h3>
+        <p>No "smart" black-box AI. Three <strong>operator-selected modes</strong> with explicit, auditable behavior. You always know what Azazel is doing and why.</p>
+      </div>
+      <div class="concept-item">
+        <div class="concept-num">03</div>
+        <div class="concept-icon">&#128204;</div>
+        <h3>Cyber Scapegoat</h3>
+        <p>In <strong>scapegoat mode</strong>, isolated honeypot services (OpenCanary) draw attackers in. The decoy takes the hit. Your endpoint stays dark.</p>
+      </div>
+      <div class="concept-item">
+        <div class="concept-num">04</div>
+        <div class="concept-icon">&#128065;</div>
+        <h3>Operator Visibility</h3>
+        <p>Web UI, TUI, E-paper display, and ntfy notifications give you <strong>live situational awareness</strong> — what's happening on the wire, in real time.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- ── Modes ── -->
+<section id="modes">
+  <div class="wrap">
+    <div class="section-label">Operating Modes</div>
+    <h2 class="section-title">Choose Your Posture</h2>
+    <p class="section-desc">Every environment is different. Azazel-Gadget gives you explicit control over your exposure surface.</p>
+
+    <div class="modes-tabs">
+      <button class="mode-tab active-portal" onclick="switchMode('portal')">Portal</button>
+      <button class="mode-tab" onclick="switchMode('shield')" id="tab-shield">Shield</button>
+      <button class="mode-tab" onclick="switchMode('scapegoat')" id="tab-scapegoat">Scapegoat</button>
+    </div>
+
+    <div class="mode-panels">
+
+      <div class="mode-panel active" id="panel-portal">
+        <div class="mode-info">
+          <div class="mode-badge badge-portal"><span class="badge-dot"></span>PORTAL</div>
+          <h3>Connectivity First</h3>
+          <p>Standard NAT/gateway behavior. Your protected endpoint (usb0) reaches the internet through Azazel's upstream (wlan0). Deception services are disabled — clean throughput mode for when you need raw connectivity.</p>
+          <div class="mode-details">
+            <div class="mode-detail-row">
+              <span class="mode-detail-key">inbound:</span>
+              <span class="mode-detail-val" style="color:var(--yellow)">open (NAT)</span>
+            </div>
+            <div class="mode-detail-row">
+              <span class="mode-detail-key">deception:</span>
+              <span class="mode-detail-val" style="color:var(--dim)">disabled</span>
+            </div>
+            <div class="mode-detail-row">
+              <span class="mode-detail-key">use case:</span>
+              <span class="mode-detail-val">trusted/known networks, initial setup</span>
+            </div>
+            <div class="mode-detail-row">
+              <span class="mode-detail-key">e-paper:</span>
+              <span class="mode-detail-val">PORTAL status display</span>
+            </div>
+          </div>
+        </div>
+        <div class="mode-visual">
+          <div class="mode-img-frame">
+            <img src="../images/portal_composite.png" alt="Portal mode EPD" />
+          </div>
+        </div>
+      </div>
+
+      <div class="mode-panel" id="panel-shield">
+        <div class="mode-info">
+          <div class="mode-badge badge-shield"><span class="badge-dot"></span>SHIELD</div>
+          <h3>Default Defensive Posture</h3>
+          <p>All inbound traffic from the upstream (wlan0) is dropped at the gateway level. Your endpoint's outbound path is preserved — you can reach out, but the hostile segment cannot reach in. This is the recommended default.</p>
+          <div class="mode-details">
+            <div class="mode-detail-row">
+              <span class="mode-detail-key">inbound:</span>
+              <span class="mode-detail-val" style="color:var(--green)">blocked</span>
+            </div>
+            <div class="mode-detail-row">
+              <span class="mode-detail-key">outbound:</span>
+              <span class="mode-detail-val" style="color:var(--green)">preserved</span>
+            </div>
+            <div class="mode-detail-row">
+              <span class="mode-detail-key">deception:</span>
+              <span class="mode-detail-val" style="color:var(--dim)">disabled</span>
+            </div>
+            <div class="mode-detail-row">
+              <span class="mode-detail-key">use case:</span>
+              <span class="mode-detail-val">public Wi-Fi, hotels, conferences</span>
+            </div>
+          </div>
+        </div>
+        <div class="mode-visual">
+          <div class="mode-img-frame">
+            <img src="../images/shield_composite.png" alt="Shield mode EPD" />
+          </div>
+        </div>
+      </div>
+
+      <div class="mode-panel" id="panel-scapegoat">
+        <div class="mode-info">
+          <div class="mode-badge badge-scapegoat"><span class="badge-dot"></span>SCAPEGOAT</div>
+          <h3>Active Deception</h3>
+          <p>Allowlisted OpenCanary decoy services are exposed on isolated ports. Canary runs in a dedicated network namespace (az_canary) — completely separated from your protected client side. Attackers probe the honeypot. You watch the logs.</p>
+          <div class="mode-details">
+            <div class="mode-detail-row">
+              <span class="mode-detail-key">inbound:</span>
+              <span class="mode-detail-val" style="color:var(--orange)">canary ports only</span>
+            </div>
+            <div class="mode-detail-row">
+              <span class="mode-detail-key">deception:</span>
+              <span class="mode-detail-val" style="color:var(--orange)">OpenCanary active</span>
+            </div>
+            <div class="mode-detail-row">
+              <span class="mode-detail-key">isolation:</span>
+              <span class="mode-detail-val">az_canary netns</span>
+            </div>
+            <div class="mode-detail-row">
+              <span class="mode-detail-key">use case:</span>
+              <span class="mode-detail-val">research, red/blue ops, hostile recon</span>
+            </div>
+          </div>
+        </div>
+        <div class="mode-visual">
+          <div class="mode-img-frame">
+            <img src="../images/scapegoat_composite.png" alt="Scapegoat mode EPD" />
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- ── Features ── -->
+<section id="features">
+  <div class="wrap">
+    <div class="section-label">Capabilities</div>
+    <h2 class="section-title">What's Inside</h2>
+
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon">&#127760;</div>
+        <h3>Web UI</h3>
+        <p>Flask-based local dashboard with live state stream (SSE). Switch modes, monitor events, manage Wi-Fi — from any browser on your protected device.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#128196;</div>
+        <h3>E-Paper Display</h3>
+        <p>Waveshare e-ink panel shows current mode, status, and warning states. Persistent even when power flickers. Zero-UI visibility.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#128421;</div>
+        <h3>Unified TUI</h3>
+        <p>Terminal-native monitor and menu panel. No browser needed. Built for operators who live in the terminal.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#128680;</div>
+        <h3>ntfy Notifications</h3>
+        <p>Local ntfy server for push alerts. Suricata and OpenCanary events reach your phone over the protected link — instant threat awareness.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#128269;</div>
+        <h3>Suricata IDS</h3>
+        <p>Optional network IDS on the upstream interface. Azazel watches the wire so you don't have to manually inspect traffic.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#128203;</div>
+        <h3>Audit Trail</h3>
+        <p>Every mode change and state transition is recorded. Operator-reviewable logs for post-incident analysis or compliance evidence.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#128246;</div>
+        <h3>Captive Portal Viewer</h3>
+        <p>noVNC + Chromium stack for safely viewing captive portals in an isolated browser — without exposing your main environment.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#128274;</div>
+        <h3>HTTPS Local UI</h3>
+        <p>Caddy reverse proxy with a locally-signed CA. Your Web UI is served over HTTPS — token-authenticated, not cleartext.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- ── Architecture ── -->
+<section id="arch">
+  <div class="wrap">
+    <div class="section-label">Architecture</div>
+    <h2 class="section-title">The Boundary</h2>
+    <p class="section-desc">Azazel-Gadget sits between your endpoint and the hostile network. The threat never crosses the gateway.</p>
+
+    <div class="arch-wrap">
+      <div class="arch-flow">
+        <div class="arch-node">
+          <div class="arch-box threat">THREAT<br>SEGMENT</div>
+          <div class="arch-label">upstream wlan0</div>
+        </div>
+        <div class="arch-arrow">&#8594;</div>
+        <div class="arch-node">
+          <div class="arch-box gateway">AZAZEL-GADGET<br>GATEWAY</div>
+          <div class="arch-label">mode controller + nftables</div>
+        </div>
+        <div class="arch-arrow">&#8594;</div>
+        <div class="arch-col">
+          <div class="arch-box portal">PORTAL</div>
+          <div class="arch-box shield">SHIELD &#11835;</div>
+          <div class="arch-box scapegoat">SCAPEGOAT</div>
+        </div>
+        <div class="arch-arrow">&#8594;</div>
+        <div class="arch-node">
+          <div class="arch-box endpoint">YOUR<br>ENDPOINT</div>
+          <div class="arch-label">protected usb0</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- ── Install ── -->
+<section id="install">
+  <div class="wrap">
+    <div class="section-label">Quick Start</div>
+    <h2 class="section-title">Deploy in Minutes</h2>
+    <p class="section-desc">Flash Raspberry Pi OS, clone the repo, and run the installer. Azazel handles the rest.</p>
+
+    <div class="terminal">
+      <div class="term-bar">
+        <div class="term-dot r"></div>
+        <div class="term-dot y"></div>
+        <div class="term-dot g"></div>
+        <div class="term-title">azazel-gadget — install.sh</div>
+      </div>
+      <div class="term-body">
+        <div class="term-line"><span class="term-comment"># Clone the repository</span></div>
+        <div class="term-line"><span class="term-prompt">pi@azazel:~ $ </span><span class="term-cmd">git clone https://github.com/01rabbit/Azazel-Gadget.git && cd Azazel-Gadget</span></div>
+        <div class="term-line">&nbsp;</div>
+        <div class="term-line"><span class="term-comment"># Full install — web UI, canary, IDS, e-paper, ntfy</span></div>
+        <div class="term-line"><span class="term-prompt">pi@azazel:~/Azazel-Gadget $ </span><span class="term-cmd">sudo ./install.sh --all</span></div>
+        <div class="term-line">&nbsp;</div>
+        <div class="term-line"><span class="term-comment"># If a reboot is required at network stage:</span></div>
+        <div class="term-line"><span class="term-prompt">pi@azazel:~/Azazel-Gadget $ </span><span class="term-cmd">sudo ./install.sh --resume</span></div>
+        <div class="term-line">&nbsp;</div>
+        <div class="term-line"><span class="term-comment"># Verify services are running</span></div>
+        <div class="term-line"><span class="term-prompt">pi@azazel:~ $ </span><span class="term-cmd">sudo systemctl status azazel-mode azazel-control-daemon azazel-web --no-pager</span></div>
+        <div class="term-line">&nbsp;</div>
+        <div class="term-line"><span class="term-out">&#9679; azazel-mode.service — active (running)</span></div>
+        <div class="term-line"><span class="term-out">&#9679; azazel-control-daemon.service — active (running)</span></div>
+        <div class="term-line"><span class="term-out">&#9679; azazel-web.service — active (running)</span></div>
+        <div class="term-line">&nbsp;</div>
+        <div class="term-line"><span class="term-warn">[MODE] SHIELD — all inbound from wlan0: DROP</span></div>
+        <div class="term-line"><span class="term-prompt">pi@azazel:~ $ </span><span class="cursor"></span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- ── Hardware ── -->
+<section id="hardware">
+  <div class="wrap">
+    <div class="section-label">Hardware</div>
+    <h2 class="section-title">Two Form Factors</h2>
+    <p class="section-desc">Pocket-sized or bench-ready. Same software stack, different deployment scenarios.</p>
+
+    <div class="hw-grid">
+      <div class="hw-card">
+        <div class="hw-img">
+          <img src="../images/Azazel-Gadget_Portable.png" alt="Azazel-Gadget Shield — Raspberry Pi Zero 2 W" />
+        </div>
+        <div class="hw-info">
+          <div class="hw-tag">AZ-02 Shield</div>
+          <h3>Azazel-Gadget Shield</h3>
+          <p>Raspberry Pi Zero 2 W. Pocket-sized, bus-powered. Fits in a keychain case. The field operator's choice for covert defensive carry.</p>
+        </div>
+      </div>
+      <div class="hw-card">
+        <div class="hw-img">
+          <img src="../images/Azazel-Gadget_Shield.png" alt="Azazel-Gadget Dock — Raspberry Pi 3/4/4B" />
+        </div>
+        <div class="hw-info">
+          <div class="hw-tag">AZ-02 Dock</div>
+          <h3>Azazel-Gadget Dock</h3>
+          <p>Raspberry Pi 3 / 4 / 4B. Higher throughput and memory headroom. Preferred for research environments and full IDS integration.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- ── Links ── -->
+<section id="links">
+  <div class="wrap">
+    <div class="section-label">Resources</div>
+    <h2 class="section-title">Documentation</h2>
+
+    <div class="links-grid">
+      <a href="https://github.com/01rabbit/Azazel-Gadget" target="_blank" rel="noopener" class="link-card">
+        <div class="link-icon">&#128196;</div>
+        <div>
+          <div class="link-label">GitHub Repository</div>
+          <div class="link-desc">Source code, issues, releases</div>
+        </div>
+        <div class="link-arrow">&#8599;</div>
+      </a>
+      <a href="../README.md" class="link-card">
+        <div class="link-icon">&#128214;</div>
+        <div>
+          <div class="link-label">README (EN)</div>
+          <div class="link-desc">Full documentation in English</div>
+        </div>
+        <div class="link-arrow">&#8599;</div>
+      </a>
+      <a href="../README_ja.md" class="link-card">
+        <div class="link-icon">&#127991;</div>
+        <div>
+          <div class="link-label">README (日本語)</div>
+          <div class="link-desc">日本語ドキュメント</div>
+        </div>
+        <div class="link-arrow">&#8599;</div>
+      </a>
+      <a href="CHANGELOG.md" class="link-card">
+        <div class="link-icon">&#128203;</div>
+        <div>
+          <div class="link-label">Changelog</div>
+          <div class="link-desc">Version history and release notes</div>
+        </div>
+        <div class="link-arrow">&#8599;</div>
+      </a>
+      <a href="concepts/personal-cyber-scapegoat-gateway.md" class="link-card">
+        <div class="link-icon">&#128293;</div>
+        <div>
+          <div class="link-label">Scapegoat Concept</div>
+          <div class="link-desc">The theory behind the design</div>
+        </div>
+        <div class="link-arrow">&#8599;</div>
+      </a>
+      <a href="SECURITY_CLAIM_POLICY.md" class="link-card">
+        <div class="link-icon">&#128273;</div>
+        <div>
+          <div class="link-label">Security Claim Policy</div>
+          <div class="link-desc">What Azazel claims — and what it doesn't</div>
+        </div>
+        <div class="link-arrow">&#8599;</div>
+      </a>
+      <a href="presentation/index.html" class="link-card">
+        <div class="link-icon">&#127912;</div>
+        <div>
+          <div class="link-label">Presentation Archive</div>
+          <div class="link-desc">Conference slides and demos</div>
+        </div>
+        <div class="link-arrow">&#8599;</div>
+      </a>
+      <a href="demo/submission-demo-profile.md" class="link-card">
+        <div class="link-icon">&#127919;</div>
+        <div>
+          <div class="link-label">Demo Profile</div>
+          <div class="link-desc">Step-by-step live demo guide</div>
+        </div>
+        <div class="link-arrow">&#8599;</div>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ── Footer ── -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-logo"><span>AZ-02</span> AZAZEL-GADGET &nbsp;·&nbsp; Codename TACMOD</div>
+    <div class="footer-links">
+      <a href="https://github.com/01rabbit/Azazel-Gadget" target="_blank" rel="noopener">GitHub</a>
+      <a href="CHANGELOG.md">Changelog</a>
+      <a href="../LICENSE">MIT License</a>
+    </div>
+    <div class="footer-copy">Built by a hacker who chose to defend.</div>
+  </div>
+</footer>
+
+<script>
+  function switchMode(mode) {
+    // Deactivate all panels and tabs
+    document.querySelectorAll('.mode-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.mode-tab').forEach(t => {
+      t.classList.remove('active-portal','active-shield','active-scapegoat');
+    });
+
+    // Activate selected
+    document.getElementById('panel-' + mode).classList.add('active');
+
+    const tabs = document.querySelectorAll('.mode-tab');
+    const idx = ['portal','shield','scapegoat'].indexOf(mode);
+    if (tabs[idx]) tabs[idx].classList.add('active-' + mode);
+  }
+</script>
+
 </body>
 </html>
