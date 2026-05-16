@@ -1,4 +1,4 @@
-# AZ-02 Azazel-Gadget - Personal Tactical Defense Device
+# AZ-02 Azazel-Gadget - Personal Tactical Defense Gateway
 
 > **Codename:** `TACMOD`
 
@@ -11,134 +11,170 @@
   </a>
 </p>
 
-Azazel-Gadget is a portable defensive gateway for untrusted Wi-Fi environments on Raspberry Pi Zero 2 W / Pi 4-class devices.
-
 <p align="center">
   <img src="images/Azazel-Gadget_logo.png" alt="Azazel-Gadget logo" width="540">
 </p>
 <p align="center">
-  <img src="https://img.shields.io/badge/-Raspberry%20Pi-C51A4A.svg?logo=raspberry-pi&style=flat">
-  <img src="https://img.shields.io/badge/-Python-F9DC3E.svg?logo=python&style=flat">
-  <img src="https://img.shields.io/badge/-Flask-000000.svg?logo=flask&style=flat">
-  <img src="https://img.shields.io/badge/Javascript-276DC3.svg?logo=javascript&style=flat">
-  <img src="https://img.shields.io/badge/-HTML5-333.svg?logo=html5&style=flat">
-  <img src="https://img.shields.io/badge/-CSS3-1572B6.svg?logo=css3&style=flat">
+  <img src="https://img.shields.io/badge/-Raspberry%20Pi-C51A4A.svg?logo=raspberry-pi&style=flat" alt="Raspberry Pi">
+  <img src="https://img.shields.io/badge/-Python-F9DC3E.svg?logo=python&style=flat" alt="Python">
+  <img src="https://img.shields.io/badge/-Flask-000000.svg?logo=flask&style=flat" alt="Flask">
+  <img src="https://img.shields.io/badge/Javascript-276DC3.svg?logo=javascript&style=flat" alt="JavaScript">
+  <img src="https://img.shields.io/badge/-HTML5-333.svg?logo=html5&style=flat" alt="HTML5">
+  <img src="https://img.shields.io/badge/-CSS3-1572B6.svg?logo=css3&style=flat" alt="CSS3">
 </p>
 
-## Concept
+Azazel-Gadget is the AZ-02 portable member of the Azazel system, a personal tactical defense gateway and Cyber Scapegoat Gateway for untrusted Wi-Fi, hostile local segments, and field use. It stands between the user's endpoint and the surrounding network, observes early network behavior, controls exposure through deterministic modes (`portal`, `shield`, `scapegoat`), and provides operator-visible state through Web UI, TUI, e-paper, and optional local notifications.
 
-Azazel-Gadget is a "sacrificial shield" you can carry at all times.
-It is a personal tactical device designed for low-trust networks such as public Wi-Fi, built to stand in front of your endpoint and take the first hit directly.
+Azazel-Gadget is not a VPN, not a general-purpose travel router, and not a promise of complete attack prevention.
 
-This is not a generic security product that merely blocks traffic. It is structured around attacker behavior: minimizing the exposed defense surface, blocking lateral movement, and controlling exposure when needed. The default posture is full defense (`Shield`), but it can switch to an observational defense posture (`Scapegoat`) when the situation demands it.
+**Who this is for:** security researchers, field defenders, travelers, incident responders, red-team/blue-team operators, and users who need a portable defensive gateway for low-trust networks.
 
-Do not defend blindly; defend with awareness of the attack.
-Azazel-Gadget is a dedicated defensive appliance that still requires tactical judgment. It stays quiet in normal conditions, shifts posture on anomalies, and when necessary accepts attacks, observes them, and buys time.
+## Requirements
 
-It is a front-line device designed for daily carry.
-Not invisible security, but a shield you consciously raise.
-
-## Hardware Variants
-
-| Azazel-Gadget Portable | Azazel-Gadget Dock |
+| Requirement | Detail |
 |---|---|
-| Raspberry Pi Zero 2 W implementation<br>![Azazel-Gadget Portable on Raspberry Pi Zero W](images/Azazel-Gadget_Portable.png) | Raspberry Pi 3/4/4B implementation<br>![Azazel-Gadget Shield on Raspberry Pi 4](images/Azazel-Gadget_Shield.png) |
+| Hardware | Raspberry Pi Zero 2 W / Raspberry Pi 4-class devices |
+| OS | Raspberry Pi OS / Linux |
+| Runtime | Python 3.x, Flask-based local Web UI |
+| Network | Protected client side on `usb0`, upstream side on `wlan0` |
+| Optional | E-paper display, OpenCanary, Suricata, ntfy, portal viewer |
 
-## Interface Preview
+## Quick Start
 
-| Web UI | Unified TUI |
-|---|---|
-| [![Azazel-Gadget Web UI screenshot](images/WebUI.png)](images/WebUI.png) | [![Azazel-Gadget unified TUI screenshot](images/TUI.png)](images/TUI.png) |
+```bash
+sudo ./install.sh --all
+# if prompted for reboot:
+sudo ./install.sh --resume
+```
 
-Azazel-Gadget combines active network defense, operator-facing interfaces, and optional deception services into a compact gateway workflow.
+Minimal verification:
 
-## Features
+```bash
+sudo systemctl status azazel-mode azazel-first-minute azazel-control-daemon azazel-web --no-pager
+```
 
-### 1) First-minute control plane
-- Main controller tracks upstream health, captive portal status, and risk transitions (`NORMAL`/`DEGRADED`/`CONTAIN`).
-- Writes UI snapshot JSON consumed by Web UI and TUI.
-- Exposes local Status API (`:8082`) with action endpoints (`/action/*`) and details endpoint (`/details`).
-- Includes tactics decision logging (`decision_explanations.jsonl`) and ntfy notifier hooks.
-- In `DECEPTION`, applies `tc` delay only to Suricata-confirmed OpenCanary attack flows (targeted Delay-to-Win).
+## Architecture Overview
 
-### 2) Action/control daemon (Unix socket)
-- Dedicated daemon at `/run/azazel/control.sock`.
-- Executes action scripts, Wi-Fi scan/connect handlers, and portal-viewer startup workflow.
-- Proxies deterministic mode switching (`mode_set`, `mode_status`) to `azctl`.
-- Supports control-plane snapshot streaming (`watch_snapshot`) for clients.
-- Includes path-schema actions (`path_schema_status`, `migrate_path_schema`).
+```mermaid
+flowchart LR
+    U[Protected Endpoint] --> G[Azazel-Gadget Gateway]
+    G --> M[Mode Controller]
+    M --> P[Portal]
+    M --> S[Shield]
+    M --> D[Scapegoat]
+    G --> O[Operator Interfaces]
+    O --> W[Web UI]
+    O --> T[TUI]
+    O --> E[E-paper]
+    D --> C[OpenCanary / Deception]
+    G --> A[Audit and State Files]
+```
 
-### 3) Web UI backend (Flask)
-- Dashboard + state API + SSE state stream.
-- Action API (new and legacy format), Wi-Fi scan/connect API, portal-viewer APIs.
-- ntfy event bridge SSE endpoint.
-- CA certificate metadata/download endpoints for local HTTPS onboarding.
-- Token auth via header or query (if token file exists).
+## What Azazel-Gadget does
 
-### 4) Portal viewer (noVNC)
-- Browser-assisted captive-portal workflow (Chromium + Xvfb + x11vnc + noVNC).
-- Web UI can start and open it on demand (`/api/portal-viewer/open`).
-- Runtime start URL override is supported.
+- Runs as a portable defensive gateway.
+- Provides deterministic operating modes (`portal`, `shield`, `scapegoat`).
+- Keeps protected `usb0` clients separated from upstream inbound traffic.
+- Supports Web UI, TUI, and e-paper visibility.
+- Optionally exposes isolated deception services through OpenCanary.
+- Optionally reflects Suricata/OpenCanary/ntfy state where implemented.
+- Records state and mode changes for operator review.
 
-### 5) E-paper integration
-- Boot/shutdown splash service.
-- Periodic captive-portal detection display updates.
-- Suricata-linked e-paper alert updates.
-- Mode/state refresh from `/run/azazel/epd_state.json` (event-driven + periodic timer).
+## Security Boundary Summary
 
-### 6) Optional local monitoring/deception
-- OpenCanary systemd unit and startup wrapper.
-- Suricata integration and monitoring-state reflection in UI.
-- Lightweight canary rules detect scans/access attempts to `22/80` from same-LAN peers on `wlan0` as well as non-local sources.
-- Optional local ntfy server (`--with-ntfy`) and `/api/events/stream` bridge.
+Azazel-Gadget claims:
 
-## Architecture at a Glance
+- local-first defensive gateway behavior
+- explicit operator-selectable modes
+- no inbound path from upstream `wlan0` to protected `usb0` clients
+- deterministic mode switching with audit-visible state
+- optional deception exposure isolated from the protected client side
 
-0. `azazel-mode.service` + `azctl`
-- Applies boot/default mode as `shield` (ignores persisted mode at boot).
-- Single applicator for firewall/sysctl/OpenCanary orchestration.
-- Writes audit log and EPD state.
+Azazel-Gadget does not claim:
 
-1. `azazel-first-minute.service`
-- Produces state snapshot and Status API (`:8082`).
-2. `azazel-control-daemon.service`
-- Bridges action requests over `/run/azazel/control.sock`.
-3. `azazel-web.service`
-- Flask backend (`127.0.0.1:8084` by default), reads snapshot and calls control daemon/Status API.
-4. Optional `caddy.service` (installer `--with-webui`)
-- TLS reverse proxy (`https://<MGMT_IP>:443`) to Flask backend.
-5. Optional `azazel-portal-viewer.service`
-- noVNC endpoint (default `10.55.0.10:6080`), started on demand by API.
+- complete protection against all hostile Wi-Fi attacks
+- replacement for endpoint security, VPN, or enterprise NAC
+- autonomous offensive response
+- invisible or zero-interaction security
+- safe use without understanding the active mode
 
-## Modes
+## Operating Modes
 
 | Mode | Behavior | EPD Sample |
 |---|---|---|
-| `portal` | Internet gateway behavior for `usb0` clients (NAT via `wlan0`). Decoy exposure is OFF on `wlan0`. | ![Portal mode EPD sample](images/portal_composite.png) |
-| `shield` (default) | Drops inbound from `wlan0` while keeping `usb0` client outbound path. Decoy exposure is OFF. | ![Shield mode EPD sample](images/shield_composite.png) |
-| `scapegoat` | Exposes only OpenCanary allowlisted ports on `wlan0`. OpenCanary runs in isolated namespace (`az_canary`) and never gets a path to `usb0`. | ![Scapegoat mode EPD sample](images/scapegoat_composite.png) |
+| `portal` | NAT/gateway behavior for protected `usb0` clients via upstream network. Deception exposure is off. | ![Portal mode EPD sample](images/portal_composite.png) |
+| `shield` (default) | Default defensive posture. Inbound traffic from `wlan0` is dropped while protected client outbound path is preserved. | ![Shield mode EPD sample](images/shield_composite.png) |
+| `scapegoat` | Only allowlisted OpenCanary ports are exposed. Canary runs in isolated namespace (`az_canary`) and is separated from protected client side. | ![Scapegoat mode EPD sample](images/scapegoat_composite.png) |
 
 Warning display (not a mode):
 
 | Display | Trigger | EPD Sample |
 |---|---|---|
-| `WARNING` | Alert conditions detected by the monitoring pipeline. | ![Warning EPD sample](images/warning_composite.png) |
+| `WARNING` | Alert conditions detected by monitoring pipeline. | ![Warning EPD sample](images/warning_composite.png) |
 
-Single source of truth:
-- `/etc/azazel/mode.json` (compatibly linked to `/etc/azazel-gadget/mode.json`)
-- Volatile runtime EPD/status state: `/run/azazel/epd_state.json`
-- Audit log: `/var/log/azazel/mode_changes.jsonl`
+## Hardware Variants
 
-CLI:
+| Azazel-Gadget Portable | Azazel-Gadget Dock |
+|---|---|
+| Raspberry Pi Zero 2 W implementation<br>![Azazel-Gadget Portable](images/Azazel-Gadget_Portable.png) | Raspberry Pi 3/4/4B implementation<br>![Azazel-Gadget Shield](images/Azazel-Gadget_Shield.png) |
 
-```bash
-sudo azctl mode status
-sudo azctl mode set shield
-sudo azctl mode set portal
-sudo azctl mode set scapegoat
-```
+## Interfaces
 
-## Included Services (systemd)
+| Web UI | Unified TUI |
+|---|---|
+| [![Azazel-Gadget Web UI screenshot](images/WebUI.png)](images/WebUI.png) | [![Azazel-Gadget unified TUI screenshot](images/TUI.png)](images/TUI.png) |
+
+Operator interfaces in the repository:
+
+- Web UI backend and dashboard: `azazel_web/`
+- Unified TUI monitor/menu: `py/azazel_gadget/cli_unified.py`
+- Menu compatibility launcher: `py/azazel_menu.py`
+- Terminal status panel: `py/azazel_status.py`
+- E-paper renderer/controller: `py/azazel_epd.py`, `py/boot_splash_epd.py`
+
+## Installation Options
+
+Main entrypoint: `install.sh`
+
+| Option | Effect |
+|---|---|
+| `--with-canary` | Installs/enables OpenCanary |
+| `--with-epd` | Enables Waveshare E-Paper dependencies (default enabled) |
+| `--with-webui` | Installs Flask venv + Caddy HTTPS reverse proxy |
+| `--with-ntfy` | Installs local ntfy server and notification integration |
+| `--with-portal-viewer` | Installs noVNC/Chromium captive-portal viewer stack |
+| `--all` | Enables all optional features above |
+| `--resume` | Resumes after reboot-required network stage |
+
+## Web API
+
+| Endpoint | Notes |
+|---|---|
+| `GET /` | Dashboard HTML |
+| `GET /api/state` | Current state snapshot |
+| `GET /api/state/stream` | SSE state stream |
+| `GET /api/mode` | Current mode metadata |
+| `POST /api/mode` | Switch mode (`portal`/`shield`/`scapegoat`) |
+| `GET /api/portal-viewer` | noVNC status/URL |
+| `POST /api/portal-viewer/open` | Start/open portal viewer |
+| `GET /api/events/stream` | SSE bridge for ntfy topic events |
+| `POST /api/action` | Action endpoint (v1 format) |
+| `POST /api/action/<action>` | Action endpoint (legacy format) |
+| `GET /api/wifi/scan` | Wi-Fi scan |
+| `POST /api/wifi/connect` | Wi-Fi connect |
+| `GET /api/certs/azazel-webui-local-ca/meta` | Local CA metadata |
+| `GET /api/certs/azazel-webui-local-ca.crt` | Local CA download |
+| `GET /health` | Backend health |
+
+Allowed actions:
+`refresh`, `reprobe`, `contain`, `release`, `details`, `stage_open`, `disconnect`, `wifi_scan`, `wifi_connect`, `portal_viewer_open`, `mode_set`, `mode_status`, `mode_get`, `mode_portal`, `mode_shield`, `mode_scapegoat`, `shutdown`, `reboot`
+
+Token auth:
+
+- Header: `X-AZAZEL-TOKEN` or `X-Auth-Token`
+- Query: `?token=...`
+
+## Services (systemd)
 
 | Unit | Purpose |
 |---|---|
@@ -148,121 +184,38 @@ sudo azctl mode set scapegoat
 | `azazel-web.service` | Flask backend API/UI |
 | `azazel-portal-viewer.service` | Captive-portal viewer (noVNC) |
 | `usb0-static.service` | Forces static IPv4 on `usb0` |
-| `azazel-nat.service` | iptables-based forwarding/NAT helper |
+| `azazel-nat.service` | NAT and forwarding helper |
 | `azazel-epd.service` | E-paper startup status |
-| `azazel-epd-refresh.service` + `.timer` | Mode/state EPD refresh pipeline |
-| `azazel-epd-shutdown.service` | E-paper shutdown clear/splash |
-| `azazel-epd-portal.service` + `.timer` | E-paper captive-portal checks |
-| `suri-epaper.service` | Suricata-driven E-paper updates |
-| `opencanary.service` | Optional deception service |
-| `opencanary@.service` | OpenCanary in a dedicated network namespace |
+| `azazel-epd-refresh.service` + `azazel-epd-refresh.timer` | E-paper periodic mode/state refresh |
+| `azazel-epd-shutdown.service` | E-paper shutdown flow |
+| `azazel-epd-portal.service` + `azazel-epd-portal.timer` | Captive-portal periodic checks |
+| `suri-epaper.service` | Suricata-driven e-paper updates |
+| `opencanary.service` | OpenCanary service |
+| `opencanary@.service` | OpenCanary in dedicated network namespace |
 
-## Installation Options
+## Documentation Map
 
-Main entrypoint: `install.sh`
+Primary entry points:
 
-| Option | Effect |
-|---|---|
-| `--with-webui` | Installs Flask venv + Caddy HTTPS reverse proxy |
-| `--with-canary` | Installs/enables OpenCanary |
-| `--with-ntfy` | Installs local ntfy server (`:8081`) |
-| `--with-portal-viewer` | Installs noVNC/Chromium stack |
-| `--with-epd` | Enables Waveshare E-Paper dependencies (default ON) |
-| `--all` | Enables all optional features above |
-| `--resume` | Resume after reboot-required network stage |
+- [Installer Guide](installer/README.md)
+- [Presentation Assets](docs/presentation/README.md)
+- [Docs Site Entry](docs/index.html)
+- [Regression Test Notes](scripts/tests/regression/README.md)
 
-Typical:
+## Repository Layout
 
-```bash
-sudo ./install.sh --all
-# if prompted for reboot:
-sudo ./install.sh --resume
-```
-
-## Web API
-
-| Endpoint | Notes |
-|---|---|
-| `GET /` | Dashboard HTML |
-| `GET /api/state` | Snapshot + monitoring + portal-viewer state |
-| `GET /api/mode` | Current mode metadata |
-| `POST /api/mode` | Switch mode (`portal`/`shield`/`scapegoat`) |
-| `GET /api/state/stream` | SSE state stream |
-| `GET /api/events/stream` | SSE ntfy bridge events |
-| `GET /api/portal-viewer` | noVNC state/URL |
-| `POST /api/portal-viewer/open` | Start/open portal viewer |
-| `POST /api/action` | New action format |
-| `POST /api/action/<action>` | Legacy action format |
-| `GET /api/wifi/scan` | Wi-Fi scan (no token required by default) |
-| `POST /api/wifi/connect` | Wi-Fi connect |
-| `GET /api/certs/azazel-webui-local-ca/meta` | Local CA metadata |
-| `GET /api/certs/azazel-webui-local-ca.crt` | Local CA download |
-| `GET /health` | Web backend health |
-
-Allowed actions (API): `refresh`, `reprobe`, `contain`, `release`, `details`, `stage_open`, `disconnect`, `wifi_scan`, `wifi_connect`, `portal_viewer_open`, `mode_set`, `mode_status`, `mode_get`, `mode_portal`, `mode_shield`, `mode_scapegoat`, `shutdown`, `reboot`
-
-Token auth:
-- Header: `X-AZAZEL-TOKEN` or `X-Auth-Token`
-- Query: `?token=...`
-
-## Interfaces
-
-- Web UI: `azazel_web/`
-- Unified TUI monitor/menu: `py/azazel_gadget/cli_unified.py`
-- Menu compatibility launcher: `py/azazel_menu.py`
-- Terminal status panel: `py/azazel_status.py`
-- E-paper renderer/controller: `py/azazel_epd.py`, `py/boot_splash_epd.py`
-
-## EPD Indicators
-
-- Transition:
-  - During mode apply: `mode=switching`, target mode shown.
-  - On failure: temporary `FAILED` state then restored steady mode.
-- Steady:
-  - `PORTAL` / `SHIELD` / `SCAPEGOAT` mode reflected from `/run/azazel/epd_state.json`.
-  - Includes internet/DHCP/DNS/OpenCanary fields and exposed decoy ports for scapegoat.
-
-## Security Guarantees
-
-- No new inbound path from `wlan0` to `usb0` in any mode.
-- `shield`: inbound `wlan0` traffic dropped by dedicated mode firewall table.
-- `portal`: NAT for `usb0` clients without decoy exposure.
-- `scapegoat`: only OpenCanary allowlisted ports exposed; canary stack isolated in `az_canary`.
-
-## Known Limits
-
-- Scapegoat netns exposure uses host-level DNAT/forwarding; ensure upstream `wlan0` remains stable.
-- Mode post-check internet test is host-side (`ping/getent`) and not a full usb0 client synthetic transaction.
-- If EPD hardware/driver is unavailable, mode switch still succeeds and only journals EPD refresh errors.
-
-## Testing
-
-- Unit tests: `tests/`
-- Regression scripts: `scripts/tests/regression/`
-- UI stack smoke test: `scripts/tests/e2e/run_ui_stack_smoke.sh`
-
-## Path Compatibility
-
-Both naming schemas are supported:
-- Current: `azazel-gadget` (`/etc/azazel-gadget`, `/run/azazel-gadget`, `~/.azazel-gadget`)
-- Legacy: `azazel-zero` (`/etc/azazel-zero`, `/run/azazel-zero`, `~/.azazel-zero`)
-
-Schema helpers and migration are implemented in `py/azazel_gadget/path_schema.py`.
-Legacy path compatibility is planned through `2026-12-31`.
-
-## Repository structure (main)
-
-| Path | Meaning |
+| Path | Role |
 |---|---|
 | `py/azazel_gadget/` | Controller, sensors, tactics engine, path schema |
-| `py/azazel_control/` | Control daemon + Wi-Fi handlers + action scripts |
-| `azazel_web/` | Flask backend + static dashboard |
+| `py/azazel_control/` | Control daemon, Wi-Fi handlers, action scripts |
+| `azazel_web/` | Flask backend and dashboard assets |
 | `systemd/` | Service and timer units |
-| `installer/` | Staged installer |
-| `configs/` | Default runtime configs |
-| `scripts/` | Runtime helpers + tests |
-| `docs/` | Development/archive notes + presentation assets (`docs/presentation/`) |
+| `installer/` | Staged installer framework |
+| `configs/` | Default runtime configuration |
+| `scripts/` | Runtime helpers and test scripts |
+| `docs/` | Project documentation and presentation assets |
+| `images/` | README and presentation image assets |
 
 ## License
 
-See `LICENSE` if present in this repository.
+No top-level `LICENSE` file is currently present in this repository.
