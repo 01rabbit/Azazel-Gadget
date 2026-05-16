@@ -123,7 +123,19 @@ Warning display (not a mode):
 5. In `scapegoat`, only allowlisted decoy services are exposed.
 6. Operator-visible state appears through Web UI, TUI, e-paper, and optional notification paths.
 
-Detailed profile: [Black Hat USA Arsenal Profile](docs/demo/blackhat-usa-arsenal-profile.md)
+Detailed profile: [Submission Demo Profile](docs/demo/submission-demo-profile.md)
+
+## Hardware Variants
+
+Project name and implementation names are intentionally separated:
+
+- Project: **Azazel-Gadget**
+- Raspberry Pi Zero 2 W implementation: **Azazel-Gadget Shield**
+- Raspberry Pi 3/4/4B implementation: **Azazel-Gadget Dock**
+
+| Azazel-Gadget Shield | Azazel-Gadget Dock |
+|---|---|
+| Raspberry Pi Zero 2 W implementation<br>![Azazel-Gadget Shield](images/Azazel-Gadget_Portable.png) | Raspberry Pi 3/4/4B implementation<br>![Azazel-Gadget Dock](images/Azazel-Gadget_Shield.png) |
 
 ## Interfaces
 
@@ -187,7 +199,7 @@ Primary entry points:
 - [Personal Cyber Scapegoat Gateway](docs/concepts/personal-cyber-scapegoat-gateway.md)
 - [First-Contact Surface Relocation](docs/concepts/first-contact-surface-relocation.md)
 - [Azazel System Product Map](docs/concepts/azazel-system-product-map.md)
-- [Black Hat USA Arsenal Profile](docs/demo/blackhat-usa-arsenal-profile.md)
+- [Submission Demo Profile](docs/demo/submission-demo-profile.md)
 - [Demo Evidence Checklist](docs/demo/evidence-checklist.md)
 - [Series Positioning and Terms](docs/SERIES_POSITIONING_AND_TERMS.md)
 - [Security Claim Policy](docs/SECURITY_CLAIM_POLICY.md)

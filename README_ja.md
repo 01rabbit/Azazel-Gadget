@@ -123,13 +123,19 @@ Azazel-Gadget が主張しないこと:
 5. `scapegoat` では allowlist されたデコイサービスのみ公開されることを示す。
 6. Web UI・TUI・E-paper・（任意）通知経路で運用状態が可視化されることを示す。
 
-詳細: [Black Hat USA Arsenal Profile](docs/demo/blackhat-usa-arsenal-profile.md)
+詳細: [Submission Demo Profile](docs/demo/submission-demo-profile.md)
 
 ## ハードウェアバリエーション
 
-| Azazel-Gadget Portable | Azazel-Gadget Dock |
+プロジェクト名と実装名は分離して扱います。
+
+- プロジェクト: **Azazel-Gadget**
+- Raspberry Pi Zero 2 W 実装: **Azazel-Gadget Shield**
+- Raspberry Pi 3/4/4B 実装: **Azazel-Gadget Dock**
+
+| Azazel-Gadget Shield | Azazel-Gadget Dock |
 |---|---|
-| Raspberry Pi Zero 2 W 実装<br>![Azazel-Gadget Portable](images/Azazel-Gadget_Portable.png) | Raspberry Pi 3/4/4B 実装<br>![Azazel-Gadget Shield](images/Azazel-Gadget_Shield.png) |
+| Raspberry Pi Zero 2 W 実装<br>![Azazel-Gadget Shield](images/Azazel-Gadget_Portable.png) | Raspberry Pi 3/4/4B 実装<br>![Azazel-Gadget Dock](images/Azazel-Gadget_Shield.png) |
 
 ## インターフェース
 
@@ -193,7 +199,7 @@ Azazel-Gadget が主張しないこと:
 - [Personal Cyber Scapegoat Gateway](docs/concepts/personal-cyber-scapegoat-gateway.md)
 - [First-Contact Surface Relocation](docs/concepts/first-contact-surface-relocation.md)
 - [Azazel System Product Map](docs/concepts/azazel-system-product-map.md)
-- [Black Hat USA Arsenal Profile](docs/demo/blackhat-usa-arsenal-profile.md)
+- [Submission Demo Profile](docs/demo/submission-demo-profile.md)
 - [Demo Evidence Checklist](docs/demo/evidence-checklist.md)
 - [Series Positioning and Terms](docs/SERIES_POSITIONING_AND_TERMS.md)
 - [Security Claim Policy](docs/SECURITY_CLAIM_POLICY.md)

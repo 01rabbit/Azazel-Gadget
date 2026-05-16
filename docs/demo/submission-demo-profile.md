@@ -1,4 +1,8 @@
-# Black Hat USA Arsenal Demo Profile (Azazel-Gadget)
+# Submission Demo Profile (Azazel-Gadget)
+
+## Status
+
+This document is a submission-preparation demo profile. Azazel-Gadget has not been accepted to Black Hat USA Arsenal.
 
 ## Demo objective
 
