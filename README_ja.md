@@ -2,7 +2,7 @@
 
 > **コードネーム:** `TACMOD`
 
-![Azazel-Gadget Logo](images/Azazel-Gadget_logo.png)
+![Azazel-Gadget Banner](images/Azazel-Gadget_Banner.png)
 [![CI](https://github.com/01rabbit/Azazel-Gadget/actions/workflows/ci-tests.yml/badge.svg)](https://github.com/01rabbit/Azazel-Gadget/actions/workflows/ci-tests.yml)
 [![Release](https://img.shields.io/github/v/release/01rabbit/Azazel-Gadget)](https://github.com/01rabbit/Azazel-Gadget/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
