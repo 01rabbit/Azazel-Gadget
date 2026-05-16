@@ -4,6 +4,16 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Series-level documentation baseline:
+  - `docs/INDEX.md` (cross-series entry map)
+  - `docs/SERIES_POSITIONING_AND_TERMS.md` (AZ-01/AZ-02 terminology and boundaries)
+  - `docs/SECURITY_CLAIM_POLICY.md` (documentation claim policy)
+  - `docs/RELEASE_NOTES_TEMPLATE.md` (Azazel-Edge style release note template)
+
+### Changed
+- `README.md` and `README_ja.md` documentation maps now include series/index/policy/release-template entry points.
+
 ## [0.1.0] - 2026-05-16
 
 ### Added
