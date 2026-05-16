@@ -38,3 +38,53 @@ jobs:
 
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
+
+  readme-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate README links and fenced blocks
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          import sys
+
+          targets = [Path("README.md"), Path("README_ja.md")]
+          errors = []
+
+          for md in targets:
+              if not md.exists():
+                  errors.append(f"{md}: file not found")
+                  continue
+              text = md.read_text(encoding="utf-8")
+
+              # Fence balance check
+              fence_count = text.count("```")
+              if fence_count % 2 != 0:
+                  errors.append(f"{md}: unbalanced fenced code blocks (count={fence_count})")
+
+              # Relative markdown/image links check
+              links = re.findall(r'\]\(([^)]+)\)', text)
+              for link in links:
+                  if "://" in link or link.startswith("#") or link.startswith("mailto:"):
+                      continue
+                  rel = link.split("#", 1)[0].strip()
+                  if not rel:
+                      continue
+                  p = Path(rel)
+                  if not p.exists():
+                      errors.append(f"{md}: missing relative path -> {link}")
+
+          if errors:
+              print("README guard failed:")
+              for e in errors:
+                  print(f"- {e}")
+              sys.exit(1)
+
+          print("README guard passed.")
+          PY

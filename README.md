@@ -3,6 +3,18 @@
 > **Codename:** `TACMOD`
 
 <p align="center">
+  <a href="https://github.com/01rabbit/Azazel-Gadget/releases">
+    <img alt="Release" src="https://img.shields.io/github/v/release/01rabbit/Azazel-Gadget">
+  </a>
+  <a href="https://github.com/01rabbit/Azazel-Gadget/actions/workflows/ci-tests.yml">
+    <img alt="CI Tests" src="https://github.com/01rabbit/Azazel-Gadget/actions/workflows/ci-tests.yml/badge.svg">
+  </a>
+  <a href="https://github.com/01rabbit/Azazel-Gadget/actions/workflows/pages.yml">
+    <img alt="Pages" src="https://github.com/01rabbit/Azazel-Gadget/actions/workflows/pages.yml/badge.svg">
+  </a>
+</p>
+
+<p align="center">
   <a href="./README_ja.md">
     <img alt="日本語" src="https://img.shields.io/badge/Language-日本語-2ea44f?style=for-the-badge">
   </a>
@@ -198,6 +210,8 @@ Token auth:
 Primary entry points:
 
 - [Installer Guide](installer/README.md)
+- [Release Process](docs/RELEASE_PROCESS.md)
+- [Changelog](docs/CHANGELOG.md)
 - [Presentation Assets](docs/presentation/README.md)
 - [Docs Site Entry](docs/index.html)
 - [Regression Test Notes](scripts/tests/regression/README.md)
