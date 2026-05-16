@@ -20,6 +20,11 @@ This index provides series-level entry points and repository-local documentation
 | [RELEASE_NOTES_TEMPLATE.md](RELEASE_NOTES_TEMPLATE.md) | Maintainer | Standard release note template (Azazel-Edge style) |
 | [SERIES_POSITIONING_AND_TERMS.md](SERIES_POSITIONING_AND_TERMS.md) | Reviewer / Developer | Series vocabulary and AZ-01/AZ-02 boundary definitions |
 | [SECURITY_CLAIM_POLICY.md](SECURITY_CLAIM_POLICY.md) | Reviewer / Developer | Allowed claim boundaries and evidence requirements |
+| [concepts/personal-cyber-scapegoat-gateway.md](concepts/personal-cyber-scapegoat-gateway.md) | Reviewer / Operator | AZ-02 core concept definition |
+| [concepts/first-contact-surface-relocation.md](concepts/first-contact-surface-relocation.md) | Reviewer / Operator | Why first-contact relocation matters |
+| [concepts/azazel-system-product-map.md](concepts/azazel-system-product-map.md) | Reviewer / Operator | AZ-01 / AZ-02 product relationship |
+| [demo/blackhat-usa-arsenal-profile.md](demo/blackhat-usa-arsenal-profile.md) | Reviewer / Presenter | 3/7/15 minute Arsenal demo flow |
+| [demo/evidence-checklist.md](demo/evidence-checklist.md) | Reviewer / Operator | Demo verification checklist and commands |
 | [presentation/README.md](presentation/README.md) | Presenter | Presentation assets map |
 
 ## Operational Notes

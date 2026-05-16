@@ -17,9 +17,19 @@
 
 Azazel-Gadget is the AZ-02 portable member of the Azazel system, a personal tactical defense gateway and Cyber Scapegoat Gateway for untrusted Wi-Fi, hostile local segments, and field use. It stands between the user's endpoint and the surrounding network, observes early network behavior, controls exposure through deterministic modes (`portal`, `shield`, `scapegoat`), and provides operator-visible state through Web UI, TUI, e-paper, and optional local notifications.
 
+Azazel-Gadget moves the first-contact surface away from the user's endpoint.
+
 Azazel-Gadget is not a VPN, not a general-purpose travel router, and not a promise of complete attack prevention.
 
 **Who this is for:** security researchers, field defenders, travelers, incident responders, red-team/blue-team operators, and users who need a portable defensive gateway for low-trust networks.
+
+## Why this exists
+
+- Public Wi-Fi and hostile local segments expose endpoints to local discovery, probing, and opportunistic attack attempts.
+- VPNs can protect traffic paths but do not remove the endpoint's local first-contact surface.
+- Endpoint firewalls run on the endpoint itself.
+- Travel routers provide connectivity but are not designed as observable tactical deception gateways.
+- Azazel-Gadget places a controlled gateway and optional scapegoat surface in front of the endpoint.
 
 ## Requirements
 
@@ -28,7 +38,7 @@ Azazel-Gadget is not a VPN, not a general-purpose travel router, and not a promi
 | Hardware | Raspberry Pi Zero 2 W / Raspberry Pi 4-class devices |
 | OS | Raspberry Pi OS / Linux |
 | Runtime | Python 3.x, Flask-based local Web UI |
-| Network | Protected client side on `usb0`, upstream side on `wlan0` |
+| Network | `usb0` protected client side and `wlan0` upstream side |
 | Optional | E-paper display, OpenCanary, Suricata, ntfy, portal viewer |
 
 ## Quick Start
@@ -65,7 +75,7 @@ flowchart LR
 ## What Azazel-Gadget does
 
 - Runs as a portable defensive gateway.
-- Provides deterministic operating modes (`portal`, `shield`, `scapegoat`).
+- Provides deterministic operating modes.
 - Keeps protected `usb0` clients separated from upstream inbound traffic.
 - Supports Web UI, TUI, and e-paper visibility.
 - Optionally exposes isolated deception services through OpenCanary.
@@ -104,19 +114,22 @@ Warning display (not a mode):
 |---|---|---|
 | `WARNING` | Alert conditions detected by monitoring pipeline. | ![Warning EPD sample](images/warning_composite.png) |
 
-## Hardware Variants
+## Demo Profile
 
-| Azazel-Gadget Portable | Azazel-Gadget Dock |
-|---|---|
-| Raspberry Pi Zero 2 W implementation<br>![Azazel-Gadget Portable](images/Azazel-Gadget_Portable.png) | Raspberry Pi 3/4/4B implementation<br>![Azazel-Gadget Shield](images/Azazel-Gadget_Shield.png) |
+1. A protected endpoint connects through Azazel-Gadget.
+2. Azazel-Gadget joins an untrusted Wi-Fi or hostile local segment.
+3. A peer performs discovery or service probing.
+4. In `shield`, upstream inbound exposure is blocked.
+5. In `scapegoat`, only allowlisted decoy services are exposed.
+6. Operator-visible state appears through Web UI, TUI, e-paper, and optional notification paths.
+
+Detailed profile: [Black Hat USA Arsenal Profile](docs/demo/blackhat-usa-arsenal-profile.md)
 
 ## Interfaces
 
 | Web UI | Unified TUI |
 |---|---|
 | [![Azazel-Gadget Web UI screenshot](images/WebUI.png)](images/WebUI.png) | [![Azazel-Gadget unified TUI screenshot](images/TUI.png)](images/TUI.png) |
-
-Operator interfaces in the repository:
 
 - Web UI backend and dashboard: `azazel_web/`
 - Unified TUI monitor/menu: `py/azazel_gadget/cli_unified.py`
@@ -166,39 +179,22 @@ Token auth:
 - Header: `X-AZAZEL-TOKEN` or `X-Auth-Token`
 - Query: `?token=...`
 
-## Services (systemd)
-
-| Unit | Purpose |
-|---|---|
-| `azazel-mode.service` | Boot mode applicator (`azctl mode apply-default`) |
-| `azazel-first-minute.service` | Main control-plane process |
-| `azazel-control-daemon.service` | Unix socket action daemon |
-| `azazel-web.service` | Flask backend API/UI |
-| `azazel-portal-viewer.service` | Captive-portal viewer (noVNC) |
-| `usb0-static.service` | Forces static IPv4 on `usb0` |
-| `azazel-nat.service` | NAT and forwarding helper |
-| `azazel-epd.service` | E-paper startup status |
-| `azazel-epd-refresh.service` + `azazel-epd-refresh.timer` | E-paper periodic mode/state refresh |
-| `azazel-epd-shutdown.service` | E-paper shutdown flow |
-| `azazel-epd-portal.service` + `azazel-epd-portal.timer` | Captive-portal periodic checks |
-| `suri-epaper.service` | Suricata-driven e-paper updates |
-| `opencanary.service` | OpenCanary service |
-| `opencanary@.service` | OpenCanary in dedicated network namespace |
-
 ## Documentation Map
 
 Primary entry points:
 
 - [Documentation Index](docs/INDEX.md)
+- [Personal Cyber Scapegoat Gateway](docs/concepts/personal-cyber-scapegoat-gateway.md)
+- [First-Contact Surface Relocation](docs/concepts/first-contact-surface-relocation.md)
+- [Azazel System Product Map](docs/concepts/azazel-system-product-map.md)
+- [Black Hat USA Arsenal Profile](docs/demo/blackhat-usa-arsenal-profile.md)
+- [Demo Evidence Checklist](docs/demo/evidence-checklist.md)
 - [Series Positioning and Terms](docs/SERIES_POSITIONING_AND_TERMS.md)
 - [Security Claim Policy](docs/SECURITY_CLAIM_POLICY.md)
 - [Installer Guide](installer/README.md)
 - [Release Process](docs/RELEASE_PROCESS.md)
 - [Release Notes Template](docs/RELEASE_NOTES_TEMPLATE.md)
 - [Changelog](docs/CHANGELOG.md)
-- [Presentation Assets](docs/presentation/README.md)
-- [Docs Site Entry](docs/index.html)
-- [Regression Test Notes](scripts/tests/regression/README.md)
 
 ## Repository Layout
 
@@ -212,7 +208,7 @@ Primary entry points:
 | `configs/` | Default runtime configuration |
 | `scripts/` | Runtime helpers and test scripts |
 | `docs/` | Project documentation and presentation assets |
-| `images/` | README and presentation image assets |
+| `images/` | README and documentation image assets |
 
 ## License
 
