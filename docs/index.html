@@ -1,16 +1,160 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Azazel-Gadget Docs</title>
-  <meta http-equiv="refresh" content="0; url=presentation/index.html" />
-  <link rel="canonical" href="presentation/index.html" />
-  <script>
-    window.location.replace("presentation/index.html" + window.location.search + window.location.hash);
-  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="AZ-02 Azazel-Gadget — Personal Tactical Defense Gateway and portable Cyber Scapegoat Gateway for untrusted Wi-Fi and hostile local segments." />
+  <title>AZ-02 Azazel-Gadget | Personal Tactical Defense Gateway</title>
+  <style>
+    :root {
+      --bg: #05090b;
+      --bg2: #0a151a;
+      --card: #0f1e24;
+      --line: #1f3a45;
+      --text: #e8f6fb;
+      --muted: #a8c3cf;
+      --accent: #16d3de;
+      --accent2: #4ef4a8;
+      --warn: #ffd166;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(1200px 700px at 90% -10%, #0e3b47 0%, transparent 55%),
+        radial-gradient(900px 500px at -10% 10%, #12303a 0%, transparent 60%),
+        linear-gradient(180deg, var(--bg), var(--bg2));
+      line-height: 1.6;
+    }
+    .shell { max-width: 1080px; margin: 0 auto; padding: 28px 20px 64px; }
+    .top {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 16px; margin-bottom: 18px;
+      border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px;
+      background: rgba(8, 19, 23, 0.85);
+    }
+    .id { font-weight: 700; letter-spacing: .04em; }
+    .tag { color: var(--muted); font-size: 14px; }
+    .hero {
+      border: 1px solid var(--line); border-radius: 16px;
+      overflow: hidden; background: rgba(7, 17, 21, 0.9);
+    }
+    .hero img { width: 100%; display: block; }
+    .hero-body { padding: 22px; }
+    h1 { margin: 0 0 8px; font-size: clamp(24px, 4vw, 36px); }
+    .sub { margin: 0 0 14px; color: var(--muted); }
+    .lead { margin: 0 0 10px; }
+    .lead strong { color: var(--accent2); }
+    .not-this {
+      margin-top: 10px; color: var(--warn); font-weight: 600;
+    }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      text-decoration: none; color: var(--text);
+      border: 1px solid var(--line); border-radius: 10px;
+      padding: 10px 14px; font-weight: 600;
+      background: #0d1e25;
+    }
+    .btn.primary { border-color: #1ba8b1; background: #0e2f36; }
+    .btn:hover { filter: brightness(1.1); }
+    .grid {
+      margin-top: 18px;
+      display: grid; gap: 14px;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    }
+    .card {
+      border: 1px solid var(--line); border-radius: 12px;
+      background: var(--card); padding: 14px;
+    }
+    .card h2 { margin: 0 0 8px; font-size: 18px; }
+    .card p { margin: 0 0 8px; color: var(--muted); }
+    ul { margin: 0; padding-left: 18px; }
+    li { margin: 4px 0; }
+    footer {
+      margin-top: 18px; color: var(--muted); font-size: 14px;
+      border-top: 1px solid var(--line); padding-top: 12px;
+    }
+    code { color: var(--accent2); }
+  </style>
 </head>
 <body>
-  <p>Redirecting to <a href="presentation/index.html">presentation</a>...</p>
+  <div class="shell">
+    <div class="top">
+      <div>
+        <div class="id">AZ-02 AZAZEL-GADGET</div>
+        <div class="tag">Codename: TACMOD</div>
+      </div>
+      <a class="btn" href="https://github.com/01rabbit/Azazel-Gadget" target="_blank" rel="noopener">GitHub Repository</a>
+    </div>
+
+    <section class="hero">
+      <img src="../images/Azazel-Gadget_Banner.png" alt="Azazel-Gadget banner" />
+      <div class="hero-body">
+        <h1>Personal Tactical Defense Gateway</h1>
+        <p class="sub">Portable Cyber Scapegoat Gateway for untrusted Wi-Fi and hostile local segments.</p>
+        <p class="lead"><strong>Core:</strong> Azazel-Gadget moves the first-contact surface away from the user's endpoint.</p>
+        <p class="not-this">Not a VPN. Not a general-purpose travel router. Not a promise of complete attack prevention.</p>
+        <div class="actions">
+          <a class="btn primary" href="../README.md">README (EN)</a>
+          <a class="btn" href="../README_ja.md">README (JA)</a>
+          <a class="btn" href="INDEX.md">Docs Index</a>
+          <a class="btn" href="CHANGELOG.md">Changelog</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2>Demo & Submission</h2>
+        <p>Review flow and evidence checklist for live demonstrations and submission preparation.</p>
+        <ul>
+          <li><a href="demo/submission-demo-profile.md">Submission Demo Profile</a></li>
+          <li><a href="demo/evidence-checklist.md">Demo Evidence Checklist</a></li>
+        </ul>
+      </article>
+
+      <article class="card">
+        <h2>Concept Documents</h2>
+        <p>Product framing and system relationship documentation.</p>
+        <ul>
+          <li><a href="concepts/personal-cyber-scapegoat-gateway.md">Personal Cyber Scapegoat Gateway</a></li>
+          <li><a href="concepts/first-contact-surface-relocation.md">First-Contact Surface Relocation</a></li>
+          <li><a href="concepts/azazel-system-product-map.md">Azazel System Product Map</a></li>
+        </ul>
+      </article>
+
+      <article class="card">
+        <h2>Presentation Archive</h2>
+        <p>
+          The currently used GitHub Pages content was a presentation deck used in past talks.
+          It remains useful for grasping the overall picture quickly.
+        </p>
+        <ul>
+          <li><a href="presentation/index.html">Open Presentation Slides</a></li>
+          <li><a href="presentation/README.md">Presentation README</a></li>
+          <li><a href="presentation/ja/01.html">Start JA Slides</a> / <a href="presentation/en/01.html">Start EN Slides</a></li>
+        </ul>
+      </article>
+
+      <article class="card">
+        <h2>Operations & Release</h2>
+        <p>Repository governance, release process, and claim boundaries.</p>
+        <ul>
+          <li><a href="RELEASE_PROCESS.md">Release Process</a></li>
+          <li><a href="RELEASE_NOTES_TEMPLATE.md">Release Notes Template</a></li>
+          <li><a href="SECURITY_CLAIM_POLICY.md">Security Claim Policy</a></li>
+          <li><a href="SERIES_POSITIONING_AND_TERMS.md">Series Positioning and Terms</a></li>
+        </ul>
+      </article>
+    </section>
+
+    <footer>
+      AZ-02 Azazel-Gadget docs portal. For full project files and implementation details, use the
+      <a href="https://github.com/01rabbit/Azazel-Gadget" target="_blank" rel="noopener">GitHub repository</a>.
+    </footer>
+  </div>
 </body>
 </html>
