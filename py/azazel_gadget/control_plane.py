@@ -128,6 +128,38 @@ def read_snapshot_payload(
     return None, "NONE"
 
 
+def read_status_view_from_files(logger: Any = None) -> Tuple[Optional[Dict[str, Any]], Optional[Path]]:
+    """Read the shared azazel_common StatusView written beside the snapshot.
+
+    The controller writes ``ui_status_view.json`` next to each ``ui_snapshot.json``
+    (see ``azazel_gadget.common_view``). This returns that view as a dict, or
+    ``(None, None)`` when it is absent — which is the normal state when
+    ``azazel-common`` is not installed on the device.
+    """
+    candidates = snapshot_path_candidates()
+    runtime_only = [p for p in candidates if str(p).startswith("/run/")]
+    if not runtime_only:
+        runtime_only = candidates[:2]
+    for snap_path in runtime_only:
+        view_path = snap_path.with_name("ui_status_view.json")
+        try:
+            if not view_path.exists():
+                continue
+            warn_if_legacy_path(view_path, logger=logger)
+            return json.loads(view_path.read_text(encoding="utf-8")), view_path
+        except Exception:
+            continue
+    return None, None
+
+
+def read_status_view_payload(logger: Any = None) -> Tuple[Optional[Dict[str, Any]], str]:
+    """Return the shared StatusView (dict, source) or ``(None, "NONE")``."""
+    data, path = read_status_view_from_files(logger=logger)
+    if data is not None:
+        return data, f"FILE:{path}"
+    return None, "NONE"
+
+
 def write_command_file_fallback(
     action: str,
     logger: Any = None,

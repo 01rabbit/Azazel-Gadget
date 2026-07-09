@@ -44,6 +44,7 @@ if str(PY_ROOT) not in sys.path:
 try:
     from azazel_gadget.control_plane import (
         read_snapshot_payload as cp_read_snapshot_payload,
+        read_status_view_payload as cp_read_status_view_payload,
         watch_snapshots as cp_watch_snapshots,
     )
     from azazel_gadget.path_schema import (
@@ -57,6 +58,7 @@ try:
     )
 except Exception:
     cp_read_snapshot_payload = None
+    cp_read_status_view_payload = None
     cp_watch_snapshots = None
     config_dir_candidates = lambda: [Path("/etc/azazel-gadget"), Path("/etc/azazel-zero")]  # type: ignore
     first_minute_config_candidates = lambda: [Path("/etc/azazel-gadget/first_minute.yaml"), Path("/etc/azazel-zero/first_minute.yaml")]  # type: ignore
@@ -714,6 +716,24 @@ def read_state() -> Dict[str, Any]:
         }
 
 
+def get_status_view() -> Optional[Dict[str, Any]]:
+    """Return the shared azazel_common StatusView if it is being emitted.
+
+    Aligns the dashboard with Azazel-Common v0.2.0: when the shared view-model
+    is present (azazel-common installed on the device, so the controller emits
+    ui_status_view.json), the UI can render from the same StatusView shape Edge
+    uses. Absent -> None, and callers fall back to the existing state fields, so
+    this never changes behavior when the package is not installed.
+    """
+    if cp_read_status_view_payload is None:
+        return None
+    try:
+        view, _ = cp_read_status_view_payload(logger=app.logger)
+        return view
+    except Exception:
+        return None
+
+
 def _normalize_status_payload(payload: Dict[str, Any], action: str = "") -> Dict[str, Any]:
     """Normalize Status API payload shape."""
     if payload.get("status") == "ok" and "ok" not in payload:
@@ -1059,6 +1079,8 @@ def api_state():
     mode_state = get_mode_state()
     state["mode"] = mode_state.get("mode", {})
     state["mode_runtime"] = mode_state
+    # Shared azazel_common StatusView (Common v0.2.0), None when not emitted.
+    state["status_view"] = get_status_view()
     return jsonify(state)
 
 
@@ -1085,6 +1107,7 @@ def api_state_stream():
                 mode_state = get_mode_state()
                 payload["mode"] = mode_state.get("mode", {})
                 payload["mode_runtime"] = mode_state
+                payload["status_view"] = get_status_view()
                 yield "event: state\ndata: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
             return
         while True:
@@ -1094,6 +1117,7 @@ def api_state_stream():
             mode_state = get_mode_state()
             payload["mode"] = mode_state.get("mode", {})
             payload["mode_runtime"] = mode_state
+            payload["status_view"] = get_status_view()
             yield "event: state\ndata: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
             time.sleep(1.0)
 
