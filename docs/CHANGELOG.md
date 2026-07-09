@@ -22,6 +22,17 @@ as a peer, not a subset. All Gadget-only detail (the `attack{}` canary block,
 - `control_plane.read_status_view_payload()` — reads the shared StatusView back.
 - Web UI: `GET /api/state` and the `/api/state/stream` SSE now include a
   `status_view` field (the shared Common view; `null` when not emitted).
+- **Developer local stack (no hardware):** `bin/azazel-gadget-devstack` +
+  `tools/dev/env.sh` run the real controller (dev mode: dry-run, no root, no
+  `nft`/`tc`/EPD) and the Web UI on loopback — mirroring Edge's dev stack.
+  Env-gated path/socket/eve overrides (`AZAZEL_RUNTIME_DIR`,
+  `AZAZEL_CONTROL_SOCKET`, `AZAZEL_EVE_PATH`) and an `AZAZEL_GADGET_DEV` /
+  `--dev` preflight bypass; appliance behavior unchanged when unset.
+- **EPD-on-Web:** `GET /api/epd` (panel content as JSON) and `GET /dev/epd`
+  (self-contained preview page) make the E-Paper content viewable in a browser
+  without the panel.
+- Docs: `docs/DEV_LOCAL_STACK.md` (+ `_JA`) and
+  `docs/concepts/azazel-common-usage.md` (how Gadget uses Common).
 - Series-level documentation baseline:
   - `docs/INDEX.md` (cross-series entry map)
   - `docs/SERIES_POSITIONING_AND_TERMS.md` (AZ-01/AZ-02 terminology and boundaries)

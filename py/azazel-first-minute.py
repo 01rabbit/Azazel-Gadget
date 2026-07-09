@@ -29,6 +29,7 @@ def parse_args() -> argparse.Namespace:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--config", default=str(REPO_ROOT / "configs/first_minute.yaml"), help="設定ファイルパス (YAML)")
     common.add_argument("--dry-run", action="store_true", help="nft/tcを適用せず計画だけ表示")
+    common.add_argument("--dev", action="store_true", help="開発モード: root/ハードウェア不要 (dry-run + preflightスキップ、macOS/dev向け)")
     common.add_argument("--no-dns-start", action="store_true", help="dnsmasqを起動しない (外部dnsmasq使用時)")
     common.add_argument("--foreground", action="store_true", help="フォアグラウンド実行（デフォルト）")
     common.add_argument("--daemonize", action="store_true", help="バックグラウンド実行")
@@ -84,10 +85,18 @@ def setup_logging(cfg: FirstMinuteConfig) -> None:
 def cmd_start(args: argparse.Namespace, cfg: FirstMinuteConfig) -> None:
     if args.daemonize and args.foreground:
         raise SystemExit("Choose either --foreground or --daemonize, not both.")
-    if os.geteuid() != 0:
+    dev = getattr(args, "dev", False) or bool(os.environ.get("AZAZEL_GADGET_DEV"))
+    if dev:
+        os.environ["AZAZEL_GADGET_DEV"] = "1"
+    elif os.geteuid() != 0:
         print("start: root 権限が必要です (sudo を使用してください)")
         sys.exit(1)
-    ctrl = FirstMinuteController(cfg, dry_run=args.dry_run, no_dns_start=args.no_dns_start, pretty_console=args.pretty_console)
+    ctrl = FirstMinuteController(
+        cfg,
+        dry_run=(args.dry_run or dev),
+        no_dns_start=(args.no_dns_start or dev),
+        pretty_console=args.pretty_console,
+    )
     if args.daemonize:
         pid = os.fork()
         if pid > 0:

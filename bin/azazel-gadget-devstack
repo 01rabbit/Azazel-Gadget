@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# Azazel-Gadget developer stack launcher (macOS / plain Linux, no Pi hardware).
+#
+# Runs the first-minute controller (in --dev: dry-run, no root, no nft/tc/EPD)
+# and the Flask Web UI on loopback, so you can see the dashboard and the EPD
+# preview in a browser without any hardware.
+#
+#   bin/azazel-gadget-devstack up       # start controller + web
+#   bin/azazel-gadget-devstack status   # show what is running
+#   bin/azazel-gadget-devstack logs     # tail component logs
+#   bin/azazel-gadget-devstack down     # stop everything
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck disable=SC1091
+source "${ROOT}/tools/dev/env.sh"
+
+RUN="${AZAZEL_DEV_STATE}"
+LOG="${AZAZEL_DEV_STATE}/log"
+PY="${PYTHON:-python3}"
+mkdir -p "${RUN}" "${LOG}"
+
+_start() { # name cmd...
+  local name="$1"; shift
+  local pidf="${RUN}/${name}.pid"
+  if [ -f "${pidf}" ] && kill -0 "$(cat "${pidf}")" 2>/dev/null; then
+    echo "${name} already running (pid $(cat "${pidf}"))"; return 0
+  fi
+  nohup "$@" >"${LOG}/${name}.log" 2>&1 </dev/null &
+  echo $! >"${pidf}"
+  disown 2>/dev/null || true
+  echo "started ${name} (pid $(cat "${pidf}"))"
+}
+
+_stop() { # name
+  local pidf="${RUN}/${1}.pid"
+  [ -f "${pidf}" ] || { echo "${1}: not running"; return 0; }
+  kill "$(cat "${pidf}")" 2>/dev/null || true
+  rm -f "${pidf}"
+  echo "stopped ${1}"
+}
+
+_wait_http() { # url
+  for _ in $(seq 1 40); do
+    curl -fsS "$1" >/dev/null 2>&1 && return 0
+    sleep 0.25
+  done
+  return 1
+}
+
+cmd_up() {
+  _start controller "${PY}" "${ROOT}/py/azazel-first-minute.py" \
+    --dev --config "${ROOT}/configs/first_minute.yaml" start --foreground
+  _start web "${PY}" "${ROOT}/azazel_web/app.py"
+  local base="http://${AZAZEL_WEB_HOST}:${AZAZEL_WEB_PORT}"
+  if _wait_http "${base}/api/state"; then
+    echo ""
+    echo "  Dashboard   : ${base}/"
+    echo "  EPD preview : ${base}/dev/epd"
+    echo "  State API   : ${base}/api/state"
+    echo "  EPD API     : ${base}/api/epd"
+  else
+    echo "web did not become ready; see ${LOG}/web.log"
+    return 1
+  fi
+}
+
+cmd_down() { _stop web; _stop controller; }
+
+cmd_status() {
+  for n in controller web; do
+    local pidf="${RUN}/${n}.pid"
+    if [ -f "${pidf}" ] && kill -0 "$(cat "${pidf}")" 2>/dev/null; then
+      echo "${n}: running (pid $(cat "${pidf}"))"
+    else
+      echo "${n}: stopped"
+    fi
+  done
+  echo "state dir: ${AZAZEL_DEV_STATE}"
+}
+
+cmd_logs() { tail -n 60 -F "${LOG}/"*.log; }
+
+case "${1:-up}" in
+  up)      cmd_up ;;
+  down)    cmd_down ;;
+  restart) cmd_down; cmd_up ;;
+  status)  cmd_status ;;
+  logs)    cmd_logs ;;
+  *) echo "usage: $0 {up|down|restart|status|logs}"; exit 1 ;;
+esac

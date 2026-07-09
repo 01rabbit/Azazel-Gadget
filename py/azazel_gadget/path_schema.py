@@ -149,9 +149,14 @@ def opencanary_config_candidates(schema: Optional[str] = None, repo_root: Option
 
 def runtime_snapshot_path_candidates(schema: Optional[str] = None, home: Optional[Path] = None) -> list[Path]:
     paths = [p for p in snapshot_path_candidates(schema=schema, home=home) if str(p).startswith("/run/")]
-    if paths:
-        return paths
-    return snapshot_path_candidates(schema=schema, home=home)[:2]
+    result = paths if paths else snapshot_path_candidates(schema=schema, home=home)[:2]
+    # Dev override: AZAZEL_RUNTIME_DIR redirects the runtime snapshot to a
+    # writable dev directory (macOS/dev has no writable /run). Appliance
+    # behavior is unchanged when the variable is unset.
+    dev_dir = os.environ.get("AZAZEL_RUNTIME_DIR")
+    if dev_dir:
+        return [Path(dev_dir) / "ui_snapshot.json", *result]
+    return result
 
 
 def portal_env_candidates(schema: Optional[str] = None) -> list[Path]:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import socket
 import time
 from pathlib import Path
@@ -103,6 +104,11 @@ def read_snapshot_from_files(logger: Any = None) -> Tuple[Optional[Dict[str, Any
     runtime_only = [p for p in candidates if str(p).startswith("/run/")]
     if not runtime_only:
         runtime_only = candidates[:2]
+    # Dev override: read the snapshot from AZAZEL_RUNTIME_DIR first, so the dev
+    # web UI reads the same file the dev controller writes (macOS has no /run).
+    dev_dir = os.environ.get("AZAZEL_RUNTIME_DIR")
+    if dev_dir:
+        runtime_only = [Path(dev_dir) / "ui_snapshot.json", *runtime_only]
     for path in runtime_only:
         try:
             if not path.exists():
@@ -140,8 +146,13 @@ def read_status_view_from_files(logger: Any = None) -> Tuple[Optional[Dict[str, 
     runtime_only = [p for p in candidates if str(p).startswith("/run/")]
     if not runtime_only:
         runtime_only = candidates[:2]
-    for snap_path in runtime_only:
-        view_path = snap_path.with_name("ui_status_view.json")
+    view_paths = [p.with_name("ui_status_view.json") for p in runtime_only]
+    # Dev override: prefer the StatusView in AZAZEL_RUNTIME_DIR when set, so the
+    # dev web UI reads the same view the dev controller writes.
+    dev_dir = os.environ.get("AZAZEL_RUNTIME_DIR")
+    if dev_dir:
+        view_paths = [Path(dev_dir) / "ui_status_view.json", *view_paths]
+    for view_path in view_paths:
         try:
             if not view_path.exists():
                 continue

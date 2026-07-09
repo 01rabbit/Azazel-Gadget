@@ -199,6 +199,8 @@ Primary entry points:
 - [Personal Cyber Scapegoat Gateway](docs/concepts/personal-cyber-scapegoat-gateway.md)
 - [First-Contact Surface Relocation](docs/concepts/first-contact-surface-relocation.md)
 - [Azazel System Product Map](docs/concepts/azazel-system-product-map.md)
+- [Developer Local Stack (no hardware)](docs/DEV_LOCAL_STACK.md)
+- [Using Azazel-Common in Gadget](docs/concepts/azazel-common-usage.md)
 - [Submission Demo Profile](docs/demo/submission-demo-profile.md)
 - [Demo Evidence Checklist](docs/demo/evidence-checklist.md)
 - [Series Positioning and Terms](docs/SERIES_POSITIONING_AND_TERMS.md)
