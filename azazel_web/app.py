@@ -44,6 +44,7 @@ if str(PY_ROOT) not in sys.path:
 try:
     from azazel_gadget.control_plane import (
         read_snapshot_payload as cp_read_snapshot_payload,
+        read_status_view_payload as cp_read_status_view_payload,
         watch_snapshots as cp_watch_snapshots,
     )
     from azazel_gadget.path_schema import (
@@ -57,6 +58,7 @@ try:
     )
 except Exception:
     cp_read_snapshot_payload = None
+    cp_read_status_view_payload = None
     cp_watch_snapshots = None
     config_dir_candidates = lambda: [Path("/etc/azazel-gadget"), Path("/etc/azazel-zero")]  # type: ignore
     first_minute_config_candidates = lambda: [Path("/etc/azazel-gadget/first_minute.yaml"), Path("/etc/azazel-zero/first_minute.yaml")]  # type: ignore
@@ -70,7 +72,7 @@ except Exception:
 _RUNTIME_STATE_PATHS = runtime_snapshot_path_candidates()
 STATE_PATH = _RUNTIME_STATE_PATHS[0]  # Share TUI snapshot
 FALLBACK_STATE_PATH = _RUNTIME_STATE_PATHS[-1]  # Legacy runtime fallback
-CONTROL_SOCKET = Path("/run/azazel/control.sock")
+CONTROL_SOCKET = Path(os.environ.get("AZAZEL_CONTROL_SOCKET", "/run/azazel/control.sock"))
 TOKEN_FILE = web_token_candidates()[0]
 BIND_HOST = os.environ.get("AZAZEL_WEB_HOST", "0.0.0.0")
 BIND_PORT = int(os.environ.get("AZAZEL_WEB_PORT", "8084"))
@@ -714,6 +716,24 @@ def read_state() -> Dict[str, Any]:
         }
 
 
+def get_status_view() -> Optional[Dict[str, Any]]:
+    """Return the shared azazel_common StatusView if it is being emitted.
+
+    Aligns the dashboard with Azazel-Common v0.2.0: when the shared view-model
+    is present (azazel-common installed on the device, so the controller emits
+    ui_status_view.json), the UI can render from the same StatusView shape Edge
+    uses. Absent -> None, and callers fall back to the existing state fields, so
+    this never changes behavior when the package is not installed.
+    """
+    if cp_read_status_view_payload is None:
+        return None
+    try:
+        view, _ = cp_read_status_view_payload(logger=app.logger)
+        return view
+    except Exception:
+        return None
+
+
 def _normalize_status_payload(payload: Dict[str, Any], action: str = "") -> Dict[str, Any]:
     """Normalize Status API payload shape."""
     if payload.get("status") == "ok" and "ok" not in payload:
@@ -1059,6 +1079,8 @@ def api_state():
     mode_state = get_mode_state()
     state["mode"] = mode_state.get("mode", {})
     state["mode_runtime"] = mode_state
+    # Shared azazel_common StatusView (Common v0.2.0), None when not emitted.
+    state["status_view"] = get_status_view()
     return jsonify(state)
 
 
@@ -1085,6 +1107,7 @@ def api_state_stream():
                 mode_state = get_mode_state()
                 payload["mode"] = mode_state.get("mode", {})
                 payload["mode_runtime"] = mode_state
+                payload["status_view"] = get_status_view()
                 yield "event: state\ndata: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
             return
         while True:
@@ -1094,10 +1117,116 @@ def api_state_stream():
             mode_state = get_mode_state()
             payload["mode"] = mode_state.get("mode", {})
             payload["mode_runtime"] = mode_state
+            payload["status_view"] = get_status_view()
             yield "event: state\ndata: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
             time.sleep(1.0)
 
     return Response(stream_with_context(generate()), headers=headers, mimetype="text/event-stream")
+
+
+def _epd_state_file() -> Optional[Dict[str, Any]]:
+    """Read epd_state.json (dev override first) if present."""
+    candidates = []
+    dev = os.environ.get("AZAZEL_RUNTIME_DIR")
+    if dev:
+        candidates.append(Path(dev) / "epd_state.json")
+    candidates.append(Path("/run/azazel/epd_state.json"))
+    for p in candidates:
+        try:
+            if p.exists():
+                return json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+    return None
+
+
+def build_epd_view() -> Dict[str, Any]:
+    """Compose what the E-Paper panel shows, for browser rendering.
+
+    Mirrors epd_mode_refresh._desired_render_spec without importing the panel
+    driver: mode label, a normal/warning/danger state, SSID, signal, and risk
+    wording — so the EPD content is viewable on macOS/dev where there is no
+    physical panel.
+    """
+    state = read_state()
+    mode_state = get_mode_state()
+    mode_label = str((mode_state.get("mode") or {}).get("current_mode") or "shield").upper()
+    view = get_status_view() or {}
+    posture = str(view.get("posture") or "").lower()
+    internal = state.get("internal") or {}
+    state_word = str(internal.get("state_name") or "").lower()
+    key = posture or state_word
+    if key in ("deception", "contain"):
+        panel = "danger"
+    elif key in ("degraded",):
+        panel = "warning"
+    else:
+        panel = "normal"
+    conn = state.get("connection") or {}
+    ssid = conn.get("ssid") or state.get("ssid") or "-"
+    risk_map = {"normal": "OK", "warning": "CAUTION", "danger": "ALERT"}
+    return {
+        "mode": mode_label,
+        "state": panel,
+        "risk_status": risk_map[panel],
+        "ssid": ssid,
+        "signal_dbm": state.get("signal_dbm"),
+        "suspicion": internal.get("suspicion"),
+        "epd_state": _epd_state_file(),
+        "note": "EPD hardware preview rendered in the browser (no panel required).",
+    }
+
+
+@app.route("/api/epd")
+def api_epd():
+    """GET /api/epd - the E-Paper panel content as JSON (dev/hardware-free)."""
+    if not verify_token():
+        return jsonify({"error": "Unauthorized"}), 403
+    return jsonify(build_epd_view())
+
+
+_EPD_PREVIEW_HTML = """<!doctype html><html><head><meta charset="utf-8">
+<title>Azazel-Gadget EPD preview</title>
+<style>
+ body{background:#222;color:#ddd;font-family:system-ui,sans-serif;display:flex;
+      flex-direction:column;align-items:center;gap:12px;padding:24px}
+ .panel{width:500px;height:244px;background:#fff;color:#000;border:2px solid #000;
+        border-radius:6px;padding:14px 18px;box-sizing:border-box;position:relative}
+ .panel.danger{background:#b00020;color:#fff;border-color:#b00020}
+ .panel.warning{border-color:#b00020}
+ .mode{font-size:44px;font-weight:800;letter-spacing:2px}
+ .risk{font-size:26px;font-weight:700;margin-top:6px}
+ .warning .risk{color:#b00020}
+ .row{position:absolute;bottom:14px;left:18px;right:18px;display:flex;
+      justify-content:space-between;font-size:18px}
+ .cap{font-size:12px;color:#888}
+</style></head><body>
+<div id="p" class="panel"><div class="mode" id="mode">…</div>
+ <div class="risk" id="risk"></div>
+ <div class="row"><span id="ssid"></span><span id="sig"></span></div></div>
+<div class="cap" id="cap">EPD preview — simulates the 250×122 panel. No hardware required.</div>
+<script>
+ const tok=new URLSearchParams(location.search).get('token');
+ async function tick(){
+   try{
+     const r=await fetch('/api/epd'+(tok?('?token='+encodeURIComponent(tok)):''));
+     const d=await r.json();
+     const p=document.getElementById('p');
+     p.className='panel '+(d.state||'normal');
+     document.getElementById('mode').textContent=d.mode||'-';
+     document.getElementById('risk').textContent=d.risk_status||'';
+     document.getElementById('ssid').textContent='SSID: '+(d.ssid||'-');
+     document.getElementById('sig').textContent=(d.signal_dbm!=null?d.signal_dbm+' dBm':'');
+   }catch(e){document.getElementById('cap').textContent='waiting for gadget… '+e;}
+ }
+ tick();setInterval(tick,2000);
+</script></body></html>"""
+
+
+@app.route("/dev/epd")
+def dev_epd():
+    """A self-contained EPD preview page (renders /api/epd, refreshes every 2s)."""
+    return Response(_EPD_PREVIEW_HTML, mimetype="text/html")
 
 
 @app.route("/api/portal-viewer")

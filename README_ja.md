@@ -199,6 +199,8 @@ Azazel-Gadget が主張しないこと:
 - [Personal Cyber Scapegoat Gateway](docs/concepts/personal-cyber-scapegoat-gateway.md)
 - [First-Contact Surface Relocation](docs/concepts/first-contact-surface-relocation.md)
 - [Azazel System Product Map](docs/concepts/azazel-system-product-map.md)
+- [開発用ローカルスタック（ハードウェア不要）](docs/DEV_LOCAL_STACK_JA.md)
+- [Gadget での Azazel-Common 活用](docs/concepts/azazel-common-usage.md)
 - [Submission Demo Profile](docs/demo/submission-demo-profile.md)
 - [Demo Evidence Checklist](docs/demo/evidence-checklist.md)
 - [Series Positioning and Terms](docs/SERIES_POSITIONING_AND_TERMS.md)

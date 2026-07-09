@@ -315,6 +315,16 @@ class FirstMinuteController:
             self._canary_delay_loss_percent = 0.0
 
     def preflight(self) -> None:
+        # Dev mode: run without root or nft/tc/ip on a developer machine
+        # (macOS/dev). Forces dry-run so no firewall/traffic-control is applied.
+        # Appliance behavior is unchanged when AZAZEL_GADGET_DEV is unset.
+        if os.environ.get("AZAZEL_GADGET_DEV"):
+            self.dry_run = True
+            self.logger.warning(
+                "dev mode (AZAZEL_GADGET_DEV): skipping root/PATH preflight; "
+                "nft/tc/dnsmasq/EPD are dry-run only"
+            )
+            return
         if os.geteuid() != 0:
             raise SystemExit("First-Minute Control requires root.")
         for bin_name in ("nft", "tc", "ip"):
@@ -998,7 +1008,7 @@ class FirstMinuteController:
         suricata_critical = 0
         suricata_warning = 0
         try:
-            eve_log = Path("/var/log/suricata/eve.json")
+            eve_log = Path(os.environ.get("AZAZEL_EVE_PATH", "/var/log/suricata/eve.json"))
             if eve_log.exists():
                 # Read the last 50 lines from eve.json and count alert events by severity
                 with open(eve_log, "r") as f:
