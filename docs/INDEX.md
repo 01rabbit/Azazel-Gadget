@@ -23,6 +23,7 @@ This index provides series-level entry points and repository-local documentation
 | [concepts/personal-cyber-scapegoat-gateway.md](concepts/personal-cyber-scapegoat-gateway.md) | Reviewer / Operator | AZ-02 core concept definition |
 | [concepts/first-contact-surface-relocation.md](concepts/first-contact-surface-relocation.md) | Reviewer / Operator | Why first-contact relocation matters |
 | [concepts/azazel-system-product-map.md](concepts/azazel-system-product-map.md) | Reviewer / Operator | AZ-01 / AZ-02 product relationship |
+| [concepts/azazel-common-adapter.md](concepts/azazel-common-adapter.md) | Reviewer / Developer | Plan to serialize Gadget state/mode/action/audit/notification through the shared `azazel-common` schema (design note, no behavior change) |
 | [demo/submission-demo-profile.md](demo/submission-demo-profile.md) | Reviewer / Presenter | 3/7/15 minute submission demo flow |
 | [demo/evidence-checklist.md](demo/evidence-checklist.md) | Reviewer / Operator | Demo verification checklist and commands |
 | [presentation/README.md](presentation/README.md) | Presenter | Presentation assets map |
