@@ -1142,6 +1142,22 @@ class FirstMinuteController:
                     warn_if_legacy_path(snap_path, logger=self.logger)
                 except Exception as e:
                     self.logger.debug(f"snapshot: failed to write {snap_path}: {e}")
+
+            # Emit-alongside: write the shared azazel_common StatusView next to
+            # the snapshot, without changing what any renderer currently reads.
+            # No-op when azazel_common is not installed; never raises into the
+            # loop. See py/azazel_gadget/common_view.py.
+            try:
+                from azazel_gadget.common_view import write_status_view_alongside
+
+                write_status_view_alongside(
+                    snap,
+                    self.snapshot_sync_paths,
+                    mode_name=self._get_current_mode_label(),
+                    logger=self.logger,
+                )
+            except Exception as e:
+                self.logger.debug(f"snapshot: status_view emit skipped: {e}")
         except Exception as e:
             self.logger.warning(f"snapshot: failed overall: {e}")
 
