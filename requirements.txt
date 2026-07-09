@@ -1,0 +1,16 @@
+# Azazel-Gadget Python runtime dependencies (pip-installable).
+#
+# System packages are still provisioned by installer/stages/10_dependencies.sh
+# (apt: python3-yaml, python3-requests, ...). This manifest makes the
+# pip-installable deps declarative and reviewable, and is the home for the
+# shared azazel-common pin.
+#
+# azazel-common provides the shared status view-model (azazel_common.view).
+# Pinned to an exact tag per Azazel-Common design-principles.md §6. The code
+# imports it optionally (see py/azazel_gadget/common_view.py), so Gadget runs
+# with or without it installed; installing this manifest activates the shared
+# view-model. Requires Azazel-Common v0.2.0 to be released.
+azazel-common @ git+https://github.com/01rabbit/Azazel-Common.git@v0.2.0
+
+requests>=2.32,<3
+PyYAML>=6,<7
