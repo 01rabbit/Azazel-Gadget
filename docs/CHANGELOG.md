@@ -4,6 +4,25 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- Docs: extended the series model beyond AZ-01/AZ-02 in `docs/INDEX.md`,
+  `docs/concepts/azazel-system-product-map.md`, and
+  `docs/SERIES_POSITIONING_AND_TERMS.md` to name the umbrella Azazel repository
+  (doctrine hub), Azazel-CTI (advisory-only knowledge-plane node, working name),
+  Azazel-Common (shared contracts library), and Azazel-Boot (AZ-03, reserved) —
+  while keeping AZ-01 Azazel-Edge and AZ-02 Azazel-Gadget as the series' two
+  device-class peer products.
+- Docs: added an "Azazel series" section to `README.md` and `README_ja.md`
+  summarizing the same repository roles.
+- Docs: `docs/DEV_LOCAL_STACK.md` and `docs/DEV_LOCAL_STACK_JA.md` now clarify
+  that the `/dev/epd` browser preview is a re-derived "digital twin" driven by
+  the same input signals as the panel, not a capture of the PIL-rendered image,
+  and that `py/azazel_epd.py` is bypassed in dev mode — so pixel parity with the
+  physical E-Paper panel is not guaranteed.
+- Docs: `docs/concepts/azazel-common-adapter.md` now carries a status header
+  marking it as the original integration plan, kept for history, superseded by
+  `docs/concepts/azazel-common-usage.md` where the two differ.
+
 ## [0.2.0] - 2026-07-09
 
 Aligned to **Azazel-Common v0.2.0**: Gadget now depends on the shared
