@@ -5,6 +5,25 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Changed
+- Migrated to **Azazel-Fabric v0.3.0**: `requirements.txt` now pins
+  `azazel-fabric @ git+https://github.com/01rabbit/Azazel-Fabric.git@v0.3.0`
+  (dist name `azazel-fabric`, import namespace `azazel_fabric` — the
+  `azazel-common` / `azazel_common` names from the v0.2.0 tag are gone).
+  `py/azazel_gadget/common_view.py` drops the `azazel_common` fallback import
+  added for this transition and now imports `azazel_fabric` only (still
+  guarded — absence remains a safe no-op). Related comments in
+  `py/azazel_gadget/control_plane.py`, `azazel_web/app.py`, and
+  `py/azazel_gadget/first_minute/controller.py` updated to drop the
+  dual-namespace phrasing. `tests/test_common_view.py` and
+  `tests/test_status_view_readback.py` updated to match (single-namespace
+  skip reasons; `test_round_trip_json` imports `azazel_fabric` directly).
+  Docs updated to the new pin/import (`docs/concepts/azazel-common-usage.md`,
+  `docs/DEV_LOCAL_STACK.md`, `docs/DEV_LOCAL_STACK_JA.md`,
+  `docs/concepts/azazel-system-product-map.md`,
+  `docs/SERIES_POSITIONING_AND_TERMS.md`, `docs/INDEX.md`, `README.md`,
+  `README_ja.md`); `docs/concepts/azazel-common-adapter.md` is left as
+  intentional design-history and still refers to `azazel_common`/`v0.1.0`/
+  `v0.2.0` by design.
 - Rename follow-up: the upstream `Azazel-CTI` and `Azazel-Common` repositories
   were renamed to `Azazel-Knowledge` (AZ-04, formal name Azazel-Knowledge
   Advisor, repo `01rabbit/Azazel-Knowledge`) and `Azazel-Fabric` (AZ-05, repo

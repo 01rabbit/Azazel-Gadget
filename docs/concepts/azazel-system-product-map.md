@@ -43,8 +43,8 @@ of which are peer devices of AZ-01/AZ-02:
   which retains final decision authority and keeps working fully without it.
   AZ-02 Azazel-Gadget has no current or planned CTI integration. Reference:
   [01rabbit/Azazel-Knowledge](https://github.com/01rabbit/Azazel-Knowledge)
-- **AZ-05 Azazel-Fabric** (formerly Azazel-Common) — the shared contracts library (distributed as `azazel-common`, installed via a pinned git tag; becomes `azazel-fabric` from v0.3.0) that
+- **AZ-05 Azazel-Fabric** (formerly Azazel-Common) — the shared contracts library (distributed as `azazel-fabric`, installed via a pinned git tag) that
   AZ-01 and AZ-02 draw on for interoperable schema/view shapes. AZ-02 is its most
-  complete consumer today (pinned at v0.2.0); see
+  complete consumer today (pinned at v0.3.0); see
   [azazel-common-usage.md](azazel-common-usage.md). Reference:
   [01rabbit/Azazel-Fabric](https://github.com/01rabbit/Azazel-Fabric)

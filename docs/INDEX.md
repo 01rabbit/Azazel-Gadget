@@ -18,9 +18,9 @@ This index provides series-level entry points and repository-local documentation
   current or planned CTI integration and is listed here only as a fellow
   series member.  
   Reference repository: [01rabbit/Azazel-Knowledge](https://github.com/01rabbit/Azazel-Knowledge)
-- AZ-05 Azazel-Fabric (formerly Azazel-Common): Shared contracts library (distributed as `azazel-common`, installed via a pinned git tag; becomes `azazel-fabric` from v0.3.0) used across the
+- AZ-05 Azazel-Fabric (formerly Azazel-Common): Shared contracts library (distributed as `azazel-fabric`, installed via a pinned git tag) used across the
   series for schema/view interop. Azazel-Gadget is its most complete consumer today
-  (pinned at v0.2.0; see [azazel-common-usage.md](concepts/azazel-common-usage.md)).  
+  (pinned at v0.3.0; see [azazel-common-usage.md](concepts/azazel-common-usage.md)).  
   Reference repository: [01rabbit/Azazel-Fabric](https://github.com/01rabbit/Azazel-Fabric)
 
 AZ-01 (Edge) and AZ-02 (Gadget) remain the series' two device-class products; the

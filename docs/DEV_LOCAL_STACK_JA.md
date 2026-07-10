@@ -14,7 +14,7 @@ dev スタックは **実際の** first-minute コントローラと Flask Web U
 
 ```bash
 # 1. pip 依存をインストール（venv 推奨）
-pip install -r requirements.txt        # Flask, requests, PyYAML, azazel-common
+pip install -r requirements.txt        # Flask, requests, PyYAML, azazel-fabric
 
 # 2. 起動（tools/dev/env.sh を自動で読み込みます）
 bin/azazel-gadget-devstack up
@@ -80,8 +80,8 @@ dev の状態はすべて `~/.azazel-gadget-dev/` 配下に置かれ、`/run`・
 - **dev では Web トークンなし。** UI はループバックのみで開放されます
   （トークンファイルが無ければ `verify_token()` は通過）。dev ポートを
   ループバック外に晒さないでください。
-- **`azazel-common`**（Azazel-Fabric、旧称 Azazel-Common。v0.3.0 から配布名は
-  `azazel-fabric`）が共有ステータス・ビューモデルを提供します。導入時
-  （`requirements.txt` に含む）は `/api/state` に `status_view` が付与され、
-  コントローラが `ui_status_view.json` を出力します。詳細は
+- **`azazel-fabric`**（Azazel-Fabric、旧称 Azazel-Common）が共有ステータス・
+  ビューモデルを提供します。導入時（`requirements.txt` に含む）は
+  `/api/state` に `status_view` が付与され、コントローラが
+  `ui_status_view.json` を出力します。詳細は
   [`concepts/azazel-common-usage.md`](concepts/azazel-common-usage.md)。
