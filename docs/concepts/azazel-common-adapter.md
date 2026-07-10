@@ -1,4 +1,16 @@
-# Azazel-Common Gadget Adapter Plan
+# Azazel-Fabric (formerly Azazel-Common) Gadget Adapter Plan
+
+> **Document status:** This was the *original* integration plan (Issue 6
+> deliverable) written before adoption landed, when the shared-contracts
+> repository was still named `Azazel-Common` (now renamed to
+> `01rabbit/Azazel-Fabric`, AZ-05). It is kept for historical record and its
+> body intentionally still uses the names and paths current at the time it was
+> written. What actually shipped is documented in
+> [`azazel-common-usage.md`](azazel-common-usage.md), which **supersedes this
+> note wherever the two differ** (notably: Gadget ended up pinned to
+> `azazel-common v0.2.0`, not the `v0.1.0` referenced below, and the
+> dependency-manifest question in §2 was resolved via `requirements.txt`).
+> Treat this file as design-history context, not as the current contract.
 
 Status: **Design note / proposal only.** No adapter code is written by this
 document, and no existing Gadget behavior is changed. This is the deliverable

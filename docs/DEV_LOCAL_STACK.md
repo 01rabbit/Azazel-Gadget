@@ -69,6 +69,16 @@ is served in the browser:
 This is derived from the same live state the panel uses; no Pillow/Waveshare
 hardware libraries are required for the browser preview.
 
+**Caveat: the browser preview is a re-derived "digital twin," not a capture of
+the panel image.** `/dev/epd` is an independently-coded HTML/CSS approximation
+driven by the same input signals (mode, posture, SSID, suspicion) that feed the
+real panel — it does **not** run the physical rendering path
+(`py/azazel_epd.py`), which is bypassed in dev mode. Pixel parity with the
+physical E-Paper panel is therefore not guaranteed; treat `/dev/epd` as a
+content/state preview, not a pixel-accurate one. (Azazel-Edge's equivalent
+preview additionally serves a `/api/epd/preview.png` rendered by its real PIL
+renderer; Gadget's dev stack does not yet have that pixel-accurate path.)
+
 ## Notes and limitations
 
 - **Dry-run is enforced.** The controller runs the real decision loop, but
@@ -78,7 +88,9 @@ hardware libraries are required for the browser preview.
   and the dashboard shows Wi-Fi as disconnected — expected on a dev box.
 - **No web token in dev.** The UI is open on loopback only (`verify_token()`
   passes when no token file exists). Do not expose the dev port off-loopback.
-- **`azazel-common`** provides the shared status view-model; when installed
-  (it's in `requirements.txt`), `/api/state` includes a `status_view` field and
-  the controller emits `ui_status_view.json`. See
+- **`azazel-common`** (Azazel-Fabric, formerly Azazel-Common; the dist
+  becomes `azazel-fabric` from v0.3.0) provides the shared status
+  view-model; when installed (it's in `requirements.txt`), `/api/state`
+  includes a `status_view` field and the controller emits
+  `ui_status_view.json`. See
   [`concepts/azazel-common-usage.md`](concepts/azazel-common-usage.md).

@@ -4,6 +4,49 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- Rename follow-up: the upstream `Azazel-CTI` and `Azazel-Common` repositories
+  were renamed to `Azazel-Knowledge` (AZ-04, formal name Azazel-Knowledge
+  Advisor, repo `01rabbit/Azazel-Knowledge`) and `Azazel-Fabric` (AZ-05, repo
+  `01rabbit/Azazel-Fabric`) respectively. Updated all series references in
+  `README.md`, `README_ja.md`, `docs/INDEX.md`,
+  `docs/SERIES_POSITIONING_AND_TERMS.md`,
+  `docs/concepts/azazel-system-product-map.md`,
+  `docs/concepts/azazel-common-usage.md`, `docs/DEV_LOCAL_STACK.md`, and
+  `docs/DEV_LOCAL_STACK_JA.md` to the new names (each noting "formerly
+  Azazel-CTI" / "formerly Azazel-Common" once). `requirements.txt`'s pin now
+  points at `git+https://github.com/01rabbit/Azazel-Fabric.git@v0.2.0`; the
+  dist name stays `azazel-common` (unchanged by the v0.2.0 tag's pyproject).
+  `docs/concepts/azazel-common-adapter.md` and
+  `docs/concepts/azazel-common-usage.md` file names are intentionally
+  unchanged (linked from CHANGELOG history and the Fabric repo docs).
+- Import shim: `py/azazel_gadget/common_view.py` now tries the
+  `azazel_fabric` namespace first and falls back to `azazel_common`, so
+  Gadget is ready for Fabric's planned v0.3.0 rename of the dist to
+  `azazel-fabric` / import to `azazel_fabric` without a code change on
+  that day. No behavior change when neither namespace is installed. Related
+  comments in `py/azazel_gadget/control_plane.py`, `azazel_web/app.py`, and
+  `py/azazel_gadget/first_minute/controller.py` updated to describe the
+  shared view as "Fabric (azazel_fabric/azazel_common)". Tests in
+  `tests/test_common_view.py` made namespace-agnostic to match.
+- Docs: extended the series model beyond AZ-01/AZ-02 in `docs/INDEX.md`,
+  `docs/concepts/azazel-system-product-map.md`, and
+  `docs/SERIES_POSITIONING_AND_TERMS.md` to name the umbrella Azazel repository
+  (doctrine hub), Azazel-CTI (advisory-only knowledge-plane node, working name),
+  Azazel-Common (shared contracts library), and Azazel-Boot (AZ-03, reserved) —
+  while keeping AZ-01 Azazel-Edge and AZ-02 Azazel-Gadget as the series' two
+  device-class peer products.
+- Docs: added an "Azazel series" section to `README.md` and `README_ja.md`
+  summarizing the same repository roles.
+- Docs: `docs/DEV_LOCAL_STACK.md` and `docs/DEV_LOCAL_STACK_JA.md` now clarify
+  that the `/dev/epd` browser preview is a re-derived "digital twin" driven by
+  the same input signals as the panel, not a capture of the PIL-rendered image,
+  and that `py/azazel_epd.py` is bypassed in dev mode — so pixel parity with the
+  physical E-Paper panel is not guaranteed.
+- Docs: `docs/concepts/azazel-common-adapter.md` now carries a status header
+  marking it as the original integration plan, kept for history, superseded by
+  `docs/concepts/azazel-common-usage.md` where the two differ.
+
 ## [0.2.0] - 2026-07-09
 
 Aligned to **Azazel-Common v0.2.0**: Gadget now depends on the shared

@@ -60,6 +60,16 @@ dev の状態はすべて `~/.azazel-gadget-dev/` 配下に置かれ、`/run`・
 パネルと同じライブ状態から生成しており、ブラウザプレビューに Pillow/Waveshare
 などのハードウェアライブラリは不要です。
 
+**注意：このブラウザプレビューはパネル画像のキャプチャではなく、再現実装した
+「デジタルツイン」です。** `/dev/epd` は、実パネルに供給されるのと同じ入力信号
+（モード・姿勢・SSID・疑わしさ）から駆動される、独立実装の HTML/CSS 近似表示
+であり、実際の描画経路（`py/azazel_epd.py`）は通っていません（dev モードでは
+バイパスされます）。そのため実機 E-Paper パネルとのピクセル一致は保証されません。
+`/dev/epd` は内容・状態のプレビューであり、ピクセル精度のプレビューではないもの
+として扱ってください。（参考：Azazel-Edge の同等プレビューは、実際の PIL
+レンダラーが描画した `/api/epd/preview.png` も併せて提供します。Gadget の dev
+スタックには、まだこのピクセル精度の経路はありません。）
+
 ## 注意・制限
 
 - **dry-run が強制されます。** コントローラは実際の判断ループを回しますが、
@@ -70,7 +80,8 @@ dev の状態はすべて `~/.azazel-gadget-dev/` 配下に置かれ、`/run`・
 - **dev では Web トークンなし。** UI はループバックのみで開放されます
   （トークンファイルが無ければ `verify_token()` は通過）。dev ポートを
   ループバック外に晒さないでください。
-- **`azazel-common`** が共有ステータス・ビューモデルを提供します。導入時
+- **`azazel-common`**（Azazel-Fabric、旧称 Azazel-Common。v0.3.0 から配布名は
+  `azazel-fabric`）が共有ステータス・ビューモデルを提供します。導入時
   （`requirements.txt` に含む）は `/api/state` に `status_view` が付与され、
   コントローラが `ui_status_view.json` を出力します。詳細は
   [`concepts/azazel-common-usage.md`](concepts/azazel-common-usage.md)。

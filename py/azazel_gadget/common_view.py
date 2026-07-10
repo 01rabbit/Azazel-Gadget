@@ -1,14 +1,17 @@
-"""Adapter: Gadget UI snapshot -> shared `azazel_common` StatusView.
+"""Adapter: Gadget UI snapshot -> shared Fabric (azazel_fabric/azazel_common) StatusView.
 
 This is the emit-alongside step of `docs/concepts/azazel-common-adapter.md`:
 Gadget builds the shared status view-model *next to* its existing snapshot,
 without changing what any renderer currently reads. The Web UI / TUI / E-Paper
 renderers are switched to consume this view only after parity is confirmed.
 
-`azazel_common` is imported optionally. If it is not installed (it is pinned in
-`requirements.txt` to a tagged release), every function here becomes a safe
-no-op, so Gadget runs identically with or without the shared package — matching
-the guarded-import pattern already used for `requests`/`yaml`.
+The shared package is imported optionally, preferring the new `azazel_fabric`
+namespace (Azazel-Fabric, formerly Azazel-Common, from v0.3.0) and falling
+back to the legacy `azazel_common` namespace (still shipped by the pinned
+v0.2.0 tag in `requirements.txt`). If neither is installed, every function
+here becomes a safe no-op, so Gadget runs identically with or without the
+shared package — matching the guarded-import pattern already used for
+`requests`/`yaml`.
 
 Gadget is a peer of Edge, not a subset: the whole raw snapshot is carried in
 `StatusView.product_view`, so Gadget-only fields (the `attack{}` canary block,
@@ -22,8 +25,14 @@ import os
 from typing import Any, Dict, Iterable, List, Optional
 
 try:  # optional dependency — pinned in requirements.txt, absent is fine
-    from azazel_common.schema.mode import ModeState
-    from azazel_common.view import HealthDimension, StatusView, build_status_view
+    try:
+        # Azazel-Fabric (formerly Azazel-Common), from v0.3.0.
+        from azazel_fabric.schema.mode import ModeState
+        from azazel_fabric.view import HealthDimension, StatusView, build_status_view
+    except ImportError:
+        # Legacy namespace shipped by the pinned v0.2.0 tag.
+        from azazel_common.schema.mode import ModeState
+        from azazel_common.view import HealthDimension, StatusView, build_status_view
 
     HAVE_AZAZEL_COMMON = True
 except Exception:  # pragma: no cover - exercised only when the dep is absent
@@ -83,8 +92,9 @@ def status_view_from_snapshot(
 ) -> "Optional[StatusView]":
     """Build a shared `StatusView` from a Gadget UI snapshot dict.
 
-    Returns ``None`` if `azazel_common` is not installed. Never raises for
-    ordinary shape variation — missing keys degrade to defaults.
+    Returns ``None`` if neither `azazel_fabric` nor `azazel_common` is
+    installed. Never raises for ordinary shape variation — missing keys
+    degrade to defaults.
     """
     if not HAVE_AZAZEL_COMMON:
         return None
@@ -122,7 +132,7 @@ def write_status_view_alongside(
 
     For a snapshot at ``<dir>/ui_snapshot.json`` the view is written to
     ``<dir>/ui_status_view.json``. This never raises into the caller and does
-    nothing when `azazel_common` is absent.
+    nothing when neither `azazel_fabric` nor `azazel_common` is installed.
     """
     if not HAVE_AZAZEL_COMMON:
         return
