@@ -201,8 +201,8 @@ Azazel-Gadget (AZ-02) is one member of the Azazel series:
 | [01rabbit/Azazel-Edge](https://github.com/01rabbit/Azazel-Edge) (AZ-01) | Deterministic Edge SOC/NOC Gateway — peer device product |
 | **Azazel-Gadget (AZ-02, this repository)** | Personal Tactical Defense Gateway — peer device product |
 | Azazel-Boot (AZ-03) | Reserved series slot; no repository yet |
-| [01rabbit/Azazel-CTI](https://github.com/01rabbit/Azazel-CTI) | Advisory-only, deterministic, on-prem tactical CTI knowledge-plane node (working name). Pairs with Azazel-Edge; never commands, and Edge keeps final authority and works fully without it. Gadget has no current or planned CTI integration. |
-| [01rabbit/Azazel-Common](https://github.com/01rabbit/Azazel-Common) | Shared contracts library (distributed as `azazel-common`, installed via a pinned git tag). Gadget is its most complete consumer today — see [Using Azazel-Common in Gadget](docs/concepts/azazel-common-usage.md). |
+| [01rabbit/Azazel-Grimoire](https://github.com/01rabbit/Azazel-Grimoire) | AZ-04 Azazel-Grimoire (formerly Azazel-CTI, formal name Azazel-Grimoire Advisor). Advisory-only, deterministic, on-prem tactical CTI knowledge-plane node. Pairs with Azazel-Edge; never commands, and Edge keeps final authority and works fully without it. Gadget has no current or planned CTI integration. |
+| [01rabbit/Azazel-Covenant](https://github.com/01rabbit/Azazel-Covenant) | AZ-05 Azazel-Covenant (formerly Azazel-Common). Shared contracts library (distributed as `azazel-common`, installed via a pinned git tag; becomes `azazel-covenant` from v0.3.0). Gadget is its most complete consumer today — see [Using Azazel-Covenant in Gadget](docs/concepts/azazel-common-usage.md). |
 
 See [Series Positioning and Terms](docs/SERIES_POSITIONING_AND_TERMS.md) and
 [Azazel System Product Map](docs/concepts/azazel-system-product-map.md) for details.
@@ -216,7 +216,7 @@ Primary entry points:
 - [First-Contact Surface Relocation](docs/concepts/first-contact-surface-relocation.md)
 - [Azazel System Product Map](docs/concepts/azazel-system-product-map.md)
 - [Developer Local Stack (no hardware)](docs/DEV_LOCAL_STACK.md)
-- [Using Azazel-Common in Gadget](docs/concepts/azazel-common-usage.md)
+- [Using Azazel-Covenant in Gadget](docs/concepts/azazel-common-usage.md)
 - [Submission Demo Profile](docs/demo/submission-demo-profile.md)
 - [Demo Evidence Checklist](docs/demo/evidence-checklist.md)
 - [Series Positioning and Terms](docs/SERIES_POSITIONING_AND_TERMS.md)

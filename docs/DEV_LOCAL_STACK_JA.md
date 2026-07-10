@@ -80,7 +80,8 @@ dev の状態はすべて `~/.azazel-gadget-dev/` 配下に置かれ、`/run`・
 - **dev では Web トークンなし。** UI はループバックのみで開放されます
   （トークンファイルが無ければ `verify_token()` は通過）。dev ポートを
   ループバック外に晒さないでください。
-- **`azazel-common`** が共有ステータス・ビューモデルを提供します。導入時
+- **`azazel-common`**（Azazel-Covenant、旧称 Azazel-Common。v0.3.0 から配布名は
+  `azazel-covenant`）が共有ステータス・ビューモデルを提供します。導入時
   （`requirements.txt` に含む）は `/api/state` に `status_view` が付与され、
   コントローラが `ui_status_view.json` を出力します。詳細は
   [`concepts/azazel-common-usage.md`](concepts/azazel-common-usage.md)。

@@ -201,8 +201,8 @@ Azazel-Gadget（AZ-02）は Azazel シリーズを構成する製品の一つで
 | [01rabbit/Azazel-Edge](https://github.com/01rabbit/Azazel-Edge)（AZ-01） | 決定論的な Edge SOC/NOC ゲートウェイ — ピア製品 |
 | **Azazel-Gadget（AZ-02、本リポジトリ）** | パーソナル戦術防御ゲートウェイ — ピア製品 |
 | Azazel-Boot（AZ-03） | 予約済みシリーズ枠。リポジトリは未公開 |
-| [01rabbit/Azazel-CTI](https://github.com/01rabbit/Azazel-CTI) | 助言専用・決定論的なオンプレ戦術 CTI ノード（暫定名）。Azazel-Edge と対を成し、決して命令はせず、最終権限は常に Edge にあり、CTI ノードが不在でも Edge は完全に機能する。Gadget は現時点で CTI 連携を持たず、予定もない。 |
-| [01rabbit/Azazel-Common](https://github.com/01rabbit/Azazel-Common) | シリーズ共有の契約ライブラリ（配布名 `azazel-common`、git タグ固定でインストール）。Gadget は現時点で最も本格的な利用者 — 詳細は [Gadget での Azazel-Common 活用](docs/concepts/azazel-common-usage.md)を参照。 |
+| [01rabbit/Azazel-Grimoire](https://github.com/01rabbit/Azazel-Grimoire) | AZ-04 Azazel-Grimoire（旧称 Azazel-CTI、正式名 Azazel-Grimoire Advisor）。助言専用・決定論的なオンプレ戦術 CTI ナレッジプレーンノード。Azazel-Edge と対を成し、決して命令はせず、最終権限は常に Edge にあり、CTI ノードが不在でも Edge は完全に機能する。Gadget は現時点で CTI 連携を持たず、予定もない。 |
+| [01rabbit/Azazel-Covenant](https://github.com/01rabbit/Azazel-Covenant) | AZ-05 Azazel-Covenant（旧称 Azazel-Common）。シリーズ共有の契約ライブラリ（配布名 `azazel-common`、git タグ固定でインストール。v0.3.0 から `azazel-covenant`）。Gadget は現時点で最も本格的な利用者 — 詳細は [Gadget での Azazel-Covenant 活用](docs/concepts/azazel-common-usage.md)を参照。 |
 
 詳細は [Series Positioning and Terms](docs/SERIES_POSITIONING_AND_TERMS.md) および
 [Azazel System Product Map](docs/concepts/azazel-system-product-map.md) を参照してください。
@@ -216,7 +216,7 @@ Azazel-Gadget（AZ-02）は Azazel シリーズを構成する製品の一つで
 - [First-Contact Surface Relocation](docs/concepts/first-contact-surface-relocation.md)
 - [Azazel System Product Map](docs/concepts/azazel-system-product-map.md)
 - [開発用ローカルスタック（ハードウェア不要）](docs/DEV_LOCAL_STACK_JA.md)
-- [Gadget での Azazel-Common 活用](docs/concepts/azazel-common-usage.md)
+- [Gadget での Azazel-Covenant 活用](docs/concepts/azazel-common-usage.md)
 - [Submission Demo Profile](docs/demo/submission-demo-profile.md)
 - [Demo Evidence Checklist](docs/demo/evidence-checklist.md)
 - [Series Positioning and Terms](docs/SERIES_POSITIONING_AND_TERMS.md)
