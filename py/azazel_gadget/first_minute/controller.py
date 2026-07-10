@@ -1153,7 +1153,7 @@ class FirstMinuteController:
                 except Exception as e:
                     self.logger.debug(f"snapshot: failed to write {snap_path}: {e}")
 
-            # Emit-alongside: write the shared Covenant (azazel_covenant/
+            # Emit-alongside: write the shared Fabric (azazel_fabric/
             # azazel_common) StatusView next to the snapshot, without changing
             # what any renderer currently reads. No-op when neither namespace
             # is installed; never raises into the loop. See

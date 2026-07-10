@@ -15,18 +15,18 @@ appliances. The wider series also includes:
 - **Azazel** (umbrella) — the doctrine hub repository and project site for the
   series, not a device. Reference: [01rabbit/Azazel](https://github.com/01rabbit/Azazel).
 - **AZ-03 Azazel-Boot** — a reserved series slot; no repository exists yet.
-- **AZ-04 Azazel-Grimoire** (formerly Azazel-CTI; formal name Azazel-Grimoire
+- **AZ-04 Azazel-Knowledge** (formerly Azazel-CTI; formal name Azazel-Knowledge
   Advisor) — an advisory-only, deterministic, on-prem tactical CTI
   knowledge-plane node. It never commands: it returns threat context,
   confidence, and recommendations as advisory data only, and AZ-01 Azazel-Edge
   keeps final decision authority and keeps working fully without it. AZ-02
   Azazel-Gadget has no current or planned CTI integration; it is listed here
   only as a fellow series member. Reference:
-  [01rabbit/Azazel-Grimoire](https://github.com/01rabbit/Azazel-Grimoire).
-- **AZ-05 Azazel-Covenant** (formerly Azazel-Common) — a shared contracts library (distributed as `azazel-common`, installed via a pinned git tag; becomes `azazel-covenant` from v0.3.0), not a
+  [01rabbit/Azazel-Knowledge](https://github.com/01rabbit/Azazel-Knowledge).
+- **AZ-05 Azazel-Fabric** (formerly Azazel-Common) — a shared contracts library (distributed as `azazel-common`, installed via a pinned git tag; becomes `azazel-fabric` from v0.3.0), not a
   device, used across the series for schema/view interop. AZ-02 is its most
   complete consumer today. Reference:
-  [01rabbit/Azazel-Covenant](https://github.com/01rabbit/Azazel-Covenant).
+  [01rabbit/Azazel-Fabric](https://github.com/01rabbit/Azazel-Fabric).
 
 ## Canonical Terms
 

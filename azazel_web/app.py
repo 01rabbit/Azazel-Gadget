@@ -717,10 +717,10 @@ def read_state() -> Dict[str, Any]:
 
 
 def get_status_view() -> Optional[Dict[str, Any]]:
-    """Return the shared Covenant (azazel_covenant/azazel_common) StatusView if it is being emitted.
+    """Return the shared Fabric (azazel_fabric/azazel_common) StatusView if it is being emitted.
 
-    Aligns the dashboard with Azazel-Covenant (formerly Azazel-Common) v0.2.0:
-    when the shared view-model is present (azazel-covenant/azazel-common
+    Aligns the dashboard with Azazel-Fabric (formerly Azazel-Common) v0.2.0:
+    when the shared view-model is present (azazel-fabric/azazel-common
     installed on the device, so the controller emits ui_status_view.json), the
     UI can render from the same StatusView shape Edge uses. Absent -> None, and
     callers fall back to the existing state fields, so this never changes
@@ -1080,7 +1080,7 @@ def api_state():
     mode_state = get_mode_state()
     state["mode"] = mode_state.get("mode", {})
     state["mode_runtime"] = mode_state
-    # Shared Covenant (azazel_covenant/azazel_common) StatusView (v0.2.0), None when not emitted.
+    # Shared Fabric (azazel_fabric/azazel_common) StatusView (v0.2.0), None when not emitted.
     state["status_view"] = get_status_view()
     return jsonify(state)
 

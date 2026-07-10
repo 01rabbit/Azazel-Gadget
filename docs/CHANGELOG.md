@@ -6,28 +6,28 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 - Rename follow-up: the upstream `Azazel-CTI` and `Azazel-Common` repositories
-  were renamed to `Azazel-Grimoire` (AZ-04, formal name Azazel-Grimoire
-  Advisor, repo `01rabbit/Azazel-Grimoire`) and `Azazel-Covenant` (AZ-05, repo
-  `01rabbit/Azazel-Covenant`) respectively. Updated all series references in
+  were renamed to `Azazel-Knowledge` (AZ-04, formal name Azazel-Knowledge
+  Advisor, repo `01rabbit/Azazel-Knowledge`) and `Azazel-Fabric` (AZ-05, repo
+  `01rabbit/Azazel-Fabric`) respectively. Updated all series references in
   `README.md`, `README_ja.md`, `docs/INDEX.md`,
   `docs/SERIES_POSITIONING_AND_TERMS.md`,
   `docs/concepts/azazel-system-product-map.md`,
   `docs/concepts/azazel-common-usage.md`, `docs/DEV_LOCAL_STACK.md`, and
   `docs/DEV_LOCAL_STACK_JA.md` to the new names (each noting "formerly
   Azazel-CTI" / "formerly Azazel-Common" once). `requirements.txt`'s pin now
-  points at `git+https://github.com/01rabbit/Azazel-Covenant.git@v0.2.0`; the
+  points at `git+https://github.com/01rabbit/Azazel-Fabric.git@v0.2.0`; the
   dist name stays `azazel-common` (unchanged by the v0.2.0 tag's pyproject).
   `docs/concepts/azazel-common-adapter.md` and
   `docs/concepts/azazel-common-usage.md` file names are intentionally
-  unchanged (linked from CHANGELOG history and the Covenant repo docs).
+  unchanged (linked from CHANGELOG history and the Fabric repo docs).
 - Import shim: `py/azazel_gadget/common_view.py` now tries the
-  `azazel_covenant` namespace first and falls back to `azazel_common`, so
-  Gadget is ready for Covenant's planned v0.3.0 rename of the dist to
-  `azazel-covenant` / import to `azazel_covenant` without a code change on
+  `azazel_fabric` namespace first and falls back to `azazel_common`, so
+  Gadget is ready for Fabric's planned v0.3.0 rename of the dist to
+  `azazel-fabric` / import to `azazel_fabric` without a code change on
   that day. No behavior change when neither namespace is installed. Related
   comments in `py/azazel_gadget/control_plane.py`, `azazel_web/app.py`, and
   `py/azazel_gadget/first_minute/controller.py` updated to describe the
-  shared view as "Covenant (azazel_covenant/azazel_common)". Tests in
+  shared view as "Fabric (azazel_fabric/azazel_common)". Tests in
   `tests/test_common_view.py` made namespace-agnostic to match.
 - Docs: extended the series model beyond AZ-01/AZ-02 in `docs/INDEX.md`,
   `docs/concepts/azazel-system-product-map.md`, and

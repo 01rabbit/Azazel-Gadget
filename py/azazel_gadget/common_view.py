@@ -1,12 +1,12 @@
-"""Adapter: Gadget UI snapshot -> shared Covenant (azazel_covenant/azazel_common) StatusView.
+"""Adapter: Gadget UI snapshot -> shared Fabric (azazel_fabric/azazel_common) StatusView.
 
 This is the emit-alongside step of `docs/concepts/azazel-common-adapter.md`:
 Gadget builds the shared status view-model *next to* its existing snapshot,
 without changing what any renderer currently reads. The Web UI / TUI / E-Paper
 renderers are switched to consume this view only after parity is confirmed.
 
-The shared package is imported optionally, preferring the new `azazel_covenant`
-namespace (Azazel-Covenant, formerly Azazel-Common, from v0.3.0) and falling
+The shared package is imported optionally, preferring the new `azazel_fabric`
+namespace (Azazel-Fabric, formerly Azazel-Common, from v0.3.0) and falling
 back to the legacy `azazel_common` namespace (still shipped by the pinned
 v0.2.0 tag in `requirements.txt`). If neither is installed, every function
 here becomes a safe no-op, so Gadget runs identically with or without the
@@ -26,9 +26,9 @@ from typing import Any, Dict, Iterable, List, Optional
 
 try:  # optional dependency — pinned in requirements.txt, absent is fine
     try:
-        # Azazel-Covenant (formerly Azazel-Common), from v0.3.0.
-        from azazel_covenant.schema.mode import ModeState
-        from azazel_covenant.view import HealthDimension, StatusView, build_status_view
+        # Azazel-Fabric (formerly Azazel-Common), from v0.3.0.
+        from azazel_fabric.schema.mode import ModeState
+        from azazel_fabric.view import HealthDimension, StatusView, build_status_view
     except ImportError:
         # Legacy namespace shipped by the pinned v0.2.0 tag.
         from azazel_common.schema.mode import ModeState
@@ -92,7 +92,7 @@ def status_view_from_snapshot(
 ) -> "Optional[StatusView]":
     """Build a shared `StatusView` from a Gadget UI snapshot dict.
 
-    Returns ``None`` if neither `azazel_covenant` nor `azazel_common` is
+    Returns ``None`` if neither `azazel_fabric` nor `azazel_common` is
     installed. Never raises for ordinary shape variation — missing keys
     degrade to defaults.
     """
@@ -132,7 +132,7 @@ def write_status_view_alongside(
 
     For a snapshot at ``<dir>/ui_snapshot.json`` the view is written to
     ``<dir>/ui_status_view.json``. This never raises into the caller and does
-    nothing when neither `azazel_covenant` nor `azazel_common` is installed.
+    nothing when neither `azazel_fabric` nor `azazel_common` is installed.
     """
     if not HAVE_AZAZEL_COMMON:
         return

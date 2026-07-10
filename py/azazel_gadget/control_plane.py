@@ -135,12 +135,12 @@ def read_snapshot_payload(
 
 
 def read_status_view_from_files(logger: Any = None) -> Tuple[Optional[Dict[str, Any]], Optional[Path]]:
-    """Read the shared Covenant (azazel_covenant/azazel_common) StatusView written beside the snapshot.
+    """Read the shared Fabric (azazel_fabric/azazel_common) StatusView written beside the snapshot.
 
     The controller writes ``ui_status_view.json`` next to each ``ui_snapshot.json``
     (see ``azazel_gadget.common_view``). This returns that view as a dict, or
     ``(None, None)`` when it is absent — which is the normal state when
-    neither ``azazel-covenant`` nor ``azazel-common`` is installed on the device.
+    neither ``azazel-fabric`` nor ``azazel-common`` is installed on the device.
     """
     candidates = snapshot_path_candidates()
     runtime_only = [p for p in candidates if str(p).startswith("/run/")]
