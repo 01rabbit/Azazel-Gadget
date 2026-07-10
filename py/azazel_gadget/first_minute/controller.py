@@ -1153,10 +1153,10 @@ class FirstMinuteController:
                 except Exception as e:
                     self.logger.debug(f"snapshot: failed to write {snap_path}: {e}")
 
-            # Emit-alongside: write the shared Fabric (azazel_fabric/
-            # azazel_common) StatusView next to the snapshot, without changing
-            # what any renderer currently reads. No-op when neither namespace
-            # is installed; never raises into the loop. See
+            # Emit-alongside: write the shared Fabric (azazel_fabric)
+            # StatusView next to the snapshot, without changing what any
+            # renderer currently reads. No-op when the package is not
+            # installed; never raises into the loop. See
             # py/azazel_gadget/common_view.py.
             try:
                 from azazel_gadget.common_view import write_status_view_alongside

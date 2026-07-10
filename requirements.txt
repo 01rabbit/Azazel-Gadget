@@ -3,21 +3,15 @@
 # System packages are still provisioned by installer/stages/10_dependencies.sh
 # (apt: python3-yaml, python3-requests, ...). This manifest makes the
 # pip-installable deps declarative and reviewable, and is the home for the
-# shared azazel-common pin.
+# shared azazel-fabric pin.
 #
-# azazel-common provides the shared status view-model (azazel_common.view).
-# Pinned to an exact tag per Azazel-Fabric (formerly Azazel-Common)
-# design-principles.md §6. The code imports it optionally (see
-# py/azazel_gadget/common_view.py), so Gadget runs with or without it
-# installed; installing this manifest activates the shared view-model.
-# Requires Azazel-Common v0.2.0 to be released.
-#
-# The dist name stays `azazel-common` here because the v0.2.0 tag's pyproject
-# defines it that way; only the URL follows the repo rename
-# (01rabbit/Azazel-Common -> 01rabbit/Azazel-Fabric). From v0.3.0 the dist
-# becomes `azazel-fabric` with import `azazel_fabric` — bump this pin and
-# drop the azazel_fabric/azazel_common fallback in common_view.py then.
-azazel-common @ git+https://github.com/01rabbit/Azazel-Fabric.git@v0.2.0
+# azazel-fabric provides the shared status view-model (azazel_fabric.view).
+# Pinned to an exact tag per Azazel-Fabric design-principles.md §6 (tag
+# pinning, not floating version ranges, for the shared-contracts package).
+# The code imports it optionally (see py/azazel_gadget/common_view.py), so
+# Gadget runs with or without it installed; installing this manifest
+# activates the shared view-model.
+azazel-fabric @ git+https://github.com/01rabbit/Azazel-Fabric.git@v0.3.0
 
 requests>=2.32,<3
 PyYAML>=6,<7

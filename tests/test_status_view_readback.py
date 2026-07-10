@@ -1,7 +1,7 @@
 """Tests for reading the shared StatusView back through control_plane.
 
-This exercises the read side only (plain JSON), so it needs neither
-azazel_fabric nor azazel_common and runs in CI unconditionally.
+This exercises the read side only (plain JSON), so it needs no azazel_fabric
+dependency and runs in CI unconditionally.
 """
 
 import json

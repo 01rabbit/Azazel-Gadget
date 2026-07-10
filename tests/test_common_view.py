@@ -1,9 +1,8 @@
-"""Tests for the Gadget -> Fabric (azazel_fabric/azazel_common) StatusView adapter.
+"""Tests for the Gadget -> Fabric (azazel_fabric) StatusView adapter.
 
-Skipped when neither azazel_fabric nor azazel_common is installed (it is an
-optional, tag-pinned dependency), so this suite stays green in CI environments
-that do not install it. Locally, install azazel-fabric (or azazel-common for
-the pinned v0.2.0 tag) to exercise the mapping.
+Skipped when azazel_fabric is not installed (it is an optional, tag-pinned
+dependency), so this suite stays green in CI environments that do not install
+it. Locally, install azazel-fabric to exercise the mapping.
 """
 
 import sys
@@ -37,7 +36,7 @@ SAMPLE_SNAPSHOT = {
 
 @unittest.skipUnless(
     common_view.HAVE_AZAZEL_COMMON,
-    "azazel_fabric/azazel_common not installed (optional dependency)",
+    "azazel_fabric not installed (optional dependency)",
 )
 class StatusViewAdapterTest(unittest.TestCase):
     def test_maps_core_fields(self):
@@ -66,10 +65,7 @@ class StatusViewAdapterTest(unittest.TestCase):
         self.assertIn("suricata", keys)
 
     def test_round_trip_json(self):
-        try:  # namespace-agnostic: match whichever the shim resolved
-            from azazel_fabric.view import StatusView
-        except ImportError:
-            from azazel_common.view import StatusView
+        from azazel_fabric.view import StatusView
 
         view = common_view.status_view_from_snapshot(SAMPLE_SNAPSHOT, mode_name="shield")
         restored = StatusView.model_validate_json(view.model_dump_json())
@@ -77,11 +73,11 @@ class StatusViewAdapterTest(unittest.TestCase):
 
 
 class AdapterNoCommonTest(unittest.TestCase):
-    """These must hold whether or not azazel_fabric/azazel_common is installed."""
+    """These must hold whether or not azazel_fabric is installed."""
 
     def test_no_common_is_safe_noop(self):
         if common_view.HAVE_AZAZEL_COMMON:
-            self.skipTest("azazel_fabric/azazel_common installed; no-op path covered elsewhere")
+            self.skipTest("azazel_fabric installed; no-op path covered elsewhere")
         self.assertIsNone(common_view.status_view_from_snapshot(SAMPLE_SNAPSHOT))
         # Must not raise even with no paths / no dependency.
         common_view.write_status_view_alongside(SAMPLE_SNAPSHOT, [], mode_name="shield")

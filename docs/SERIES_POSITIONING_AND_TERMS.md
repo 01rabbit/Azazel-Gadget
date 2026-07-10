@@ -23,7 +23,7 @@ appliances. The wider series also includes:
   Azazel-Gadget has no current or planned CTI integration; it is listed here
   only as a fellow series member. Reference:
   [01rabbit/Azazel-Knowledge](https://github.com/01rabbit/Azazel-Knowledge).
-- **AZ-05 Azazel-Fabric** (formerly Azazel-Common) — a shared contracts library (distributed as `azazel-common`, installed via a pinned git tag; becomes `azazel-fabric` from v0.3.0), not a
+- **AZ-05 Azazel-Fabric** (formerly Azazel-Common) — a shared contracts library (distributed as `azazel-fabric`, installed via a pinned git tag), not a
   device, used across the series for schema/view interop. AZ-02 is its most
   complete consumer today. Reference:
   [01rabbit/Azazel-Fabric](https://github.com/01rabbit/Azazel-Fabric).

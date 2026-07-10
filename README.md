@@ -202,7 +202,7 @@ Azazel-Gadget (AZ-02) is one member of the Azazel series:
 | **Azazel-Gadget (AZ-02, this repository)** | Personal Tactical Defense Gateway — peer device product |
 | Azazel-Boot (AZ-03) | Reserved series slot; no repository yet |
 | [01rabbit/Azazel-Knowledge](https://github.com/01rabbit/Azazel-Knowledge) | AZ-04 Azazel-Knowledge (formerly Azazel-CTI, formal name Azazel-Knowledge Advisor). Advisory-only, deterministic, on-prem tactical CTI knowledge-plane node. Pairs with Azazel-Edge; never commands, and Edge keeps final authority and works fully without it. Gadget has no current or planned CTI integration. |
-| [01rabbit/Azazel-Fabric](https://github.com/01rabbit/Azazel-Fabric) | AZ-05 Azazel-Fabric (formerly Azazel-Common). Shared contracts library (distributed as `azazel-common`, installed via a pinned git tag; becomes `azazel-fabric` from v0.3.0). Gadget is its most complete consumer today — see [Using Azazel-Fabric in Gadget](docs/concepts/azazel-common-usage.md). |
+| [01rabbit/Azazel-Fabric](https://github.com/01rabbit/Azazel-Fabric) | AZ-05 Azazel-Fabric (formerly Azazel-Common). Shared contracts library (distributed as `azazel-fabric`, installed via a pinned git tag). Gadget is its most complete consumer today — see [Using Azazel-Fabric in Gadget](docs/concepts/azazel-common-usage.md). |
 
 See [Series Positioning and Terms](docs/SERIES_POSITIONING_AND_TERMS.md) and
 [Azazel System Product Map](docs/concepts/azazel-system-product-map.md) for details.
