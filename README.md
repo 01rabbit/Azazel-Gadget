@@ -200,7 +200,7 @@ designations, and doctrine live in the umbrella repository:
 
 Gadget-local integration note: Gadget consumes the shared
 [Azazel-Fabric](https://github.com/01rabbit/Azazel-Fabric) contracts
-(`azazel-fabric` pinned at v0.3.0, StatusView emit + read-back) — see
+(`azazel-fabric` pinned at v0.4.0, StatusView emit + read-back) — see
 [Using Azazel-Fabric in Gadget](docs/concepts/azazel-common-usage.md).
 
 ## Documentation Map

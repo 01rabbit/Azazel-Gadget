@@ -11,9 +11,9 @@ This page documents what Gadget uses from Fabric today and how it flows through
 the system. For the full call-site plan see
 [`azazel-common-adapter.md`](azazel-common-adapter.md).
 
-## What Gadget uses today (v0.3.0)
+## What Gadget uses today (v0.4.0)
 
-Gadget depends on `azazel-fabric @ v0.3.0` (pinned in `requirements.txt` to
+Gadget depends on `azazel-fabric @ v0.4.0` (pinned in `requirements.txt` to
 a tag on the `01rabbit/Azazel-Fabric` repository) and uses
 **`azazel_fabric.view`** — the shared **status view-model**:
 
@@ -73,12 +73,47 @@ AZ-02 to "Edge minus features."
 `azazel-fabric` is installed with the pip requirements:
 
 ```bash
-pip install -r requirements.txt   # includes azazel-fabric @ v0.3.0 (from 01rabbit/Azazel-Fabric)
+pip install -r requirements.txt   # includes azazel-fabric @ v0.4.0 (from 01rabbit/Azazel-Fabric)
 ```
 
 On a developer machine, `bin/azazel-gadget-devstack up` runs the controller and
 web with Fabric installed, so you can see `status_view` in `/api/state` and the
 EPD content at `/dev/epd`. See [`../DEV_LOCAL_STACK.md`](../DEV_LOCAL_STACK.md).
+
+## v0.4.0 module evaluation
+
+Fabric v0.4.0 adds `azazel_fabric.paths`, `.audit`, `.api`, `.notify`, and
+`.testing`. Each was evaluated against Gadget's existing code for a genuine,
+zero-behavior-change adoption:
+
+- **`azazel_fabric.testing`** (factories + invariant assertions): evaluated
+  against `tests/test_common_view.py` and `tests/test_status_view_readback.py`,
+  the two suites that touch Fabric shapes. Neither hand-builds a Fabric model
+  that the factories would simplify — `test_common_view.py` exercises
+  `common_view.status_view_from_snapshot()` against a Gadget-native snapshot
+  dict (not a Fabric model) and only *parses* a `StatusView` back
+  (`model_validate_json`) for its round-trip check; `test_status_view_readback.py`
+  deliberately uses a bare, partial JSON dict so the suite stays
+  `azazel_fabric`-free and runs unconditionally in CI. Adopting the factories
+  there would force a hard `azazel_fabric` install onto a suite whose stated
+  purpose is to run without it. No change made.
+- **`azazel_fabric.notify`** (`to_ntfy_payload`/`to_mattermost_payload`):
+  Gadget's `py/azazel_gadget/first_minute/notifier.py` (`NtfyNotifier`) posts
+  to ntfy's plain-text publish endpoint with the title/priority/tags carried
+  as HTTP *headers* and the body as the raw POST payload. Fabric's
+  `to_ntfy_payload` returns a `{title, message, priority, tags}` **JSON body**
+  shape for ntfy's JSON publish API — not byte-equivalent to what Gadget
+  sends today. Gadget has no Mattermost integration. Not a drop-in — skipped.
+- **`azazel_fabric.api` token helpers** (`extract_token`/`token_matches`):
+  Gadget's `verify_token()` in `azazel_web/app.py` fail-*opens* when no token
+  file is configured, also accepts a `?token=` query-string fallback, and
+  compares with `==`. Fabric's `token_matches` is fail-closed (denies when no
+  expected token), header-only, and constant-time. Different semantics by
+  design — not a drop-in — skipped, matching the expectation set for this
+  module.
+- **`azazel_fabric.paths` / `.audit`**: no current Gadget call site exercises
+  candidate-dir hinting or chain-free audit JSONL formatting; left for a
+  future pass rather than force-fit here.
 
 ## Roadmap
 
@@ -86,6 +121,9 @@ EPD content at `/dev/epd`. See [`../DEV_LOCAL_STACK.md`](../DEV_LOCAL_STACK.md).
   *primarily* from `status_view`, once field parity is confirmed in the UI.
   Today they read the existing snapshot and `status_view` is exposed alongside.
 - **Future Fabric modules:** `azazel_fabric.paths` (Gadget's existing
-  `path_schema` is the reference input), `azazel_fabric.audit`, and
-  `azazel_fabric.notify` are later Fabric phases Gadget can adopt where they
-  remove real duplication.
+  `path_schema` is the reference input) and `azazel_fabric.audit` are later
+  Fabric phases Gadget can adopt where they remove real duplication.
+  `azazel_fabric.notify` and the `azazel_fabric.api` token helpers were
+  evaluated at v0.4.0 and are not drop-ins for Gadget's current
+  ntfy/token-auth code (see above); revisit only as part of a deliberate
+  behavior change, not a pin bump.
