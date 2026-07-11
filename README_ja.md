@@ -200,7 +200,7 @@ AZ 番号・ドクトリンは傘リポジトリ
 
 Gadget 固有の統合ノート: Gadget は共有契約ライブラリ
 [Azazel-Fabric](https://github.com/01rabbit/Azazel-Fabric)
-(`azazel-fabric` v0.3.0 固定、StatusView の emit + 読み戻し)を利用しています —
+(`azazel-fabric` v0.4.0 固定、StatusView の emit + 読み戻し)を利用しています —
 詳細は [Gadget での Azazel-Fabric 活用](docs/concepts/azazel-common-usage.md)。
 ## Documentation Map
 

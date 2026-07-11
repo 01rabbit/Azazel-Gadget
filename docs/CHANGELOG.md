@@ -6,6 +6,24 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Migrated to **Azazel-Fabric v0.4.0**: `requirements.txt` now pins
+  `azazel-fabric @ git+https://github.com/01rabbit/Azazel-Fabric.git@v0.4.0`
+  (drop-in, zero behavior change). `docs/concepts/azazel-common-usage.md`
+  updated to the new pin and now documents an evaluation of the four new
+  v0.4.0 modules (`azazel_fabric.paths`, `.audit`, `.api`, `.notify`,
+  `.testing`) against Gadget's current code: `azazel_fabric.testing`
+  factories/invariants were evaluated against `tests/test_common_view.py`
+  and `tests/test_status_view_readback.py` but not adopted — neither suite
+  hand-builds a Fabric model the factories would simplify, and
+  `test_status_view_readback.py` intentionally stays `azazel_fabric`-free so
+  it runs unconditionally in CI; `azazel_fabric.notify`'s ntfy/Mattermost
+  payload mappers are not byte-equivalent to Gadget's existing
+  `NtfyNotifier` (header-based ntfy publish vs. Fabric's JSON-body shape),
+  and Gadget has no Mattermost integration; the `azazel_fabric.api` token
+  helpers are fail-closed/header-only/constant-time while Gadget's
+  `verify_token()` is fail-open-when-unconfigured with a query-param
+  fallback — neither is a drop-in, so both were left as-is. `README.md` /
+  `README_ja.md` pin mentions bumped to v0.4.0.
 - Series-list consolidation (owner decision): product repositories no longer
   carry the full Azazel series table — it lives only in the umbrella
   repository (01rabbit/Azazel). README (EN/JA), docs/INDEX.md,
