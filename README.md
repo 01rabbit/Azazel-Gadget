@@ -193,19 +193,15 @@ Token auth:
 
 ## Azazel Series
 
-Azazel-Gadget (AZ-02) is one member of the Azazel series:
+Azazel-Gadget (**AZ-02**, codename `TACMOD`) is one product of the **Azazel**
+series ("Cyber Scapegoat Gateway"). The series map, naming specification, AZ
+designations, and doctrine live in the umbrella repository:
+[01rabbit/Azazel](https://github.com/01rabbit/Azazel).
 
-| Repository | Role |
-|---|---|
-| [01rabbit/Azazel](https://github.com/01rabbit/Azazel) | Umbrella doctrine hub and project site ("Cyber Scapegoat Gateway") |
-| [01rabbit/Azazel-Edge](https://github.com/01rabbit/Azazel-Edge) (AZ-01) | Deterministic Edge SOC/NOC Gateway — peer device product |
-| **Azazel-Gadget (AZ-02, this repository)** | Personal Tactical Defense Gateway — peer device product |
-| Azazel-Boot (AZ-03) | Reserved series slot; no repository yet |
-| [01rabbit/Azazel-Knowledge](https://github.com/01rabbit/Azazel-Knowledge) | AZ-04 Azazel-Knowledge (formerly Azazel-CTI, formal name Azazel-Knowledge Advisor). Advisory-only, deterministic, on-prem tactical CTI knowledge-plane node. Pairs with Azazel-Edge; never commands, and Edge keeps final authority and works fully without it. Gadget has no current or planned CTI integration. |
-| [01rabbit/Azazel-Fabric](https://github.com/01rabbit/Azazel-Fabric) | AZ-05 Azazel-Fabric (formerly Azazel-Common). Shared contracts library (distributed as `azazel-fabric`, installed via a pinned git tag). Gadget is its most complete consumer today — see [Using Azazel-Fabric in Gadget](docs/concepts/azazel-common-usage.md). |
-
-See [Series Positioning and Terms](docs/SERIES_POSITIONING_AND_TERMS.md) and
-[Azazel System Product Map](docs/concepts/azazel-system-product-map.md) for details.
+Gadget-local integration note: Gadget consumes the shared
+[Azazel-Fabric](https://github.com/01rabbit/Azazel-Fabric) contracts
+(`azazel-fabric` pinned at v0.3.0, StatusView emit + read-back) — see
+[Using Azazel-Fabric in Gadget](docs/concepts/azazel-common-usage.md).
 
 ## Documentation Map
 

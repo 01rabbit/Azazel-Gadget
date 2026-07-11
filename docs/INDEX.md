@@ -4,29 +4,12 @@ This index provides series-level entry points and repository-local documentation
 
 ## Azazel Series Positioning
 
-- Azazel (umbrella): Doctrine hub and project site for the series — "Cyber Scapegoat Gateway".  
-  Reference repository: [01rabbit/Azazel](https://github.com/01rabbit/Azazel) · [Project site](https://01rabbit.github.io/Azazel/)
-- AZ-01 Azazel-Edge: Deterministic Edge SOC/NOC Gateway  
-  Reference repository: [01rabbit/Azazel-Edge](https://github.com/01rabbit/Azazel-Edge)
-- AZ-02 Azazel-Gadget: Personal Tactical Defense Gateway (this repository)  
-  Repository: [01rabbit/Azazel-Gadget](https://github.com/01rabbit/Azazel-Gadget)
-- AZ-03 Azazel-Boot: Reserved series member; no repository published yet.
-- AZ-04 Azazel-Knowledge (formerly Azazel-CTI; formal name Azazel-Knowledge
-  Advisor): advisory-only, deterministic, on-prem tactical CTI knowledge-plane
-  node. It never commands; it pairs with Azazel-Edge, which retains final
-  decision authority and keeps working fully without it. Azazel-Gadget has no
-  current or planned CTI integration and is listed here only as a fellow
-  series member.  
-  Reference repository: [01rabbit/Azazel-Knowledge](https://github.com/01rabbit/Azazel-Knowledge)
-- AZ-05 Azazel-Fabric (formerly Azazel-Common): Shared contracts library (distributed as `azazel-fabric`, installed via a pinned git tag) used across the
-  series for schema/view interop. Azazel-Gadget is its most complete consumer today
-  (pinned at v0.3.0; see [azazel-common-usage.md](concepts/azazel-common-usage.md)).  
-  Reference repository: [01rabbit/Azazel-Fabric](https://github.com/01rabbit/Azazel-Fabric)
-
-AZ-01 (Edge) and AZ-02 (Gadget) remain the series' two device-class products; the
-entries above are the doctrine hub, a reserved future device, and shared
-infrastructure/knowledge-plane components around them.
-
+Azazel-Gadget (**AZ-02**, codename `TACMOD`) is one product of the Azazel
+series. Its device-class peer is
+[Azazel-Edge](https://github.com/01rabbit/Azazel-Edge) (AZ-01). The full
+series map, AZ designations, and naming specification live in the umbrella
+repository: [01rabbit/Azazel](https://github.com/01rabbit/Azazel) ·
+[Project site](https://01rabbit.github.io/Azazel/).
 ## Primary Documents (This Repository)
 
 | Path | Audience | Purpose |
