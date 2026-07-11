@@ -217,6 +217,8 @@ Primary entry points:
 - [Demo Evidence Checklist](docs/demo/evidence-checklist.md)
 - [Series Positioning and Terms](docs/SERIES_POSITIONING_AND_TERMS.md)
 - [Security Claim Policy](docs/SECURITY_CLAIM_POLICY.md)
+- [Security Policy (vulnerability reporting)](SECURITY.md)
+- [Contributing](CONTRIBUTING.md)
 - [Installer Guide](installer/README.md)
 - [Release Process](docs/RELEASE_PROCESS.md)
 - [Release Notes Template](docs/RELEASE_NOTES_TEMPLATE.md)

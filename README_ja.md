@@ -216,6 +216,8 @@ Gadget 固有の統合ノート: Gadget は共有契約ライブラリ
 - [Demo Evidence Checklist](docs/demo/evidence-checklist.md)
 - [Series Positioning and Terms](docs/SERIES_POSITIONING_AND_TERMS.md)
 - [Security Claim Policy](docs/SECURITY_CLAIM_POLICY.md)
+- [Security Policy（脆弱性報告）](SECURITY.md)
+- [Contributing](CONTRIBUTING.md)
 - [Installer Guide](installer/README.md)
 - [Release Process](docs/RELEASE_PROCESS.md)
 - [Release Notes Template](docs/RELEASE_NOTES_TEMPLATE.md)

@@ -4,6 +4,15 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `SECURITY.md` (vulnerability reporting: private GitHub Security Advisory,
+  scope, response targets, supported versions) and `CONTRIBUTING.md`
+  (branch/commit conventions, PR checklist, testing) at the repo root.
+  `README.md` / `README_ja.md` Documentation Map now link both. See also
+  `docs/SECURITY_CLAIM_POLICY.md`, which governs what the project claims
+  (distinct from `SECURITY.md`, which governs vulnerability reporting).
+
 ### Changed
 
 - Migrated to **Azazel-Fabric v0.4.0**: `requirements.txt` now pins
