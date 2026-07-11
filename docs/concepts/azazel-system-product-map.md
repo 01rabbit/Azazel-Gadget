@@ -29,22 +29,7 @@ AZ-02 is not a reduced AZ-01. It is a peer product with a different deployment c
 
 ## Rest of the Azazel Series
 
-AZ-01 and AZ-02 are the series' two device-class products. The wider series adds a
-doctrine hub, a reserved future device, and shared infrastructure components — none
-of which are peer devices of AZ-01/AZ-02:
-
-- **Azazel (umbrella)** — the doctrine hub repository and project site for the whole
-  series ("Cyber Scapegoat Gateway"). Reference: [01rabbit/Azazel](https://github.com/01rabbit/Azazel) ·
-  [Project site](https://01rabbit.github.io/Azazel/)
-- **AZ-03 Azazel-Boot** — reserved series slot; no repository published yet.
-- **AZ-04 Azazel-Knowledge** (formerly Azazel-CTI; formal name Azazel-Knowledge
-  Advisor) — an advisory-only, deterministic, on-prem tactical CTI
-  knowledge-plane node. It never commands; it pairs with AZ-01 Azazel-Edge,
-  which retains final decision authority and keeps working fully without it.
-  AZ-02 Azazel-Gadget has no current or planned CTI integration. Reference:
-  [01rabbit/Azazel-Knowledge](https://github.com/01rabbit/Azazel-Knowledge)
-- **AZ-05 Azazel-Fabric** (formerly Azazel-Common) — the shared contracts library (distributed as `azazel-fabric`, installed via a pinned git tag) that
-  AZ-01 and AZ-02 draw on for interoperable schema/view shapes. AZ-02 is its most
-  complete consumer today (pinned at v0.3.0); see
-  [azazel-common-usage.md](azazel-common-usage.md). Reference:
-  [01rabbit/Azazel-Fabric](https://github.com/01rabbit/Azazel-Fabric)
+The full series map (umbrella hub, AZ-03 Azazel-Boot reserved slot,
+AZ-04 Azazel-Knowledge Advisor, AZ-05 Azazel-Fabric Contract) is maintained in
+the umbrella repository: [01rabbit/Azazel](https://github.com/01rabbit/Azazel).
+This document intentionally covers only the AZ-01/AZ-02 device relationship.

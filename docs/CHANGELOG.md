@@ -5,6 +5,15 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Changed
+
+- Series-list consolidation (owner decision): product repositories no longer
+  carry the full Azazel series table — it lives only in the umbrella
+  repository (01rabbit/Azazel). README (EN/JA), docs/INDEX.md,
+  SERIES_POSITIONING_AND_TERMS.md, and azazel-system-product-map.md now keep
+  a short membership pointer (AZ-02, codename TACMOD) plus Gadget-local
+  integration notes only.
+
+### Changed
 - Migrated to **Azazel-Fabric v0.3.0**: `requirements.txt` now pins
   `azazel-fabric @ git+https://github.com/01rabbit/Azazel-Fabric.git@v0.3.0`
   (dist name `azazel-fabric`, import namespace `azazel_fabric` — the
