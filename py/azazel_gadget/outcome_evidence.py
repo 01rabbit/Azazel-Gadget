@@ -1,8 +1,8 @@
 """Low-cost, non-authoritative Outcome-as-Evidence projection for Gadget.
 
 Gadget contributes execution/mechanism/outcome facts from its local deterministic
-controls.  It deliberately does not label DELAY, DIVERT, success, attacker
-belief, or global initiative.  Higher-level assessment belongs outside Gadget.
+controls. It deliberately does not label DELAY, DIVERT, success, attacker
+belief, or global initiative. Higher-level assessment belongs outside Gadget.
 """
 
 from __future__ import annotations
@@ -15,22 +15,43 @@ from typing import Any, Mapping
 
 _ALLOWED_EXECUTION_STATUS = {"applied", "partial", "failed", "rejected", "unverified", "released"}
 _ALLOWED_MECHANISMS = {
-    "traffic_shaping",
-    "redirection",
-    "isolation",
-    "notification",
-    "observation_only",
-    "unknown",
+    "traffic_shaping", "redirection", "isolation", "notification",
+    "observation_only", "unknown",
 }
 _ALLOWED_MECHANISM_STATUS = {"observed", "not_observed", "unverified", "released", "stale", "disputed"}
 _BANNED_KEYS = {
     "effect_class", "tactical_effect", "success", "successful", "attacker_belief",
-    "model_recommendation", "execute", "approve", "override", "select_action",
+    "model_recommendation", "execute", "execution_command", "provider_command",
+    "command", "commands", "approve", "approval", "override", "arbiter_override",
+    "auto_execute", "select_action", "selected_action",
 }
 _MAX_MAP_ITEMS = 48
 _MAX_LIST_ITEMS = 96
 _MAX_STRING = 1024
 _MAX_DEPTH = 5
+
+
+def _normalized_key(raw: str) -> str:
+    normalized = "".join(ch.lower() if ch.isalnum() else "_" for ch in raw.strip())
+    while "__" in normalized:
+        normalized = normalized.replace("__", "_")
+    return normalized.strip("_")
+
+
+def _is_forbidden_key(raw: str) -> bool:
+    key = _normalized_key(raw)
+    return (
+        key in _BANNED_KEYS
+        or "provider_command" in key
+        or key.endswith("_command")
+        or key.startswith("command_")
+        or key.startswith("success_")
+        or key.endswith("_success")
+        or "attacker_belief" in key
+        or "model_recommendation" in key
+        or "effect_class" in key
+        or "tactical_effect" in key
+    )
 
 
 def _validate_bounded(value: Any, *, depth: int = 0) -> None:
@@ -48,8 +69,10 @@ def _validate_bounded(value: Any, *, depth: int = 0) -> None:
         for key, child in value.items():
             if not isinstance(key, str):
                 raise ValueError("evidence keys must be strings")
-            if key.strip().lower() in _BANNED_KEYS:
+            if _is_forbidden_key(key):
                 raise ValueError(f"forbidden tactical/authority field: {key}")
+            if len(key) > 128:
+                raise ValueError("evidence payload contains oversized key")
             _validate_bounded(child, depth=depth + 1)
         return
     if isinstance(value, (list, tuple)):
@@ -61,7 +84,45 @@ def _validate_bounded(value: Any, *, depth: int = 0) -> None:
     raise ValueError(f"unsupported evidence value: {type(value).__name__}")
 
 
+def _require_text(label: str, value: Any, *, optional: bool = False) -> None:
+    if optional and value is None:
+        return
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{label} must be a non-empty string")
+    if len(value) > _MAX_STRING:
+        raise ValueError(f"{label} is oversized")
+
+
+def _require_refs(label: str, value: tuple[str, ...]) -> None:
+    if not isinstance(value, tuple) or len(value) > _MAX_LIST_ITEMS:
+        raise ValueError(f"{label} must be a bounded tuple")
+    for item in value:
+        _require_text(label, item)
+
+
+def _require_chain_fields(
+    *,
+    producer_product: str,
+    producer_node: str,
+    trace_id: str,
+    decision_ref: str,
+    execution_ref: str,
+    observed_at: str,
+) -> None:
+    for label, value in (
+        ("producer_product", producer_product),
+        ("producer_node", producer_node),
+        ("trace_id", trace_id),
+        ("decision_ref", decision_ref),
+        ("execution_ref", execution_ref),
+        ("observed_at", observed_at),
+    ):
+        _require_text(label, value)
+
+
 def _stable_id(prefix: str, *parts: str) -> str:
+    for index, part in enumerate(parts):
+        _require_text(f"id_part_{index}", part)
     raw = "|".join(parts).encode("utf-8")
     return prefix + "-" + hashlib.sha256(raw).hexdigest()[:24]
 
@@ -88,8 +149,17 @@ class LocalExecutionFact:
             raise ValueError("invalid execution status")
         if self.authority_class != "producer_execution_fact":
             raise ValueError("invalid execution authority class")
-        if not all((self.producer_node, self.trace_id, self.decision_ref, self.execution_ref, self.action, self.observed_at)):
-            raise ValueError("execution fact requires non-empty identity fields")
+        _require_chain_fields(
+            producer_product=self.producer_product,
+            producer_node=self.producer_node,
+            trace_id=self.trace_id,
+            decision_ref=self.decision_ref,
+            execution_ref=self.execution_ref,
+            observed_at=self.observed_at,
+        )
+        _require_text("action", self.action)
+        _require_text("release_ref", self.release_ref, optional=True)
+        _require_refs("evidence_refs", self.evidence_refs)
 
 
 @dataclass(frozen=True)
@@ -118,6 +188,19 @@ class LocalMechanismFact:
             raise ValueError("invalid mechanism status")
         if self.authority_class != "producer_mechanism_fact":
             raise ValueError("invalid mechanism authority class")
+        _require_chain_fields(
+            producer_product=self.producer_product,
+            producer_node=self.producer_node,
+            trace_id=self.trace_id,
+            decision_ref=self.decision_ref,
+            execution_ref=self.execution_ref,
+            observed_at=self.observed_at,
+        )
+        _require_text("observation_id", self.observation_id)
+        _require_refs("evidence_refs", self.evidence_refs)
+        _require_refs("limitations", self.limitations)
+        if not isinstance(self.observed_parameters, Mapping):
+            raise ValueError("observed_parameters must be a mapping")
         _validate_bounded(self.observed_parameters)
 
 
@@ -151,9 +234,30 @@ class LocalOutcomeFact:
             raise ValueError("invalid observation phase")
         if self.authority_class != "producer_outcome_fact":
             raise ValueError("invalid outcome authority class")
-        _validate_bounded(self.observation_values)
-        _validate_bounded(self.telemetry_coverage)
-        _validate_bounded(self.resource_impact)
+        _require_chain_fields(
+            producer_product=self.producer_product,
+            producer_node=self.producer_node,
+            trace_id=self.trace_id,
+            decision_ref=self.decision_ref,
+            execution_ref=self.execution_ref,
+            observed_at=self.observed_at,
+        )
+        _require_text("observation_id", self.observation_id)
+        _require_text("mechanism_observation_ref", self.mechanism_observation_ref, optional=True)
+        _require_text("subject_ref", self.subject_ref, optional=True)
+        _require_text("window_start", self.window_start)
+        _require_text("window_end", self.window_end)
+        _require_text("observation_class", self.observation_class)
+        _require_refs("confounders", self.confounders)
+        _require_refs("evidence_refs", self.evidence_refs)
+        for label, value in (
+            ("observation_values", self.observation_values),
+            ("telemetry_coverage", self.telemetry_coverage),
+            ("resource_impact", self.resource_impact),
+        ):
+            if not isinstance(value, Mapping):
+                raise ValueError(f"{label} must be a mapping")
+            _validate_bounded(value)
 
 
 def build_execution_fact(
@@ -226,25 +330,34 @@ def build_outcome_fact(
 ) -> LocalOutcomeFact:
     """Build a conservative pre/post fact without tactical interpretation."""
 
+    if before_metrics is not None and not isinstance(before_metrics, Mapping):
+        raise ValueError("before_metrics must be a mapping or None")
+    if after_metrics is not None and not isinstance(after_metrics, Mapping):
+        raise ValueError("after_metrics must be a mapping or None")
     before = dict(before_metrics or {})
     after = dict(after_metrics or {})
     _validate_bounded(before)
     _validate_bounded(after)
     confounders: list[str] = []
     coverage = {
-        "before_present": bool(before_metrics),
-        "after_present": bool(after_metrics),
+        "before_present": before_metrics is not None,
+        "after_present": after_metrics is not None,
     }
     values: dict[str, Any] = {"before": before, "after": after}
-    if not before_metrics:
+    if before_metrics is None:
         confounders.append("missing_pre_telemetry")
-    if not after_metrics:
+    if after_metrics is None:
         confounders.append("missing_post_telemetry")
 
     deltas: dict[str, float] = {}
     for key in sorted(set(before) & set(after)):
         left, right = before[key], after[key]
-        if isinstance(left, (int, float)) and isinstance(right, (int, float)) and not isinstance(left, bool) and not isinstance(right, bool):
+        if (
+            isinstance(left, (int, float))
+            and isinstance(right, (int, float))
+            and not isinstance(left, bool)
+            and not isinstance(right, bool)
+        ):
             if right >= left:
                 deltas[key] = float(right - left)
             else:
@@ -311,8 +424,8 @@ class BoundedEvidenceSpool:
     def drain(self, limit: int | None = None) -> list[str]:
         if limit is None:
             limit = len(self._items)
-        if limit < 0:
-            raise ValueError("limit must be non-negative")
+        if not isinstance(limit, int) or isinstance(limit, bool) or limit < 0:
+            raise ValueError("limit must be a non-negative integer")
         result: list[str] = []
         for _ in range(min(limit, len(self._items))):
             result.append(self._items.popleft())
