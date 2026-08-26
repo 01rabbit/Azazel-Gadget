@@ -15,8 +15,9 @@ from azazel_gadget.tactics_engine.decision_logger import (
 )
 
 
-def decision(*, action: str = "contain") -> DecisionRecord:
+def decision(*, action: str = "contain", action_type: str = "action") -> DecisionRecord:
     state = StateSnapshot(state="NORMAL", user_state="NORMAL", suspicion=0.5, risk_score=50)
+    detail = {"action": action} if action_type == "action" else {"target_stage": action}
     return DecisionRecord(
         ts="2026-08-26T00:00:00Z",
         decision_id="decision-1",
@@ -27,7 +28,7 @@ def decision(*, action: str = "contain") -> DecisionRecord:
         state_before=state,
         score_delta=ScoreDelta(),
         constraints_triggered=[],
-        chosen=[ChosenAction(action_type="action", detail={"action": action})],
+        chosen=[ChosenAction(action_type=action_type, detail=detail)],
         state_after=state,
         parse_errors={},
     )
@@ -58,6 +59,14 @@ class OutcomeDecisionBridgeTests(unittest.TestCase):
             bridge_decision_to_execution(
                 decision(action="contain"),
                 observation(observed_action="release"),
+                node_id="gadget-1",
+            )
+
+    def test_transition_only_decision_cannot_correlate_execution(self):
+        with self.assertRaisesRegex(ValueError, "no explicit chosen action"):
+            bridge_decision_to_execution(
+                decision(action="contain", action_type="transition"),
+                observation(observed_action="contain"),
                 node_id="gadget-1",
             )
 
