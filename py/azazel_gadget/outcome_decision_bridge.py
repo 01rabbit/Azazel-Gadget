@@ -1,14 +1,14 @@
 """Conservative bridge from Tactics Engine decisions to Outcome-as-Evidence facts.
 
-A DecisionRecord is intent/audit evidence only.  It is never sufficient to
-create an execution fact.  Callers must provide a separate observation from
+A DecisionRecord is intent/audit evidence only. It is never sufficient to
+create an execution fact. Callers must provide a separate observation from
 the component that actually attempted/applied the local mechanism.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping, Any
+from typing import Any, Mapping
 
 from azazel_gadget.outcome_evidence import (
     LocalExecutionFact,
@@ -31,8 +31,8 @@ class LocalExecutionObservation:
     """Independent local observation made after a decision.
 
     ``observed_action`` is the action the execution layer reports it actually
-    attempted.  It must match one of the decision's chosen action details;
-    absence/mismatch fails closed rather than guessing from state_after.
+    attempted. It must match an explicit ``ChosenAction(action_type='action')``;
+    transitions and state changes are not execution evidence.
     """
 
     observed_action: str
@@ -60,16 +60,21 @@ class LocalExecutionObservation:
 
 
 def _decision_actions(record: DecisionRecord) -> set[str]:
+    """Return only actions explicitly selected as executable actions.
+
+    A ``transition`` to CONTAIN/DECEPTION is state intent, not proof that the
+    corresponding nft/tc operation was attempted. It must never authorize this
+    bridge by itself.
+    """
+
     actions: set[str] = set()
     for chosen in record.chosen:
+        if str(chosen.action_type).strip().lower() != "action":
+            continue
         detail = chosen.detail if isinstance(chosen.detail, dict) else {}
-        for key in ("action", "stage", "target_stage", "name"):
-            value = detail.get(key)
-            if isinstance(value, str) and value.strip():
-                actions.add(value.strip().lower())
-        # Existing records sometimes carry the action in the action_type itself.
-        if chosen.action_type not in {"transition", "action", "constraint"}:
-            actions.add(str(chosen.action_type).strip().lower())
+        value = detail.get("action")
+        if isinstance(value, str) and value.strip():
+            actions.add(value.strip().lower())
     return actions
 
 
@@ -81,7 +86,7 @@ def bridge_decision_to_execution(
 ) -> tuple[LocalExecutionFact, LocalMechanismFact | None]:
     """Project independently observed execution after a deterministic decision.
 
-    Decision-only input is deliberately rejected.  The bridge does not infer an
+    Decision-only input is deliberately rejected. The bridge does not infer an
     execution from ``state_after`` and never emits DELAY/DIVERT/tactical success.
     """
 
