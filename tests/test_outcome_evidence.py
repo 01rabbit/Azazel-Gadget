@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 import unittest
 from pathlib import Path
@@ -57,6 +56,27 @@ class OutcomeEvidenceTests(unittest.TestCase):
             self.assertNotIn("delay", encoded.lower())
             self.assertNotIn("divert", encoded.lower())
 
+    def test_wire_shape_matches_shared_execution_and_mechanism_contracts(self):
+        execution_payload = json.loads(canonical_fact_json(self.execution()))
+        self.assertEqual(
+            set(execution_payload),
+            {
+                "schema_version", "producer_product", "producer_node", "trace_id",
+                "decision_ref", "execution_ref", "action", "status", "observed_at",
+                "evidence_refs", "release_ref", "authority_class",
+            },
+        )
+        mechanism_payload = json.loads(canonical_fact_json(self.mechanism()))
+        self.assertEqual(
+            set(mechanism_payload),
+            {
+                "schema_version", "observation_id", "producer_product", "producer_node",
+                "trace_id", "decision_ref", "execution_ref", "mechanism_kind", "status",
+                "observed_parameters", "observed_at", "evidence_refs", "limitations",
+                "authority_class",
+            },
+        )
+
     def test_unknown_mechanism_is_allowed_without_upgrade(self):
         mechanism = self.mechanism(mechanism_kind="unknown", status="unverified")
         self.assertEqual(mechanism.mechanism_kind, "unknown")
@@ -68,11 +88,26 @@ class OutcomeEvidenceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.mechanism(mechanism_kind="divert")
 
-    def test_nested_success_or_authority_field_is_rejected(self):
+    def test_nested_success_or_authority_key_variants_are_rejected(self):
+        for key, value in (
+            ("success", True),
+            ("success-rate", 1.0),
+            ("select_action", "isolate"),
+            ("provider-command", "nft add rule"),
+            ("attacker belief", "fooled"),
+            ("tactical-effect", "delay"),
+        ):
+            with self.subTest(key=key):
+                with self.assertRaises(ValueError):
+                    self.mechanism(observed_parameters={"nested": {key: value}})
+
+    def test_empty_identity_or_reference_is_rejected(self):
         with self.assertRaises(ValueError):
-            self.mechanism(observed_parameters={"nested": {"success": True}})
+            self.execution(node_id="")
         with self.assertRaises(ValueError):
-            self.mechanism(observed_parameters={"nested": {"select_action": "isolate"}})
+            self.execution(trace_id="   ")
+        with self.assertRaises(ValueError):
+            self.mechanism(evidence_refs=("",))
 
     def test_missing_telemetry_becomes_confounder_not_success(self):
         execution = self.execution()
@@ -88,9 +123,27 @@ class OutcomeEvidenceTests(unittest.TestCase):
             after_metrics={"rx_packets": 20},
         )
         self.assertIn("missing_pre_telemetry", outcome.confounders)
+        self.assertFalse(outcome.telemetry_coverage["before_present"])
         payload = json.loads(canonical_fact_json(outcome))
         self.assertNotIn("success", payload)
         self.assertNotIn("tactical_effect", payload)
+
+    def test_empty_but_present_telemetry_is_not_mislabeled_missing(self):
+        execution = self.execution()
+        outcome = build_outcome_fact(
+            execution,
+            self.mechanism(execution),
+            subject_ref=None,
+            window_start="a",
+            window_end="b",
+            phase="after",
+            observed_at="b",
+            before_metrics={},
+            after_metrics={},
+        )
+        self.assertTrue(outcome.telemetry_coverage["before_present"])
+        self.assertTrue(outcome.telemetry_coverage["after_present"])
+        self.assertNotIn("missing_pre_telemetry", outcome.confounders)
 
     def test_counter_decrease_is_counter_reset_not_negative_improvement(self):
         execution = self.execution()
@@ -137,11 +190,14 @@ class OutcomeEvidenceTests(unittest.TestCase):
         self.assertEqual(json.loads(drained[0])["observed_at"], "original-ts")
         self.assertEqual(spool.depth, 0)
 
-    def test_bounded_spool_capacity_is_bounded(self):
+    def test_bounded_spool_capacity_and_drain_limit_are_bounded(self):
         with self.assertRaises(ValueError):
             BoundedEvidenceSpool(max_entries=0)
         with self.assertRaises(ValueError):
             BoundedEvidenceSpool(max_entries=4097)
+        spool = BoundedEvidenceSpool(max_entries=1)
+        with self.assertRaises(ValueError):
+            spool.drain(limit=True)
 
     def test_direct_construction_rejects_bad_mechanism_status(self):
         with self.assertRaises(ValueError):
@@ -154,7 +210,7 @@ class OutcomeEvidenceTests(unittest.TestCase):
                 decision_ref="d",
                 execution_ref="e",
                 mechanism_kind="unknown",
-                status="applied",  # execution status, not mechanism observation status
+                status="applied",
                 observed_parameters={},
                 observed_at="now",
             )
