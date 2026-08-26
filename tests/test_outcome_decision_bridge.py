@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import pytest
+import unittest
 
 from azazel_gadget.outcome_decision_bridge import (
     LocalExecutionObservation,
@@ -48,45 +48,48 @@ def observation(**overrides) -> LocalExecutionObservation:
     return LocalExecutionObservation(**values)
 
 
-def test_decision_alone_cannot_create_execution_fact():
-    with pytest.raises(ValueError, match="decision alone"):
-        bridge_decision_to_execution(decision(), None, node_id="gadget-1")
+class OutcomeDecisionBridgeTests(unittest.TestCase):
+    def test_decision_alone_cannot_create_execution_fact(self):
+        with self.assertRaisesRegex(ValueError, "decision alone"):
+            bridge_decision_to_execution(decision(), None, node_id="gadget-1")
 
+    def test_observed_action_must_match_explicit_decision_action(self):
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            bridge_decision_to_execution(
+                decision(action="contain"),
+                observation(observed_action="release"),
+                node_id="gadget-1",
+            )
 
-def test_observed_action_must_match_explicit_decision_action():
-    with pytest.raises(ValueError, match="does not match"):
-        bridge_decision_to_execution(
-            decision(action="contain"),
-            observation(observed_action="release"),
+    def test_matching_observation_projects_execution_and_mechanism_without_tactical_effect(self):
+        execution, mechanism = bridge_decision_to_execution(
+            decision(), observation(), node_id="gadget-1"
+        )
+        self.assertEqual(execution.decision_ref, "decision-1")
+        self.assertEqual(execution.action, "contain")
+        self.assertEqual(execution.status, "applied")
+        self.assertIsNotNone(mechanism)
+        assert mechanism is not None
+        self.assertEqual(mechanism.mechanism_kind, "isolation")
+        self.assertEqual(mechanism.status, "observed")
+        self.assertFalse(hasattr(execution, "effect_class"))
+        self.assertFalse(hasattr(mechanism, "tactical_effect"))
+
+    def test_unverified_mechanism_remains_unverified_with_limitation(self):
+        _, mechanism = bridge_decision_to_execution(
+            decision(),
+            observation(mechanism_status="unverified", mechanism_evidence_refs=()),
             node_id="gadget-1",
         )
+        self.assertIsNotNone(mechanism)
+        assert mechanism is not None
+        self.assertEqual(mechanism.status, "unverified")
+        self.assertIn("mechanism_not_independently_verified", mechanism.limitations)
+
+    def test_mechanism_parameters_without_kind_are_rejected(self):
+        with self.assertRaisesRegex(ValueError, "require mechanism_kind"):
+            observation(mechanism_kind=None, mechanism_parameters={"x": 1})
 
 
-def test_matching_observation_projects_execution_and_mechanism_without_tactical_effect():
-    execution, mechanism = bridge_decision_to_execution(
-        decision(), observation(), node_id="gadget-1"
-    )
-    assert execution.decision_ref == "decision-1"
-    assert execution.action == "contain"
-    assert execution.status == "applied"
-    assert mechanism is not None
-    assert mechanism.mechanism_kind == "isolation"
-    assert mechanism.status == "observed"
-    assert not hasattr(execution, "effect_class")
-    assert not hasattr(mechanism, "tactical_effect")
-
-
-def test_unverified_mechanism_remains_unverified_with_limitation():
-    _, mechanism = bridge_decision_to_execution(
-        decision(),
-        observation(mechanism_status="unverified", mechanism_evidence_refs=()),
-        node_id="gadget-1",
-    )
-    assert mechanism is not None
-    assert mechanism.status == "unverified"
-    assert "mechanism_not_independently_verified" in mechanism.limitations
-
-
-def test_mechanism_parameters_without_kind_are_rejected():
-    with pytest.raises(ValueError, match="require mechanism_kind"):
-        observation(mechanism_kind=None, mechanism_parameters={"x": 1})
+if __name__ == "__main__":
+    unittest.main()
