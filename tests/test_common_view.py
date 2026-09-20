@@ -1,10 +1,21 @@
 """Tests for the Gadget -> Fabric (azazel_fabric) StatusView adapter.
 
-Skipped when azazel_fabric is not installed (it is an optional, tag-pinned
-dependency), so this suite stays green in CI environments that do not install
-it. Locally, install azazel-fabric to exercise the mapping.
+Skipped when azazel_fabric is not installed, because it is an optional,
+tag-pinned dependency and a contributor without it must still get a green
+run. `pip install -r requirements.txt` installs it.
+
+**That skip used to apply to this repository's own CI**, which installed
+PyYAML alone. The four cases below are the only ones that exercise the
+adapter, so nothing here ran on any commit: the pinned Fabric tag could have
+been changed to a broken one, or to a release that renamed `StatusView`, and
+CI would have stayed green while reporting the same test count.
+
+CI now installs the manifest, and `CiInstallsFabricTest` below fails if it
+ever stops -- a skip that is correct on a laptop is not correct on the
+machine whose green run is the evidence.
 """
 
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -81,6 +92,33 @@ class AdapterNoCommonTest(unittest.TestCase):
         self.assertIsNone(common_view.status_view_from_snapshot(SAMPLE_SNAPSHOT))
         # Must not raise even with no paths / no dependency.
         common_view.write_status_view_alongside(SAMPLE_SNAPSHOT, [], mode_name="shield")
+
+
+class CiInstallsFabricTest(unittest.TestCase):
+    """The adapter suite above must not be skipped on CI.
+
+    Every other test here is guarded by `skipUnless(HAVE_AZAZEL_COMMON)`, and
+    a skipped test reports success. So "the adapter is covered" is a claim
+    about the CI environment, not about this file, and nothing was checking
+    it -- CI installed PyYAML only, and all four cases silently skipped on
+    every commit.
+
+    This is the check. Outside CI it skips, because a contributor without the
+    optional dependency should still get a green run; on CI it fails, naming
+    the manifest as the fix. `CI` is set to "true" by GitHub Actions on every
+    step of every run.
+    """
+
+    def test_the_adapter_suite_is_not_skipped_on_ci(self):
+        if os.environ.get("CI", "").lower() != "true":
+            self.skipTest("not running on CI; azazel_fabric is optional locally")
+        self.assertTrue(
+            common_view.HAVE_AZAZEL_COMMON,
+            "azazel_fabric is not installed on CI, so every StatusView adapter "
+            "test above is skipping and the pinned Fabric tag is unverified. "
+            "Install the manifest in .github/workflows/ci-tests.yml "
+            "(`pip install -r requirements.txt`).",
+        )
 
 
 if __name__ == "__main__":

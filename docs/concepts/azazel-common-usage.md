@@ -11,9 +11,9 @@ This page documents what Gadget uses from Fabric today and how it flows through
 the system. For the full call-site plan see
 [`azazel-common-adapter.md`](azazel-common-adapter.md).
 
-## What Gadget uses today (v0.4.0)
+## What Gadget uses today (v0.8.0)
 
-Gadget depends on `azazel-fabric @ v0.4.0` (pinned in `requirements.txt` to
+Gadget depends on `azazel-fabric @ v0.8.0` (pinned in `requirements.txt` to
 a tag on the `01rabbit/Azazel-Fabric` repository) and uses
 **`azazel_fabric.view`** — the shared **status view-model**:
 
@@ -73,12 +73,48 @@ AZ-02 to "Edge minus features."
 `azazel-fabric` is installed with the pip requirements:
 
 ```bash
-pip install -r requirements.txt   # includes azazel-fabric @ v0.4.0 (from 01rabbit/Azazel-Fabric)
+pip install -r requirements.txt   # includes azazel-fabric @ v0.8.0 (from 01rabbit/Azazel-Fabric)
 ```
 
 On a developer machine, `bin/azazel-gadget-devstack up` runs the controller and
 web with Fabric installed, so you can see `status_view` in `/api/state` and the
 EPD content at `/dev/epd`. See [`../DEV_LOCAL_STACK.md`](../DEV_LOCAL_STACK.md).
+
+## The v0.4.0 -> v0.8.0 bump
+
+A drop-in, and measured rather than assumed. The complete set of modules
+Gadget imports -- `view/__init__.py`, `view/build.py`, `view/status.py`, and
+the `schema/mode.py`, `schema/action.py`, `schema/state.py`,
+`schema/evidence.py` they pull in, which is the whole transitive closure --
+is **byte-identical between v0.4.0 and v0.8.0**. So are Fabric's own
+`dependencies` (`pydantic>=2,<3`) and `requires-python` (`>=3.10`). Feeding
+one snapshot through `status_view_from_snapshot()` produces the same
+`StatusView` JSON, byte for byte, at either version.
+
+What v0.5.0-v0.8.0 add is entirely new files: `deception_contracts`,
+`engagement_contracts`, `deception_integrity`, and the matching
+`azazel_fabric.testing` helpers. Gadget uses none of them -- it is not a
+deception host, it does not produce engagement records, and it does not
+verify signed Edge decision envelopes -- and Fabric imports submodules on
+demand, so carrying them costs nothing at import time.
+
+**Why not v0.9.0rc2**, which Deception and Knowledge pin. It is a release
+candidate, and it adds contract families (`outcome_contracts`,
+`provisioning_contracts`, `mio_contracts`, `schema.defensive_state`) that
+Gadget does not use. AZ-06 documents its own rc2 pin as a deliberate, narrow
+deviation from the exact-stable-tag policy, justified by needing
+`schema.defensive_state`. Gadget has no such need, so pinning a candidate
+would buy instability for nothing and force another bump when `v0.9.0` is
+cut.
+
+**CI now installs the manifest**, so the pin is exercised rather than
+declared. It previously installed PyYAML alone, which meant the four
+`tests/test_common_view.py` cases -- the only ones that touch the adapter --
+were skipped on every run, and the pinned tag could have been changed to
+anything with CI still green. `CiInstallsFabricTest` fails if that ever
+regresses. `tests/test_status_view_readback.py` stays deliberately
+`azazel_fabric`-free, as described below; that is unchanged and still
+correct, since it covers the read side as plain JSON.
 
 ## v0.4.0 module evaluation
 
