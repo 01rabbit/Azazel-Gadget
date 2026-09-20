@@ -24,7 +24,7 @@ Examples: `feat/scapegoat-mode-toggle`, `fix/web-token-refresh`, `docs/readme-ma
 
 - 1 PR = 1 purpose. Do not mix unrelated changes.
 - Every PR must include:
-  - [ ] `python -m unittest discover -s tests` passes (40 baseline — never reduce)
+  - [ ] `python -m unittest discover -s tests` passes (61 baseline — never reduce)
   - [ ] No overclaiming: claims must be verifiable from the implementation
         (the readme-guard CI enforces part of this; `docs/SECURITY_CLAIM_POLICY.md`
         governs the rest)

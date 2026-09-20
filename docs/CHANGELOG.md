@@ -6,6 +6,15 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- CI now runs the Fabric StatusView adapter tests. `.github/workflows/ci-tests.yml`
+  installs `requirements.txt` instead of PyYAML alone, so the pinned
+  `azazel-fabric` tag is exercised on every run, and
+  `tests/test_common_view.py::CiInstallsFabricTest` fails if CI ever stops
+  installing it. Before this, the four adapter cases were skipped on every
+  commit: the pin could have been changed to a broken tag, or to a release
+  that renamed `StatusView`, with CI still green and the test count unchanged.
+  A contributor without the optional dependency still gets a green local run.
+
 - `SECURITY.md` (vulnerability reporting: private GitHub Security Advisory,
   scope, response targets, supported versions) and `CONTRIBUTING.md`
   (branch/commit conventions, PR checklist, testing) at the repo root.
@@ -14,6 +23,21 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (distinct from `SECURITY.md`, which governs vulnerability reporting).
 
 ### Changed
+
+- Migrated to **Azazel-Fabric v0.8.0** (the latest *stable* tag):
+  `requirements.txt` now pins
+  `azazel-fabric @ git+https://github.com/01rabbit/Azazel-Fabric.git@v0.8.0`.
+  Drop-in, and verified rather than assumed: the whole transitive closure
+  Gadget imports (`view/{__init__,build,status}.py` plus `schema/{mode,action,
+  state,evidence}.py`) is byte-identical between v0.4.0 and v0.8.0, Fabric's
+  own `dependencies` and `requires-python` are unchanged, the suite is green
+  at both, and one snapshot produces the same `StatusView` JSON byte for byte
+  at either version. v0.5.0-v0.8.0 add only new files
+  (`deception_contracts`, `engagement_contracts`, `deception_integrity`),
+  none of which Gadget uses. **Not** pinned to `v0.9.0rc2`, which Deception
+  and Knowledge carry: it is a release candidate whose additions Gadget does
+  not use, so it would buy instability for nothing and force another bump
+  when `v0.9.0` is cut. See `docs/concepts/azazel-common-usage.md`.
 
 - Migrated to **Azazel-Fabric v0.4.0**: `requirements.txt` now pins
   `azazel-fabric @ git+https://github.com/01rabbit/Azazel-Fabric.git@v0.4.0`

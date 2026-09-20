@@ -31,10 +31,16 @@ jobs:
         with:
           python-version: "3.11"
 
+      # Installs the manifest rather than a hand-listed set, so the
+      # azazel-fabric tag pinned in requirements.txt is the thing CI
+      # exercises. Before this, CI installed PyYAML only, so the four
+      # tests/test_common_view.py cases -- the only ones that touch the
+      # Fabric adapter -- were skipped on every run, and the pin could have
+      # been changed to any tag, including a broken one, with CI still green.
       - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install PyYAML
+          python -m pip install -r requirements.txt
 
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
