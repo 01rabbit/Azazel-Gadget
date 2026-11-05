@@ -6,7 +6,7 @@ without changing what any renderer currently reads. The Web UI / TUI / E-Paper
 renderers are switched to consume this view only after parity is confirmed.
 
 The shared package is imported optionally from the `azazel_fabric` namespace
-(Azazel-Fabric, formerly Azazel-Common, pinned at v0.3.0 in
+(Azazel-Fabric, formerly Azazel-Common, pinned in
 `requirements.txt`). If it is not installed, every function here becomes a
 safe no-op, so Gadget runs identically with or without the shared package —
 matching the guarded-import pattern already used for `requests`/`yaml`.
