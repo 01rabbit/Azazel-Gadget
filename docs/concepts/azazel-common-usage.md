@@ -11,9 +11,9 @@ This page documents what Gadget uses from Fabric today and how it flows through
 the system. For the full call-site plan see
 [`azazel-common-adapter.md`](azazel-common-adapter.md).
 
-## What Gadget uses today (v0.8.0)
+## What Gadget uses today (v0.9.0)
 
-Gadget depends on `azazel-fabric @ v0.8.0` (pinned in `requirements.txt` to
+Gadget depends on `azazel-fabric @ v0.9.0` (pinned in `requirements.txt` to
 a tag on the `01rabbit/Azazel-Fabric` repository) and uses
 **`azazel_fabric.view`** — the shared **status view-model**:
 
@@ -73,7 +73,7 @@ AZ-02 to "Edge minus features."
 `azazel-fabric` is installed with the pip requirements:
 
 ```bash
-pip install -r requirements.txt   # includes azazel-fabric @ v0.8.0 (from 01rabbit/Azazel-Fabric)
+pip install -r requirements.txt   # includes azazel-fabric @ v0.9.0 (from 01rabbit/Azazel-Fabric)
 ```
 
 On a developer machine, `bin/azazel-gadget-devstack up` runs the controller and
@@ -98,7 +98,20 @@ deception host, it does not produce engagement records, and it does not
 verify signed Edge decision envelopes -- and Fabric imports submodules on
 demand, so carrying them costs nothing at import time.
 
-**Why not v0.9.0rc2**, which Deception and Knowledge pin. It is a release
+**Upgrade to v0.9.0 (stable).** Same basis as above: the transitive closure
+Gadget imports (`view/*`, `schema/mode.py`, `schema/action.py`,
+`schema/state.py`, `schema/evidence.py`) has no diff between the v0.8.0 and
+v0.9.0 tags, and Fabric's `dependencies` and `requires-python` are unchanged.
+v0.9.0's only non-additive change -- a depth limit of 32 in
+`deception_contracts.assert_no_runtime_directives` /
+`assert_no_effectiveness_verdict` and
+`engagement_contracts.assert_no_engagement_directives` -- does not apply,
+because Gadget imports none of them. `cti_contracts` is experimental in
+v0.9.0 (no compatibility promise); Gadget does not import it. Fabric records
+Gadget as using the view and `schema.mode` only (Azazel-Gadget#22).
+
+**Why Gadget did not pin v0.9.0rc2 while v0.8.0 was the latest stable**
+(historical), which Deception and Knowledge pin. It is a release
 candidate, and it adds contract families (`outcome_contracts`,
 `provisioning_contracts`, `mio_contracts`, `schema.defensive_state`) that
 Gadget does not use. AZ-06 documents its own rc2 pin as a deliberate, narrow

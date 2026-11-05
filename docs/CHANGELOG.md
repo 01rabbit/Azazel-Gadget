@@ -24,6 +24,15 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Migrated to **Azazel-Fabric v0.9.0** (stable, signed release digest
+  verified): `requirements.txt` now pins `@v0.9.0`. Gadget imports only
+  `azazel_fabric.view` and `azazel_fabric.schema.mode`; the modules in that
+  closure have no diff between v0.8.0 and v0.9.0. v0.9.0's only non-additive
+  change (32-level depth limit in the `deception_contracts` /
+  `engagement_contracts` `assert_no_*` helpers) and the experimental
+  `cti_contracts` do not affect Gadget, which uses none of them. Rollback:
+  set the pin back to `@v0.8.0`. See `docs/concepts/azazel-common-usage.md`.
+
 - Migrated to **Azazel-Fabric v0.8.0** (the latest *stable* tag):
   `requirements.txt` now pins
   `azazel-fabric @ git+https://github.com/01rabbit/Azazel-Fabric.git@v0.8.0`.

@@ -12,11 +12,11 @@
 # Gadget runs with or without it installed; installing this manifest
 # activates the shared view-model.
 #
-# v0.8.0 is the latest *stable* tag. Fabric also publishes v0.9.0rc candidates,
-# and Gadget deliberately does not pin one: the candidate adds contract
-# families Gadget does not use, so pinning it would buy instability for
-# nothing and force another bump when v0.9.0 is cut.
-azazel-fabric @ git+https://github.com/01rabbit/Azazel-Fabric.git@v0.8.0
+# v0.9.0 is the latest *stable* tag (signed release digest verified). Gadget
+# uses only azazel_fabric.view and azazel_fabric.schema.mode, whose source is
+# unchanged since v0.8.0, and does not use the experimental cti_contracts or
+# any candidate/contract family. See docs/concepts/azazel-common-usage.md.
+azazel-fabric @ git+https://github.com/01rabbit/Azazel-Fabric.git@v0.9.0
 
 requests>=2.32,<3
 PyYAML>=6,<7
