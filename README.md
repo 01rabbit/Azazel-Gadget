@@ -241,3 +241,5 @@ Primary entry points:
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE).
+
+- [Optional field overview](docs/FIELD_OVERVIEW.md)

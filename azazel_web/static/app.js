@@ -41,12 +41,14 @@ async function fetchState() {
         
         if (!data.ok) {
             showToast(`Error: ${data.error}`, 'error');
+            document.dispatchEvent(new CustomEvent('gadget:state-error'));
             displayErrorState();
             return;
         }
         
         updateUI(data);
     } catch (e) {
+        document.dispatchEvent(new CustomEvent('gadget:state-error'));
         console.error('Failed to fetch state:', e);
         showToast('Connection error', 'error');
     }
@@ -241,6 +243,7 @@ function updateUI(state) {
     updateElement('sysCPUTemp', `${state.temp_c || '--'}°C`);
     updateElement('sysCPUUsage', `${state.cpu_percent || '--'}%`);
     updateElement('sysMemUsage', `${state.mem_percent || '--'}%`);
+    document.dispatchEvent(new CustomEvent('gadget:state', {detail: state}));
 }
 
 // Map state names between different systems
@@ -358,6 +361,7 @@ async function switchMode(targetMode) {
         return;
     }
 
+    document.dispatchEvent(new CustomEvent('gadget:mode-request', {detail: {target:mode,phase:'pending'}}));
     modeSwitchInFlight = true;
     updateElement('modeNote', `Switching -> ${mode.toUpperCase()} ...`);
     ['modePortalBtn', 'modeShieldBtn', 'modeScapegoatBtn'].forEach((id) => {
@@ -376,11 +380,14 @@ async function switchMode(targetMode) {
         });
         const data = await res.json();
         if (!res.ok || !data.ok) {
+            document.dispatchEvent(new CustomEvent('gadget:mode-request', {detail: {target:mode,phase:'failed'}}));
             showToast(`Mode switch failed: ${data.error || 'unknown error'}`, 'error');
         } else {
-            showToast(`Mode switched to ${mode.toUpperCase()}`, 'success');
+            document.dispatchEvent(new CustomEvent('gadget:mode-request', {detail: {target:mode,phase:'accepted'}}));
+            showToast(`Mode request accepted for ${mode.toUpperCase()}; awaiting state readback`, 'info');
         }
     } catch (e) {
+        document.dispatchEvent(new CustomEvent('gadget:mode-request', {detail: {target:mode,phase:'unavailable'}}));
         showToast(`Mode switch failed: ${e.message}`, 'error');
     } finally {
         modeSwitchInFlight = false;
@@ -669,6 +676,7 @@ function startEventStream() {
 
     eventSource.addEventListener('open', () => {
         setLiveBadge('ntfyStreamStatus', 'CONNECTED', 'on');
+        document.dispatchEvent(new CustomEvent('gadget:stream', {detail: 'CONNECTED'}));
     });
 
     eventSource.addEventListener('azazel', (event) => {
@@ -682,6 +690,7 @@ function startEventStream() {
 
     eventSource.addEventListener('error', () => {
         setLiveBadge('ntfyStreamStatus', 'RECONNECTING', 'degraded');
+        document.dispatchEvent(new CustomEvent('gadget:stream', {detail: 'RECONNECTING'}));
         const now = Date.now();
         if (now - lastEventSourceErrorToastAt > 15000) {
             showToast('⚠️ Event stream reconnecting...', 'info');
@@ -707,6 +716,7 @@ function handleLiveEvent(payload) {
     unreadEventCount += 1;
     updateUnreadBadge();
     appendLiveEventLog(payload);
+    document.dispatchEvent(new CustomEvent('gadget:event', {detail: payload}));
 
     const title = payload.title || 'Azazel Notification';
     const message = payload.message || '';
