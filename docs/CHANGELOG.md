@@ -6,6 +6,11 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Optional compact field overview with explicit freshness, current/requested mode,
+  configuration-versus-connectivity distinctions and bounded priority events.
+  Existing mode request acknowledgement is now described as accepted until state
+  readback; no controls or network boundaries change.
+
 - CI now runs the Fabric StatusView adapter tests. `.github/workflows/ci-tests.yml`
   installs `requirements.txt` instead of PyYAML alone, so the pinned
   `azazel-fabric` tag is exercised on every run, and

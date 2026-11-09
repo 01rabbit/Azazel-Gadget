@@ -19,6 +19,21 @@
 
     <!-- Main Content -->
     <div class="container">
+        <button id="fieldToggle" type="button" aria-pressed="false" aria-controls="fieldOverview">Field overview / 現場の概況</button>
+        <section id="fieldOverview" class="field-overview" hidden aria-label="Field overview">
+            <h2>Field overview / 現場の概況</h2><p id="fieldFreshness" role="status"></p>
+            <div class="field-cards">
+                <article><h3>Current mode / 現在モード</h3><strong id="fieldMode">UNKNOWN</strong><p>Requested / 要求先: <span id="fieldRequested">None reported</span></p></article>
+                <article><h3>Uplink / 上流通信</h3><strong id="fieldUplink">UNKNOWN</strong><p id="fieldPortal"></p></article>
+                <article><h3>Protected client / 保護端末</h3><strong id="fieldClient">UNKNOWN</strong><p>NAT is configuration, not client reachability / NAT設定は端末の到達確認ではありません</p></article>
+                <article><h3>Sensor / センサー</h3><strong id="fieldSensor">UNKNOWN</strong><p>Reported availability, not proof of exposure / 報告状態であり公開の証明ではありません</p></article>
+            </div>
+            <p id="fieldWarning"></p><p id="fieldAction" role="status">No mode request in this page / このページからの要求なし</p>
+            <h3>Recent priority events / 最近の優先イベント</h3><p id="fieldStream">Event stream: unknown</p>
+            <p>Last 24 received events in this page; not an incident total. Expand for details. / このページの受信24件。インシデント総数ではありません。</p>
+            <ul id="fieldEvents"><li>No retained events / 保持イベントなし</li></ul>
+            <p>Existing controls and confirmations remain below / 操作と確認は下の既存欄を使用します</p>
+        </section>
         <!-- PC: Two-column layout | Mobile: Single column -->
         <div class="grid">
             <!-- Risk Card -->
@@ -315,5 +330,6 @@
     <div class="toast" id="toast"></div>
 
     <script src="/static/app.js"></script>
+    <script src="/static/field_overview.js"></script>
 </body>
 </html>

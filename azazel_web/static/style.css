@@ -695,3 +695,18 @@ body {
         font-size: 1.5em;
     }
 }
+
+/* Optional bounded field overview. */
+#fieldOverview[hidden] { display: none; }
+#fieldToggle { min-height: 44px; padding: 8px 14px; background: var(--bg-dark); color: var(--text-primary); border: 1px solid var(--accent); border-radius: 6px; margin-bottom: 12px; }
+.field-overview { padding: 16px; margin-bottom: 20px; border: 1px solid var(--text-secondary); border-radius: 8px; overflow-wrap: anywhere; }
+.field-overview p { color: var(--text-secondary); margin: 8px 0; font-size: .9rem; }
+.field-cards { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin: 12px 0; }
+.field-cards article { background: var(--bg-card); padding: 12px; border-radius: 6px; min-width: 0; }
+.field-cards strong { display: block; font-size: 1.2rem; margin-top: 8px; }
+#fieldEvents { list-style: none; max-height: 400px; overflow-y: auto; }
+#fieldEvents li { border-top: 1px solid var(--text-secondary); padding: 10px 0; }
+#fieldEvents summary { cursor: pointer; min-height: 44px; }
+.field-overview :focus-visible, #fieldToggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media(max-width:600px) { .field-cards { grid-template-columns: 1fr; } }
+@media(prefers-reduced-motion:reduce) { .field-overview * { animation: none; transition: none; } }

@@ -37,3 +37,5 @@ repository: [01rabbit/Azazel](https://github.com/01rabbit/Azazel) ·
 - Product claims must be implementation-verifiable.
 - AZ-02 is a peer Azazel product, not a reduced variant of AZ-01.
 - Do not describe AZ-02 as a VPN replacement or complete attack-prevention system.
+
+- [Optional field overview](FIELD_OVERVIEW.md)

@@ -1,0 +1,15 @@
+const assert=require('node:assert/strict');
+const {build}=require('../../azazel_web/static/field_overview.js');
+assert.equal(build({},1000,false).freshness,'UNKNOWN');
+assert.equal(build({snapshot_epoch:1000},1000,false).freshness,'CURRENT');
+assert.equal(build({snapshot_epoch:1000},1011,false).freshness,'STALE');
+assert.equal(build({snapshot_epoch:1006},1000,false).freshness,'UNKNOWN');
+assert.equal(build({snapshot_epoch:'1000'},1000,false).freshness,'UNKNOWN');
+assert.equal(build({snapshot_epoch:1000},1000,true).freshness,'OFFLINE');
+assert.equal(build({},1000,false).mode,'UNKNOWN');
+assert.equal(build({mode:{current_mode:'warning'}},1000,false).mode,'UNKNOWN');
+const m=build({mode:{current_mode:'shield'},mode_runtime:{epd_state:{mode:'switching',target_mode:'scapegoat'}},connection:{usb_nat:'ON'}},1000,false);
+assert.equal(m.mode,'SHIELD');assert.equal(m.target,'SCAPEGOAT');assert.equal(m.nat,'ON');
+assert.equal(build({mode_runtime:{epd_state:{mode:'normal',target_mode:'portal'}}},1000,false).target,'');
+assert.equal(m.internet,'UNKNOWN');
+console.log('Field freshness, unknowns and current/requested distinction pass');
